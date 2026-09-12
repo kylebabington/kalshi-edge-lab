@@ -21,6 +21,7 @@ import requests
 
 from collections import defaultdict
 from datetime import datetime
+from statistics import mean, median
 
 from rich.console import Console
 from rich.table import Table
@@ -768,6 +769,31 @@ def display_ensemble_comparison(
             f"Range: "
             f"{min(temperatures):.1f}°F – "
             f"{max(temperatures):.1f}°F"
+            f"[/dim]"
+        )
+
+        console.print(
+            f"[dim]"
+            f"Mean: "
+            f"{mean(temperatures):.1f}°F | "
+            f"Median: "
+            f"{median(temperatures):.1f}°F"
+            f"[/dim]"
+        )
+
+        sorted_temperatures = sorted(
+            temperatures
+        )
+
+        formatted_temperatures = ", ".join(
+            f"{temperature:.1f}"
+            for temperature in sorted_temperatures
+        )
+
+        console.print(
+            f"[dim]"
+            f"Members: "
+            f"{formatted_temperatures}"
             f"[/dim]"
         )
 
