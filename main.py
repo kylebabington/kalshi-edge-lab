@@ -31,6 +31,8 @@ from weather import (
     get_nyc_high_ensemble,
 )
 
+from nws import get_today_knyc_summary
+
 
 # ---------------------------------------------------------
 # CONFIGURATION
@@ -830,6 +832,79 @@ def display_weather_forecast() -> None:
             f"{date}: forecast high [bold]{high:.1f}°F[/bold]"
         )
 
+def display_nws_observations() -> None:
+    """
+    Display actual observations from Central Park.
+
+    This tells us what has really happened today,
+    rather than what a forecast model predicted.
+    """
+
+    summary = get_today_knyc_summary()
+
+    console.print(
+        "\n[bold]"
+        "Official NWS Central Park Observations"
+        "[/bold]"
+    )
+
+    if summary is None:
+
+        console.print(
+            "[yellow]"
+            "No Central Park observations available."
+            "[/yellow]"
+        )
+
+        return
+
+    latest_time = (
+        summary["latest_time"]
+        .strftime("%I:%M %p")
+        .lstrip("0")
+    )
+
+    high_time = (
+        summary["high_time"]
+        .strftime("%I:%M %p")
+        .lstrip("0")
+    )
+
+    console.print(
+        f"Station: [bold]KNYC — Central Park[/bold]"
+    )
+
+    console.print(
+        f"Date: {summary['date']}"
+    )
+
+    console.print(
+        f"Latest observation: "
+        f"[bold]"
+        f"{summary['latest_temperature']:.1f}°F"
+        f"[/bold] "
+        f"at {latest_time}"
+    )
+
+    console.print(
+        f"Observed high so far: "
+        f"[bold]"
+        f"{summary['high_temperature']:.1f}°F"
+        f"[/bold] "
+        f"at {high_time}"
+    )
+
+    console.print(
+        f"Observations today: "
+        f"{summary['observation_count']}"
+    )
+
+    console.print(
+        "[dim]"
+        "NWS observations may be delayed by "
+        "roughly 20 minutes."
+        "[/dim]"
+    )
 
 # ---------------------------------------------------------
 # PROGRAM ENTRY POINT
@@ -839,29 +914,58 @@ def main() -> None:
     """
     Main application workflow.
 
-    Version 0.2:
+    Version 0.4:
 
     1. Retrieve an independent weather forecast.
-    2. Retrieve Kalshi market prices.
-    3. Display both sources.
+    2. Retrieve official Central Park observations.
+    3. Retrieve Kalshi market prices.
+    4. Retrieve the NOAA GEFS ensemble.
+    5. Compare forecast probabilities with market prices.
     """
+
+    # -----------------------------------------------------
+    # APPLICATION HEADER
+    # -----------------------------------------------------
 
     console.print(
         "\n[bold]KALSHI EDGE LAB[/bold]"
     )
 
-    # First get independent weather information.
+    # -----------------------------------------------------
+    # WEATHER FORECAST
+    # -----------------------------------------------------
+
+    # Show our deterministic weather forecast.
     display_weather_forecast()
 
+    # -----------------------------------------------------
+    # ACTUAL NWS OBSERVATIONS
+    # -----------------------------------------------------
+
+    # Show what has actually happened today
+    # at the Central Park weather station.
+    display_nws_observations()
+
+    # -----------------------------------------------------
+    # KALSHI MARKET DATA
+    # -----------------------------------------------------
+
     console.print(
-        "\n[bold]Fetching live Kalshi weather markets...[/bold]"
+        "\n[bold]"
+        "Fetching live Kalshi weather markets..."
+        "[/bold]"
     )
 
-    # Then get prediction-market information.
-    markets = get_open_markets(SERIES_TICKER)
+    # Retrieve currently open NYC temperature contracts.
+    markets = get_open_markets(
+        SERIES_TICKER
+    )
 
+    # Count how many separate dated events are open.
     event_count = len(
-        group_markets_by_event(markets)
+        group_markets_by_event(
+            markets
+        )
     )
 
     console.print(
@@ -869,7 +973,14 @@ def main() -> None:
         f"across [bold]{event_count}[/bold] events."
     )
 
-    display_markets(markets)
+    # Display Kalshi markets grouped by date.
+    display_markets(
+        markets
+    )
+
+    # -----------------------------------------------------
+    # GEFS ENSEMBLE
+    # -----------------------------------------------------
 
     console.print(
         "\n[bold]"
@@ -877,17 +988,23 @@ def main() -> None:
         "[/bold]"
     )
 
+    # Retrieve all GEFS ensemble members.
     ensemble_forecasts = (
         get_nyc_high_ensemble()
     )
 
+    # Compare GEFS probabilities against Kalshi prices.
     display_ensemble_comparison(
         markets,
         ensemble_forecasts,
     )
 
 
+# ---------------------------------------------------------
+# PROGRAM START
+# ---------------------------------------------------------
+
 # This prevents main() from automatically running
-# if another Python file imports this file later.
+# if another Python file imports this file.
 if __name__ == "__main__":
     main()
