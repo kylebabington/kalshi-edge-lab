@@ -16,6 +16,7 @@ At this stage we DO NOT:
 We're just building the market-data foundation first.
 """
 
+import re
 import requests
 
 from collections import defaultdict
@@ -24,8 +25,10 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 
-from weather import get_nyc_high_forecast
-
+from weather import (
+    get_nyc_high_forecast,
+    get_nyc_high_ensemble,
+)
 
 
 # ---------------------------------------------------------
@@ -275,6 +278,153 @@ def market_sort_value(market: dict) -> float:
 
     return 0
 
+def temperature_matches_outcome(
+    temperature: float,
+    outcome: str,
+    ) -> bool:
+    """
+    Determine whether a forecast temperature belongs
+    in a Kalshi temperature bucket.
+
+    Examples:
+
+        73.8°F -> "74° or below"
+
+        77.4°F -> "77° to 78°"
+
+        79.1°F -> "79° to 80°"
+
+        83.2°F -> "83° or above"
+
+
+    IMPORTANT:
+
+    The weather model produces decimal temperatures,
+    while Kalshi's market labels use whole degrees.
+
+    For version 0.3 we treat each whole-degree value as
+    representing a +/- 0.5°F interval.
+
+    Example:
+
+        Kalshi 77° to 78°
+
+    corresponds approximately to:
+
+        76.5°F <= forecast < 78.5°F
+
+    This is a modeling assumption.
+
+    Later versions will verify the exact settlement/rounding
+    behavior and calibrate against historical outcomes.
+    """
+
+    # Extract numbers from labels like:
+    #
+    # "77° to 78°"
+    #
+    # producing:
+    #
+    # [77, 78]
+    numbers = [
+        int(number)
+        for number in re.findall(
+            r"-?\d+",
+            outcome,
+        )
+    ]
+
+    outcome_lower = outcome.lower()
+
+    # ---------------------------------------------
+    # Example:
+    #
+    # "74° or below"
+    # ---------------------------------------------
+
+    if (
+        "or below" in outcome_lower
+        and numbers
+    ):
+        upper = numbers[0]
+
+        return temperature < (
+            upper + 0.5
+        )
+
+    # ---------------------------------------------
+    # Example:
+    #
+    # "83° or above"
+    # ---------------------------------------------
+
+    if (
+        "or above" in outcome_lower
+        and numbers
+    ):
+        lower = numbers[0]
+
+        return temperature >= (
+            lower - 0.5
+        )
+
+    # ---------------------------------------------
+    # Example:
+    #
+    # "77° to 78°"
+    # ---------------------------------------------
+
+    if (
+        "to" in outcome_lower
+        and len(numbers) >= 2
+    ):
+        lower = numbers[0]
+        upper = numbers[1]
+
+        return (
+            temperature >= lower - 0.5
+            and temperature < upper + 0.5
+        )
+
+    return False
+
+def calculate_ensemble_probability(
+    temperatures: list[float],
+    outcome: str,
+) -> float:
+    """
+    Calculate the fraction of ensemble members that
+    land inside a specific Kalshi temperature bucket.
+
+    Example:
+
+        18 matching members
+        31 total members
+
+        18 / 31 = 0.5806
+
+    which means:
+
+        58.1%
+    """
+
+    if not temperatures:
+        return 0.0
+
+    matching_members = 0
+
+    for temperature in temperatures:
+
+        if temperature_matches_outcome(
+            temperature,
+            outcome,
+        ):
+            matching_members += 1
+
+    return (
+        matching_members
+        / len(temperatures)
+    )
 
 # ---------------------------------------------------------
 # DISPLAY
@@ -426,6 +576,202 @@ def display_markets(markets: list[dict]) -> None:
 
         console.print(table)
     
+def display_ensemble_comparison(
+    markets: list[dict],
+    ensemble_forecasts: dict[str, list[float]],
+) -> None:
+    """
+    Compare NOAA GEFS ensemble probabilities with
+    Kalshi's current market probabilities.
+
+    IMPORTANT:
+
+    The difference shown here is NOT yet a verified
+    trading edge.
+
+    We have not yet accounted for:
+
+        - Model calibration
+        - Kalshi fees
+        - Bid/ask execution
+        - Settlement-source bias
+        - Historical model errors
+
+    This is simply our first raw probability comparison.
+    """
+
+    if not ensemble_forecasts:
+
+        console.print(
+            "[yellow]"
+            "Ensemble forecast unavailable."
+            "[/yellow]"
+        )
+
+        return
+
+    grouped_events = (
+        group_markets_by_event(markets)
+    )
+
+    console.print(
+        "\n[bold]"
+        "NOAA GEFS Ensemble Probability Comparison"
+        "[/bold]"
+    )
+
+    for event_ticker, event_markets in sorted(
+        grouped_events.items(),
+        key=lambda item: (
+            get_event_date(item[0])
+            or "9999-12-31"
+        ),
+    ):
+
+        event_date = get_event_date(
+            event_ticker
+        )
+
+        if event_date is None:
+            continue
+
+        temperatures = (
+            ensemble_forecasts.get(
+                event_date,
+                [],
+            )
+        )
+
+        if not temperatures:
+            continue
+
+        event_markets = sorted(
+            event_markets,
+            key=market_sort_value,
+        )
+
+        table = Table(
+            title=(
+                f"GEFS vs Kalshi — "
+                f"{event_date}"
+            )
+        )
+
+        table.add_column(
+            "Outcome",
+            justify="left",
+            no_wrap=True,
+        )
+
+        table.add_column(
+            "GEFS",
+            justify="right",
+            no_wrap=True,
+        )
+
+        table.add_column(
+            "Market",
+            justify="right",
+            no_wrap=True,
+        )
+
+        table.add_column(
+            "Raw Diff",
+            justify="right",
+            no_wrap=True,
+        )
+
+        for market in event_markets:
+
+            outcome = market.get(
+                "yes_sub_title",
+                market.get(
+                    "title",
+                    "Unknown",
+                ),
+            )
+
+            # -----------------------------------------
+            # OUR WEATHER MODEL PROBABILITY
+            # -----------------------------------------
+
+            ensemble_probability = (
+                calculate_ensemble_probability(
+                    temperatures,
+                    outcome,
+                )
+            )
+
+            # -----------------------------------------
+            # KALSHI MARKET PROBABILITY
+            # -----------------------------------------
+
+            yes_bid = dollars_to_float(
+                market.get(
+                    "yes_bid_dollars"
+                )
+            )
+
+            yes_ask = dollars_to_float(
+                market.get(
+                    "yes_ask_dollars"
+                )
+            )
+
+            market_midpoint = (
+                yes_bid + yes_ask
+            ) / 2
+
+            # -----------------------------------------
+            # RAW DIFFERENCE
+            # -----------------------------------------
+            #
+            # Example:
+            #
+            # GEFS   = 61%
+            # Kalshi = 48%
+            #
+            # Difference = +13 percentage points
+            #
+            # Again: this is NOT yet verified edge.
+            # -----------------------------------------
+
+            raw_difference = (
+                ensemble_probability
+                - market_midpoint
+            )
+
+            table.add_row(
+                outcome,
+                format_percent(
+                    ensemble_probability
+                ),
+                format_percent(
+                    market_midpoint
+                ),
+                (
+                    f"{raw_difference * 100:+.1f}pp"
+                ),
+            )
+
+        console.print()
+
+        console.print(
+            f"[dim]"
+            f"Ensemble members: "
+            f"{len(temperatures)}"
+            f"[/dim]"
+        )
+
+        console.print(
+            f"[dim]"
+            f"Range: "
+            f"{min(temperatures):.1f}°F – "
+            f"{max(temperatures):.1f}°F"
+            f"[/dim]"
+        )
+
+        console.print(table)
 
 def display_weather_forecast() -> None:
     """
@@ -498,6 +844,21 @@ def main() -> None:
     )
 
     display_markets(markets)
+
+    console.print(
+        "\n[bold]"
+        "Fetching NOAA GEFS ensemble..."
+        "[/bold]"
+    )
+
+    ensemble_forecasts = (
+        get_nyc_high_ensemble()
+    )
+
+    display_ensemble_comparison(
+        markets,
+        ensemble_forecasts,
+    )
 
 
 # This prevents main() from automatically running
