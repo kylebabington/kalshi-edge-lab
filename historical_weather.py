@@ -11,7 +11,10 @@ before a historical NYC daily-high event.
 We will test ONE historical date before attempting to
 download hundreds of dates.
 """
+import json
+
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import requests
 
@@ -33,10 +36,74 @@ NYC_LONGITUDE = -73.97
 
 GFS_MODEL = "ncep_gfs_seamless"
 
+# Store downloaded historical forecasts locally.
+#
+# This prevents us from repeatedly requesting the same
+# model run every time we rerun a backtest.
+CACHE_FILE = Path(
+    "gfs_run_cache.json"
+)
+
 
 # ---------------------------------------------------------
 # HISTORICAL FORECAST
 # ---------------------------------------------------------
+
+def load_gfs_cache() -> dict:
+    """
+    Load previously downloaded GFS forecasts.
+
+    If the cache file does not exist yet, return
+    an empty dictionary.
+    """
+
+    if not CACHE_FILE.exists():
+        return {}
+
+    try:
+        with CACHE_FILE.open(
+            "r",
+            encoding="utf-8",
+        ) as file:
+
+            return json.load(
+                file
+            )
+
+    except (
+        OSError,
+        json.JSONDecodeError,
+    ):
+
+        return {}
+
+
+def save_gfs_cache(
+    cache: dict,
+) -> None:
+    """
+    Save downloaded GFS forecasts to disk.
+    """
+
+    try:
+        with CACHE_FILE.open(
+            "w",
+            encoding="utf-8",
+        ) as file:
+
+            json.dump(
+                cache,
+                file,
+                indent=2,
+                sort_keys=True,
+            )
+
+    except OSError as error:
+
+        print(
+            "Could not save GFS cache: "
+            f"{error}"
+        )
 
 def get_gfs_24h_high_forecast(
     date: str,
@@ -204,6 +271,31 @@ def get_gfs_run_high(
         + f"T{run_hour:02d}:00"
     )
 
+        # -----------------------------------------------------
+    # CHECK LOCAL CACHE FIRST
+    # -----------------------------------------------------
+
+    # The cache key uniquely identifies:
+    #
+    # target date + exact model run.
+    #
+    # Example:
+    #
+    # 2026-07-12|2026-07-12T00:00
+    cache_key = (
+        f"{date}|{run}"
+    )
+
+    cache = load_gfs_cache()
+
+    if cache_key in cache:
+
+        return float(
+            cache[
+                cache_key
+            ]
+        )
+
     params = {
         "latitude": NYC_LATITUDE,
         "longitude": NYC_LONGITUDE,
@@ -332,12 +424,24 @@ def get_gfs_run_high(
     if not target_temperatures:
         return None
 
-    # Our forecast high is the highest hourly
+        # Our forecast high is the highest hourly
     # 2-meter temperature from that exact GFS run
     # during the target New York calendar date.
-    return max(
+    forecast_high = max(
         target_temperatures
     )
+
+    # Save this result so future backtests can reuse
+    # it without another API request.
+    cache[
+        cache_key
+    ] = forecast_high
+
+    save_gfs_cache(
+        cache
+    )
+
+    return forecast_high
 
 
 # ---------------------------------------------------------
