@@ -128,9 +128,11 @@ def get_gfs_24h_high_forecast(
         valid_temperatures
     )
 
-def get_gfs_previous_day_12z_high(
+def get_gfs_run_high(
     date: str,
-) -> float | None:
+    run_date_offset: int,
+    run_hour: int,
+    ) -> float | None:
     """
     Retrieve the NYC high-temperature forecast from
     the previous day's 12 UTC GFS model run.
@@ -163,10 +165,20 @@ def get_gfs_previous_day_12z_high(
         "%Y-%m-%d",
     )
 
-    # Move backward one calendar day.
-    previous_date = (
+    # Choose which calendar date contains the model run.
+    #
+    # Examples:
+    #
+    # run_date_offset = -1
+    #     previous calendar day
+    #
+    # run_date_offset = 0
+    #     same calendar day as the Kalshi event
+    run_date = (
         target_date
-        - timedelta(days=1)
+        + timedelta(
+            days=run_date_offset
+        )
     )
 
     # GFS runs several times per day.
@@ -186,10 +198,10 @@ def get_gfs_previous_day_12z_high(
     # so this should comfortably represent information
     # available by later that afternoon/evening.
     run = (
-        previous_date.strftime(
+        run_date.strftime(
             "%Y-%m-%d"
         )
-        + "T12:00"
+        + f"T{run_hour:02d}:00"
     )
 
     params = {
@@ -366,6 +378,37 @@ def main() -> None:
         },
     ]
 
+        # Compare several exact GFS model runs.
+    #
+    # run_date_offset:
+    #
+    #   -1 = previous calendar day
+    #    0 = same calendar day as the Kalshi event
+    #
+    # run_hour is always UTC.
+    run_configs = [
+        {
+            "label": "Previous day 12Z",
+            "date_offset": -1,
+            "hour": 12,
+        },
+        {
+            "label": "Previous day 18Z",
+            "date_offset": -1,
+            "hour": 18,
+        },
+        {
+            "label": "Event day 00Z",
+            "date_offset": 0,
+            "hour": 0,
+        },
+        {
+            "label": "Event day 06Z",
+            "date_offset": 0,
+            "hour": 6,
+        },
+    ]
+
     print()
     print(
         "KALSHI EDGE LAB — HISTORICAL WEATHER"
@@ -383,12 +426,6 @@ def main() -> None:
             )
         )
 
-        exact_run_high = (
-            get_gfs_previous_day_12z_high(
-                date
-            )
-        )
-
         print(
             f"Date: {date}"
         )
@@ -397,6 +434,8 @@ def main() -> None:
             f"Kalshi winner: {winner}"
         )
 
+        # First show the rolling 24-hour-lead forecast
+        # that we tested earlier.
         if forecast_high is None:
 
             print(
@@ -410,18 +449,43 @@ def main() -> None:
                 f"{forecast_high:.1f}°F"
             )
 
-            if exact_run_high is None:
+        # -------------------------------------------------
+        # EXACT GFS RUNS
+        # -------------------------------------------------
+
+        for run_config in run_configs:
+
+            run_high = (
+                get_gfs_run_high(
+                    date,
+                    run_date_offset=(
+                        run_config[
+                            "date_offset"
+                        ]
+                    ),
+                    run_hour=(
+                        run_config[
+                            "hour"
+                        ]
+                    ),
+                )
+            )
+
+            label = run_config[
+                "label"
+            ]
+
+            if run_high is None:
 
                 print(
-                    "GFS previous-day 12Z run: "
-                    "unavailable"
+                    f"{label}: unavailable"
                 )
 
             else:
 
                 print(
-                    f"GFS previous-day 12Z run: "
-                    f"{exact_run_high:.1f}°F"
+                    f"{label}: "
+                    f"{run_high:.1f}°F"
                 )
 
         print()

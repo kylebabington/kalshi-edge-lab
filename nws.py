@@ -23,6 +23,16 @@ import requests
 
 NWS_API_BASE = "https://api.weather.gov"
 
+# Iowa Environmental Mesonet provides a parsed archive
+# of official NWS Daily Climate Report (CLI) products.
+#
+# This lets us retrieve the final daily high used in
+# historical climate reports instead of trying to
+# reconstruct it from hourly observations.
+IEM_CLI_URL = (
+    "https://mesonet.agron.iastate.edu/json/cli.py"
+)
+
 # Official Central Park observation station.
 STATION_ID = "KNYC"
 
@@ -285,3 +295,107 @@ def get_today_knyc_summary() -> dict | None:
             today_observations
         ),
     }
+
+def get_historical_knyc_highs(
+    year: int,
+) -> dict[str, float]:
+    """
+    Retrieve official historical Central Park daily
+    high temperatures from parsed NWS CLI reports.
+
+    The Iowa Environmental Mesonet archives and parses
+    National Weather Service Daily Climate Report data.
+
+    Returns:
+
+        {
+            "2026-07-12": 84.0,
+            "2026-07-11": 82.0,
+            ...
+        }
+
+    The dictionary key is the climate-report date.
+
+    The value is the official daily maximum temperature
+    in degrees Fahrenheit.
+    """
+
+    params = {
+        # Central Park.
+        "station": STATION_ID,
+
+        # IEM's endpoint retrieves one year at a time.
+        "year": year,
+
+        # Explicitly request normal JSON.
+        "fmt": "json",
+    }
+
+    try:
+        response = requests.get(
+            IEM_CLI_URL,
+            params=params,
+            timeout=20,
+        )
+
+        response.raise_for_status()
+
+    except requests.RequestException as error:
+
+        print(
+            "Could not retrieve historical "
+            f"NWS CLI data: {error}"
+        )
+
+        return {}
+
+    data = response.json()
+
+    historical_highs = {}
+
+    # IEM returns:
+    #
+    # {
+    #     "results": [
+    #         {
+    #             "valid": "2026-07-12",
+    #             "high": 84,
+    #             ...
+    #         }
+    #     ]
+    # }
+    for result in data.get(
+        "results",
+        [],
+    ):
+
+        date = result.get(
+            "valid"
+        )
+
+        high = result.get(
+            "high"
+        )
+
+        # IEM uses "M" for a missing climate value.
+        if (
+            date is None
+            or high is None
+            or high == "M"
+        ):
+            continue
+
+        try:
+            historical_highs[
+                date
+            ] = float(
+                high
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            continue
+
+    return historical_highs

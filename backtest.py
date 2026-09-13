@@ -18,10 +18,16 @@ First we need a reliable historical dataset.
 from collections import defaultdict
 from datetime import datetime
 
+import re
 import requests
 
 from rich.console import Console
 from rich.table import Table
+
+from historical_weather import (
+    get_gfs_run_high,
+)
+from nws import get_historical_knyc_highs
 
 
 # ---------------------------------------------------------
@@ -306,13 +312,95 @@ def is_range_bucket_event(
         and expected_total == len(markets)
     )
 
+def temperature_matches_outcome(
+    temperature: float,
+    outcome: str,
+) -> bool:
+    """
+    Determine whether a forecast temperature belongs
+    inside a Kalshi temperature bucket.
+
+    Examples:
+
+        73.8°F -> "74° or below"
+
+        77.4°F -> "77° to 78°"
+
+        83.2°F -> "83° or above"
+
+    For now we use the same +/- 0.5°F assumption
+    used by the live application.
+    """
+
+    # Pull the numbers out of labels such as:
+    #
+    #     "77° to 78°"
+    #
+    # producing:
+    #
+    #     [77, 78]
+    numbers = [
+        int(number)
+        for number in re.findall(
+            r"-?\d+",
+            outcome,
+        )
+    ]
+
+    outcome_lower = outcome.lower()
+
+    # Example:
+    #
+    #     "74° or below"
+    if (
+        "or below" in outcome_lower
+        and numbers
+    ):
+
+        upper = numbers[0]
+
+        return temperature < (
+            upper + 0.5
+        )
+
+    # Example:
+    #
+    #     "83° or above"
+    if (
+        "or above" in outcome_lower
+        and numbers
+    ):
+
+        lower = numbers[0]
+
+        return temperature >= (
+            lower - 0.5
+        )
+
+    # Example:
+    #
+    #     "77° to 78°"
+    if (
+        " to " in outcome_lower
+        and len(numbers) >= 2
+    ):
+
+        lower = numbers[0]
+        upper = numbers[1]
+
+        return (
+            temperature >= lower - 0.5
+            and temperature < upper + 0.5
+        )
+
+    return False
 # ---------------------------------------------------------
 # FIND WINNING CONTRACT
 # ---------------------------------------------------------
 
 def get_winning_market(
     markets: list[dict],
-) -> dict | None:
+    ) -> dict | None:
     """
     Return the winning contract only when exactly
     ONE contract resolved YES.
@@ -336,6 +424,44 @@ def get_winning_market(
         return None
 
     return winners[0]
+
+def get_predicted_market(
+    markets: list[dict],
+    forecast_temperature: float,
+) -> dict | None:
+    """
+    Find which Kalshi bucket contains our GFS
+    forecast temperature.
+
+    Example:
+
+        GFS forecast:
+            84.2°F
+
+        Available buckets:
+            80° or below
+            81° to 82°
+            83° to 84°
+            85° to 86°
+            87° or above
+
+        Result:
+            83° to 84°
+    """
+
+    for market in markets:
+
+        outcome = get_outcome_label(
+            market
+        )
+
+        if temperature_matches_outcome(
+            forecast_temperature,
+            outcome,
+        ):
+            return market
+
+    return None
 
 def audit_historical_events(
     markets: list[dict],
@@ -666,7 +792,7 @@ def audit_historical_events(
 def display_recent_events(
     markets: list[dict],
     event_limit: int = 20,
-) -> None:
+    ) -> None:
     """
     Display recent historical NYC temperature events
     and their winning bucket.
@@ -781,6 +907,702 @@ def display_recent_events(
 
     console.print(table)
 
+def display_gfs_backtest_sample(
+    markets: list[dict],
+    event_limit: int = 10,
+) -> None:
+    """
+    Backtest the previous-day 12Z GFS forecast against
+    a small sample of historical Kalshi outcomes.
+
+    For now we intentionally test only a few events.
+
+    We want to verify that:
+
+        1. Historical GFS retrieval works repeatedly.
+        2. Forecast temperatures map to the right buckets.
+        3. Actual winners are being compared correctly.
+
+    We are NOT calculating trading profitability yet.
+    """
+
+    grouped_events = (
+        group_markets_by_event(
+            markets
+        )
+    )
+
+    usable_events = []
+
+    # -----------------------------------------------------
+    # BUILD OUR LIST OF USABLE EVENTS
+    # -----------------------------------------------------
+
+    for (
+        event_ticker,
+        event_markets,
+    ) in grouped_events.items():
+
+        # Ignore legacy threshold-style markets.
+        if not is_range_bucket_event(
+            event_markets
+        ):
+            continue
+
+        event_date = get_event_date(
+            event_ticker
+        )
+
+        if event_date is None:
+            continue
+
+        # Exact Single Runs data only exists for the
+        # recent portion of our Kalshi history.
+        if event_date < "2026-04-02":
+            continue
+
+        winner = get_winning_market(
+            event_markets
+        )
+
+        if winner is None:
+            continue
+
+        usable_events.append(
+            {
+                "date": event_date,
+                "markets": event_markets,
+                "winner": winner,
+            }
+        )
+
+    # Newest dates first.
+    usable_events.sort(
+        key=lambda event: event["date"],
+        reverse=True,
+    )
+
+    # Only test a small number for now.
+    sample_events = usable_events[
+        :event_limit
+    ]
+
+    
+
+    # -----------------------------------------------------
+    # CREATE OUTPUT TABLE
+    # -----------------------------------------------------
+
+    table = Table(
+        title=(
+            "Previous-Day 12Z GFS "
+            "Historical Test"
+        )
+    )
+
+    table.add_column(
+        "Date",
+        no_wrap=True,
+    )
+
+    table.add_column(
+        "GFS",
+        justify="right",
+        no_wrap=True,
+    )
+
+    table.add_column(
+        "Predicted Bucket",
+        no_wrap=True,
+    )
+
+    table.add_column(
+        "Actual Bucket",
+        no_wrap=True,
+    )
+
+    table.add_column(
+        "Correct?",
+        justify="center",
+        no_wrap=True,
+    )
+
+    tested_events = 0
+    correct_predictions = 0
+
+    # -----------------------------------------------------
+    # TEST EACH EVENT
+    # -----------------------------------------------------
+
+    for event in sample_events:
+
+        event_date = event["date"]
+        event_markets = event["markets"]
+        winner = event["winner"]
+
+        forecast_high = (
+            get_gfs_run_high(
+                event_date,
+                run_date_offset=-1,
+                run_hour=12,
+            )
+        )
+
+        # If Open-Meteo cannot give us this model run,
+        # skip the event rather than pretending we have
+        # a forecast.
+        if forecast_high is None:
+            continue
+
+        predicted_market = (
+            get_predicted_market(
+                event_markets,
+                forecast_high,
+            )
+        )
+
+        if predicted_market is None:
+            continue
+
+        predicted_outcome = (
+            get_outcome_label(
+                predicted_market
+            )
+        )
+
+        actual_outcome = (
+            get_outcome_label(
+                winner
+            )
+        )
+
+        is_correct = (
+            predicted_market.get("ticker")
+            == winner.get("ticker")
+        )
+
+        tested_events += 1
+
+        if is_correct:
+            correct_predictions += 1
+
+        table.add_row(
+            event_date,
+            f"{forecast_high:.1f}°F",
+            predicted_outcome,
+            actual_outcome,
+            (
+                "YES"
+                if is_correct
+                else "NO"
+            ),
+        )
+
+    # -----------------------------------------------------
+    # DISPLAY RESULTS
+    # -----------------------------------------------------
+
+    console.print()
+    console.print(table)
+
+    console.print()
+
+    console.print(
+        f"Events tested: "
+        f"[bold]{tested_events}[/bold]"
+    )
+
+    console.print(
+        f"Correct bucket predictions: "
+        f"[bold]{correct_predictions}[/bold]"
+    )
+
+    if tested_events > 0:
+
+        accuracy = (
+            correct_predictions
+            / tested_events
+        )
+
+        console.print(
+            f"Bucket accuracy: "
+            f"[bold]"
+            f"{accuracy * 100:.1f}%"
+            f"[/bold]"
+        )
+
+def display_gfs_run_comparison(
+    markets: list[dict],
+    event_limit: int = 10,
+) -> None:
+    """
+    Compare several exact historical GFS model runs
+    against the same Kalshi events.
+
+    This helps us determine which point-in-time
+    forecast snapshot deserves deeper testing.
+
+    We are still measuring WEATHER FORECAST accuracy.
+
+    This is NOT yet a trading-profitability backtest.
+    """
+
+    grouped_events = (
+        group_markets_by_event(
+            markets
+        )
+    )
+
+    usable_events = []
+
+    # -----------------------------------------------------
+    # BUILD USABLE EVENT LIST
+    # -----------------------------------------------------
+
+    for (
+        event_ticker,
+        event_markets,
+    ) in grouped_events.items():
+
+        # Ignore legacy threshold markets.
+        if not is_range_bucket_event(
+            event_markets
+        ):
+            continue
+
+        event_date = get_event_date(
+            event_ticker
+        )
+
+        if event_date is None:
+            continue
+
+        # Exact Single Runs history begins only
+        # in the recent portion of our dataset.
+        if event_date < "2026-04-02":
+            continue
+
+        winner = get_winning_market(
+            event_markets
+        )
+
+        if winner is None:
+            continue
+
+        usable_events.append(
+            {
+                "date": event_date,
+                "markets": event_markets,
+                "winner": winner,
+            }
+        )
+
+    # Newest events first.
+    usable_events.sort(
+        key=lambda event: (
+            event["date"]
+        ),
+        reverse=True,
+    )
+
+    sample_events = usable_events[
+        :event_limit
+    ]
+
+        # -----------------------------------------------------
+    # LOAD OFFICIAL NWS DAILY HIGHS
+    # -----------------------------------------------------
+
+    # Find every year represented in our sample.
+    #
+    # Right now this will only be 2026, but writing it
+    # this way means the code will continue working when
+    # we expand the historical test later.
+    needed_years = sorted(
+        {
+            int(
+                event["date"][:4]
+            )
+            for event in sample_events
+        }
+    )
+
+    historical_highs = {}
+
+    for year in needed_years:
+
+        historical_highs.update(
+            get_historical_knyc_highs(
+                year
+            )
+        )
+
+    # -----------------------------------------------------
+    # GFS RUNS WE WANT TO COMPARE
+    # -----------------------------------------------------
+
+    run_configs = [
+        {
+            "label": "Prev 12Z",
+            "date_offset": -1,
+            "hour": 12,
+        },
+        {
+            "label": "Prev 18Z",
+            "date_offset": -1,
+            "hour": 18,
+        },
+        {
+            "label": "Day 00Z",
+            "date_offset": 0,
+            "hour": 0,
+        },
+        {
+            "label": "Day 06Z",
+            "date_offset": 0,
+            "hour": 6,
+        },
+    ]
+
+    # Keep a separate accuracy count for each run.
+    results = {
+        config["label"]: {
+            # Kalshi bucket statistics.
+            "tested": 0,
+            "correct": 0,
+
+            # Actual temperature-error statistics.
+            "temperature_tested": 0,
+            "absolute_error_sum": 0.0,
+            "signed_error_sum": 0.0,
+        }
+        for config in run_configs
+    }
+
+    # -----------------------------------------------------
+    # TABLE
+    # -----------------------------------------------------
+
+    table = Table(
+        title=(
+            "Historical GFS Run Comparison"
+        )
+    )
+
+    table.add_column(
+        "Date",
+        no_wrap=True,
+    )
+
+    table.add_column(
+        "Actual",
+        no_wrap=True,
+    )
+
+    table.add_column(
+        "Actual High",
+        justify="right",
+        no_wrap=True,
+    )
+
+    for config in run_configs:
+
+        table.add_column(
+            config["label"],
+            justify="right",
+            no_wrap=True,
+        )
+
+    # -----------------------------------------------------
+    # TEST EVENTS
+    # -----------------------------------------------------
+
+    for event in sample_events:
+
+        event_date = event["date"]
+
+        event_markets = event[
+            "markets"
+        ]
+
+        winner = event[
+            "winner"
+        ]
+
+        actual_outcome = (
+            get_outcome_label(
+                winner
+            )
+        )
+
+        # Retrieve the official daily high from the
+        # NWS Daily Climate Report archive.
+        actual_high = historical_highs.get(
+            event_date
+        )
+
+        # Display the actual temperature if available.
+        if actual_high is None:
+
+            actual_high_display = (
+                "Unavailable"
+            )
+
+        else:
+
+            actual_high_display = (
+                f"{actual_high:.1f}°F"
+            )
+
+        row = [
+            event_date,
+            actual_outcome,
+            actual_high_display,
+        ]
+
+        # Test the same event against every
+        # historical GFS snapshot.
+        for config in run_configs:
+
+            # Get the short name for this model run.
+            #
+            # Examples:
+            #
+            # "Prev 12Z"
+            # "Prev 18Z"
+            # "Day 00Z"
+            # "Day 06Z"
+            label = config[
+                "label"
+            ]
+
+            forecast_high = (
+                get_gfs_run_high(
+                    event_date,
+                    run_date_offset=(
+                        config[
+                            "date_offset"
+                        ]
+                    ),
+                    run_hour=(
+                        config[
+                            "hour"
+                        ]
+                    ),
+                )
+            )
+
+            if forecast_high is None:
+
+                row.append(
+                    "Unavailable"
+                )
+
+                continue
+
+            # -------------------------------------------------
+            # ACTUAL TEMPERATURE ERROR
+            # -------------------------------------------------
+
+            if actual_high is not None:
+
+                # Positive means GFS forecast too warm.
+                #
+                # Negative means GFS forecast too cool.
+                signed_error = (
+                    forecast_high
+                    - actual_high
+                )
+
+                # Absolute error ignores direction.
+                #
+                # Example:
+                #
+                # Forecast = 88°F
+                # Actual   = 85°F
+                #
+                # Error = +3°F
+                # Absolute error = 3°F
+                absolute_error = abs(
+                    signed_error
+                )
+
+                results[
+                    label
+                ][
+                    "temperature_tested"
+                ] += 1
+
+                results[
+                    label
+                ][
+                    "absolute_error_sum"
+                ] += absolute_error
+
+                results[
+                    label
+                ][
+                    "signed_error_sum"
+                ] += signed_error
+
+            predicted_market = (
+                get_predicted_market(
+                    event_markets,
+                    forecast_high,
+                )
+            )
+
+            if predicted_market is None:
+
+                row.append(
+                    f"{forecast_high:.1f}°F ?"
+                )
+
+                continue
+
+            is_correct = (
+                predicted_market.get(
+                    "ticker"
+                )
+                == winner.get(
+                    "ticker"
+                )
+            )
+
+            results[
+                label
+            ][
+                "tested"
+            ] += 1
+
+            if is_correct:
+
+                results[
+                    label
+                ][
+                    "correct"
+                ] += 1
+
+            row.append(
+                (
+                    f"{forecast_high:.1f}°F "
+                    f"{'YES' if is_correct else 'NO'}"
+                )
+            )
+
+        table.add_row(
+            *row
+        )
+
+    # -----------------------------------------------------
+    # DISPLAY
+    # -----------------------------------------------------
+
+    console.print()
+    console.print(table)
+
+    console.print(
+        "\n[bold]"
+        "GFS Run Accuracy"
+        "[/bold]"
+    )
+
+    for config in run_configs:
+
+        label = config[
+            "label"
+        ]
+
+        tested = results[
+            label
+        ][
+            "tested"
+        ]
+
+        correct = results[
+            label
+        ][
+            "correct"
+        ]
+
+        if tested == 0:
+
+            console.print(
+                f"{label}: no usable events"
+            )
+
+            continue
+
+        accuracy = (
+            correct
+            / tested
+        )
+
+        temperature_tested = (
+            results[
+                label
+            ][
+                "temperature_tested"
+            ]
+        )
+
+        # If official NWS temperatures were available,
+        # calculate mean absolute error and signed bias.
+        if temperature_tested > 0:
+
+            mae = (
+                results[
+                    label
+                ][
+                    "absolute_error_sum"
+                ]
+                / temperature_tested
+            )
+
+            bias = (
+                results[
+                    label
+                ][
+                    "signed_error_sum"
+                ]
+                / temperature_tested
+            )
+
+            console.print(
+                f"{label}: "
+                f"Bucket "
+                f"{correct}/{tested} "
+                f"([bold]"
+                f"{accuracy * 100:.1f}%"
+                f"[/bold])"
+                f" | MAE "
+                f"[bold]"
+                f"{mae:.2f}°F"
+                f"[/bold]"
+                f" | Bias "
+                f"[bold]"
+                f"{bias:+.2f}°F"
+                f"[/bold]"
+            )
+
+        else:
+
+            console.print(
+                f"{label}: "
+                f"Bucket "
+                f"{correct}/{tested} "
+                f"([bold]"
+                f"{accuracy * 100:.1f}%"
+                f"[/bold])"
+                f" | No NWS temperatures"
+            )
+
+    console.print(
+        "\n[dim]"
+        "Bias: positive = forecast too warm; "
+        "negative = forecast too cool."
+        "[/dim]"
+    ) 
 
 # ---------------------------------------------------------
 # PROGRAM ENTRY POINT
@@ -814,6 +1636,13 @@ def main() -> None:
 # Then show a sample of the historical results.
     display_recent_events(
     markets
+    )
+
+    # Compare several exact historical GFS runs
+    # using the same 10 Kalshi events.
+    display_gfs_run_comparison(
+        markets,
+        event_limit=10,
     )
 
 
