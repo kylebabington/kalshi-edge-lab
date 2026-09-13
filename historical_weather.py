@@ -34,7 +34,15 @@ SINGLE_RUNS_URL = (
 NYC_LATITUDE = 40.77
 NYC_LONGITUDE = -73.97
 
-GFS_MODEL = "ncep_gfs_seamless"
+# Use the pure global NOAA GFS model.
+#
+# Do NOT use ncep_gfs_seamless for this experiment.
+# In the United States, the seamless product can combine
+# GFS with higher-resolution NOAA models such as HRRR.
+#
+# We want one consistent model so our historical
+# calibration actually measures GFS.
+GFS_MODEL = "ncep_gfs_global"
 
 # Store downloaded historical forecasts locally.
 #
@@ -279,11 +287,23 @@ def get_gfs_run_high(
     #
     # target date + exact model run.
     #
+        # Include the model name in the key.
+    #
+    # This is VERY important.
+    #
+    # A forecast from:
+    #
+    #     ncep_gfs_seamless
+    #
+    # is not interchangeable with:
+    #
+    #     ncep_gfs_global
+    #
     # Example:
     #
-    # 2026-07-12|2026-07-12T00:00
+    # ncep_gfs_global|2026-07-12|2026-07-12T00:00
     cache_key = (
-        f"{date}|{run}"
+        f"{GFS_MODEL}|{date}|{run}"
     )
 
     cache = load_gfs_cache()

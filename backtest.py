@@ -1602,6 +1602,474 @@ def display_gfs_run_comparison(
         "Bias: positive = forecast too warm; "
         "negative = forecast too cool."
         "[/dim]"
+    )
+
+def display_day_00z_full_backtest(
+    markets: list[dict],
+) -> None:
+    """
+    Test the event-day 00Z GFS forecast across every
+    usable historical Kalshi event supported by the
+    Open-Meteo Single Runs archive.
+
+    This is a WEATHER FORECAST skill test.
+
+    It does NOT yet test whether a trading strategy
+    would have made money.
+    """
+
+    grouped_events = (
+        group_markets_by_event(
+            markets
+        )
+    )
+
+    usable_events = []
+
+    # -----------------------------------------------------
+    # BUILD THE HISTORICAL SAMPLE
+    # -----------------------------------------------------
+
+    for (
+        event_ticker,
+        event_markets,
+    ) in grouped_events.items():
+
+        # Only use modern mutually exclusive
+        # temperature-bucket events.
+        if not is_range_bucket_event(
+            event_markets
+        ):
+            continue
+
+        event_date = get_event_date(
+            event_ticker
+        )
+
+        if event_date is None:
+            continue
+
+        # Open-Meteo's exact Single Runs archive
+        # starts in this part of our historical dataset.
+        if event_date < "2026-04-02":
+            continue
+
+        winner = get_winning_market(
+            event_markets
+        )
+
+        if winner is None:
+            continue
+
+        usable_events.append(
+            {
+                "date": event_date,
+                "markets": event_markets,
+                "winner": winner,
+            }
+        )
+
+    # Oldest first makes the test easier to reason about
+    # chronologically.
+    usable_events.sort(
+        key=lambda event: (
+            event["date"]
+        )
+    )
+
+    # -----------------------------------------------------
+    # LOAD OFFICIAL NWS DAILY HIGHS
+    # -----------------------------------------------------
+
+    needed_years = sorted(
+        {
+            int(
+                event["date"][:4]
+            )
+            for event in usable_events
+        }
+    )
+
+    historical_highs = {}
+
+    for year in needed_years:
+
+        historical_highs.update(
+            get_historical_knyc_highs(
+                year
+            )
+        )
+
+    # -----------------------------------------------------
+    # STATISTICS
+    # -----------------------------------------------------
+
+    forecast_count = 0
+    bucket_tested = 0
+    bucket_correct = 0
+
+    absolute_error_sum = 0.0
+    signed_error_sum = 0.0
+    squared_error_sum = 0.0
+
+    within_1_degree = 0
+    within_2_degrees = 0
+    within_3_degrees = 0
+
+    error_records = []
+
+    total_events = len(
+        usable_events
+    )
+
+    console.print()
+
+    console.print(
+        "[bold]"
+        "Testing full Day 00Z historical sample..."
+        "[/bold]"
+    )
+
+    console.print(
+        f"Usable events: "
+        f"[bold]{total_events}[/bold]"
+    )
+
+    # -----------------------------------------------------
+    # TEST EACH DATE
+    # -----------------------------------------------------
+
+    for index, event in enumerate(
+        usable_events,
+        start=1,
+    ):
+
+        event_date = event[
+            "date"
+        ]
+
+        event_markets = event[
+            "markets"
+        ]
+
+        winner = event[
+            "winner"
+        ]
+
+        # Show occasional progress without printing
+        # one line for every single API request.
+        if (
+            index == 1
+            or index % 10 == 0
+            or index == total_events
+        ):
+
+            console.print(
+                f"Testing "
+                f"{index}/{total_events}: "
+                f"{event_date}",
+                style="dim",
+            )
+
+        # Event-day 00Z GFS run.
+        forecast_high = (
+            get_gfs_run_high(
+                event_date,
+                run_date_offset=0,
+                run_hour=0,
+            )
+        )
+
+        if forecast_high is None:
+            continue
+
+        actual_high = (
+            historical_highs.get(
+                event_date
+            )
+        )
+
+        if actual_high is None:
+            continue
+
+        forecast_count += 1
+
+        # ---------------------------------------------
+        # TEMPERATURE ERROR
+        # ---------------------------------------------
+
+        signed_error = (
+            forecast_high
+            - actual_high
+        )
+
+        absolute_error = abs(
+            signed_error
+        )
+
+        squared_error = (
+            signed_error ** 2
+        )
+
+        absolute_error_sum += (
+            absolute_error
+        )
+
+        signed_error_sum += (
+            signed_error
+        )
+
+        squared_error_sum += (
+            squared_error
+        )
+
+        if absolute_error <= 1.0:
+            within_1_degree += 1
+
+        if absolute_error <= 2.0:
+            within_2_degrees += 1
+
+        if absolute_error <= 3.0:
+            within_3_degrees += 1
+
+        # ---------------------------------------------
+        # KALSHI BUCKET ACCURACY
+        # ---------------------------------------------
+
+        predicted_market = (
+            get_predicted_market(
+                event_markets,
+                forecast_high,
+            )
+        )
+
+        actual_outcome = (
+            get_outcome_label(
+                winner
+            )
+        )
+
+        predicted_outcome = (
+            "No matching bucket"
+        )
+
+        is_correct = False
+
+        if predicted_market is not None:
+
+            bucket_tested += 1
+
+            predicted_outcome = (
+                get_outcome_label(
+                    predicted_market
+                )
+            )
+
+            is_correct = (
+                predicted_market.get(
+                    "ticker"
+                )
+                == winner.get(
+                    "ticker"
+                )
+            )
+
+            if is_correct:
+                bucket_correct += 1
+
+        # Save the individual result so we can later
+        # inspect the largest forecast misses.
+        error_records.append(
+            {
+                "date": event_date,
+                "forecast": forecast_high,
+                "actual": actual_high,
+                "signed_error": signed_error,
+                "absolute_error": absolute_error,
+                "predicted_bucket": predicted_outcome,
+                "actual_bucket": actual_outcome,
+                "correct": is_correct,
+            }
+        )
+
+    # -----------------------------------------------------
+    # SUMMARY
+    # -----------------------------------------------------
+
+    console.print()
+
+    console.print(
+        "[bold]"
+        "Day 00Z Full Historical Results"
+        "[/bold]"
+    )
+
+    console.print(
+        f"Usable Kalshi events: "
+        f"[bold]{total_events}[/bold]"
+    )
+
+    console.print(
+        f"Events with GFS + NWS data: "
+        f"[bold]{forecast_count}[/bold]"
+    )
+
+    if forecast_count == 0:
+
+        console.print(
+            "[yellow]"
+            "No complete forecast/observation pairs."
+            "[/yellow]"
+        )
+
+        return
+
+    mae = (
+        absolute_error_sum
+        / forecast_count
+    )
+
+    bias = (
+        signed_error_sum
+        / forecast_count
+    )
+
+    rmse = (
+        squared_error_sum
+        / forecast_count
+    ) ** 0.5
+
+    within_1_rate = (
+        within_1_degree
+        / forecast_count
+    )
+
+    within_2_rate = (
+        within_2_degrees
+        / forecast_count
+    )
+
+    within_3_rate = (
+        within_3_degrees
+        / forecast_count
+    )
+
+    console.print(
+        f"MAE: "
+        f"[bold]{mae:.2f}°F[/bold]"
+    )
+
+    console.print(
+        f"Bias: "
+        f"[bold]{bias:+.2f}°F[/bold]"
+    )
+
+    console.print(
+        f"RMSE: "
+        f"[bold]{rmse:.2f}°F[/bold]"
+    )
+
+    console.print(
+        f"Within 1°F: "
+        f"[bold]"
+        f"{within_1_degree}/{forecast_count} "
+        f"({within_1_rate * 100:.1f}%)"
+        f"[/bold]"
+    )
+
+    console.print(
+        f"Within 2°F: "
+        f"[bold]"
+        f"{within_2_degrees}/{forecast_count} "
+        f"({within_2_rate * 100:.1f}%)"
+        f"[/bold]"
+    )
+
+    console.print(
+        f"Within 3°F: "
+        f"[bold]"
+        f"{within_3_degrees}/{forecast_count} "
+        f"({within_3_rate * 100:.1f}%)"
+        f"[/bold]"
+    )
+
+    if bucket_tested > 0:
+
+        bucket_accuracy = (
+            bucket_correct
+            / bucket_tested
+        )
+
+        console.print(
+            f"Exact Kalshi bucket accuracy: "
+            f"[bold]"
+            f"{bucket_correct}/{bucket_tested} "
+            f"({bucket_accuracy * 100:.1f}%)"
+            f"[/bold]"
+        )
+
+    # -----------------------------------------------------
+    # WORST FORECAST MISSES
+    # -----------------------------------------------------
+
+    error_records.sort(
+        key=lambda result: (
+            result[
+                "absolute_error"
+            ]
+        ),
+        reverse=True,
+    )
+
+    worst_table = Table(
+        title=(
+            "10 Largest Day 00Z Forecast Errors"
+        )
+    )
+
+    worst_table.add_column(
+        "Date",
+        no_wrap=True,
+    )
+
+    worst_table.add_column(
+        "GFS",
+        justify="right",
+    )
+
+    worst_table.add_column(
+        "Actual",
+        justify="right",
+    )
+
+    worst_table.add_column(
+        "Error",
+        justify="right",
+    )
+
+    worst_table.add_column(
+        "Actual Bucket",
+        no_wrap=True,
+    )
+
+    for result in error_records[:10]:
+
+        worst_table.add_row(
+            result["date"],
+            f"{result['forecast']:.1f}°F",
+            f"{result['actual']:.1f}°F",
+            f"{result['signed_error']:+.1f}°F",
+            result["actual_bucket"],
+        )
+
+    console.print()
+    console.print(worst_table)
+
+    console.print(
+        "\n[dim]"
+        "Bias: positive = GFS too warm; "
+        "negative = GFS too cool."
+        "[/dim]"
     ) 
 
 # ---------------------------------------------------------
@@ -1638,11 +2106,10 @@ def main() -> None:
     markets
     )
 
-    # Compare several exact historical GFS runs
-    # using the same 10 Kalshi events.
-    display_gfs_run_comparison(
-        markets,
-        event_limit=10,
+       # Run the event-day 00Z GFS forecast across
+    # the full exact-run historical sample.
+    display_day_00z_full_backtest(
+        markets
     )
 
 
