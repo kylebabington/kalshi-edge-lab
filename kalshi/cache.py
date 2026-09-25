@@ -24,6 +24,13 @@ def ensure_dirs() -> None:
         CACHE_ROOT / "candles",
         CACHE_ROOT / "fees",
         CACHE_ROOT / "logs",
+        CACHE_ROOT / "weather",
+        CACHE_ROOT / "weather" / "gfs",
+        CACHE_ROOT / "weather" / "gefs",
+        CACHE_ROOT / "weather" / "observations",
+        CACHE_ROOT / "weather" / "resolution",
+        CACHE_ROOT / "weather" / "calibration",
+        CACHE_ROOT / "weather" / "clinyc",
         RESULTS_ROOT,
     ):
         path.mkdir(parents=True, exist_ok=True)

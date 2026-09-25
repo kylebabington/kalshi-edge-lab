@@ -28,6 +28,14 @@ from historical_weather import (
 )
 from nws import get_historical_knyc_highs
 from kalshi.client import KalshiClient, get_historical_markets_for_series
+from research.weather.resolution import (
+    get_event_date,
+    get_outcome_label,
+    get_winning_market,
+    group_markets_by_event,
+    is_range_bucket_event,
+    temperature_matches_outcome,
+)
 
 
 # ---------------------------------------------------------
@@ -39,45 +47,6 @@ BASE_URL = "https://external-api.kalshi.com/trade-api/v2"
 SERIES_TICKER = "KXHIGHNY"
 
 console = Console()
-
-
-# ---------------------------------------------------------
-# DATE HELPERS
-# ---------------------------------------------------------
-
-def get_event_date(
-    event_ticker: str,
-) -> str | None:
-    """
-    Convert:
-
-        KXHIGHNY-26SEP12
-
-    into:
-
-        2026-09-12
-    """
-
-    try:
-        date_code = (
-            event_ticker
-            .rsplit("-", 1)[-1]
-        )
-
-        parsed_date = datetime.strptime(
-            date_code,
-            "%y%b%d",
-        )
-
-        return parsed_date.strftime(
-            "%Y-%m-%d"
-        )
-
-    except (
-        ValueError,
-        AttributeError,
-    ):
-        return None
 
 
 # ---------------------------------------------------------
@@ -113,259 +82,8 @@ def get_historical_markets() -> list[dict]:
 
 
 # ---------------------------------------------------------
-# GROUP MARKETS INTO EVENTS
+# PREDICTED CONTRACT
 # ---------------------------------------------------------
-
-def group_markets_by_event(
-    markets: list[dict],
-    ) -> dict[str, list[dict]]:
-    """
-    A single daily temperature event contains several
-    mutually exclusive contracts.
-
-    Example:
-
-        74° or below
-        75° to 76°
-        77° to 78°
-        79° to 80°
-        ...
-
-    Group them by event ticker.
-    """
-
-    events = defaultdict(list)
-
-    for market in markets:
-
-        event_ticker = market.get(
-            "event_ticker"
-        )
-
-        if not event_ticker:
-            continue
-
-        events[
-            event_ticker
-        ].append(
-            market
-        )
-
-    return dict(events)
-
-def get_outcome_label(
-    market: dict,
-    ) -> str:
-    """
-    Return the human-readable YES outcome label
-    for a Kalshi market.
-
-    Examples:
-
-        "77° to 78°"
-        "74° or below"
-        "83° or above"
-    """
-
-    return market.get(
-        "yes_sub_title",
-        market.get(
-            "title",
-            "",
-        ),
-    )
-
-
-def is_range_bucket_event(
-    markets: list[dict],
-    ) -> bool:
-    """
-    Determine whether an event uses the modern
-    mutually exclusive temperature-range structure.
-
-    A range event should look roughly like:
-
-        74° or below
-        75° to 76°
-        77° to 78°
-        79° to 80°
-        81° to 82°
-        83° or above
-
-    That structure has:
-
-        - exactly one "or below" bucket
-        - exactly one "or above" bucket
-        - all remaining contracts are ranges using "to"
-
-    Older Kalshi markets sometimes used independent
-    threshold contracts such as:
-
-        Above 60°
-        Above 62°
-
-    Multiple threshold contracts can resolve YES at the
-    same time, so they cannot be treated like mutually
-    exclusive range buckets.
-    """
-
-    # A usable range event needs at least:
-    #
-    # low tail
-    # middle range
-    # high tail
-    if len(markets) < 3:
-        return False
-
-    labels = [
-        get_outcome_label(
-            market
-        ).lower()
-        for market in markets
-    ]
-
-    below_count = sum(
-        "or below" in label
-        for label in labels
-    )
-
-    above_count = sum(
-        "or above" in label
-        for label in labels
-    )
-
-    range_count = sum(
-        " to " in label
-        for label in labels
-    )
-
-    # Every contract must fit one of the expected
-    # mutually exclusive bucket types.
-    expected_total = (
-        below_count
-        + above_count
-        + range_count
-    )
-
-    return (
-        below_count == 1
-        and above_count == 1
-        and range_count >= 1
-        and expected_total == len(markets)
-    )
-
-def temperature_matches_outcome(
-    temperature: float,
-    outcome: str,
-) -> bool:
-    """
-    Determine whether a forecast temperature belongs
-    inside a Kalshi temperature bucket.
-
-    Examples:
-
-        73.8°F -> "74° or below"
-
-        77.4°F -> "77° to 78°"
-
-        83.2°F -> "83° or above"
-
-    For now we use the same +/- 0.5°F assumption
-    used by the live application.
-    """
-
-    # Pull the numbers out of labels such as:
-    #
-    #     "77° to 78°"
-    #
-    # producing:
-    #
-    #     [77, 78]
-    numbers = [
-        int(number)
-        for number in re.findall(
-            r"-?\d+",
-            outcome,
-        )
-    ]
-
-    outcome_lower = outcome.lower()
-
-    # Example:
-    #
-    #     "74° or below"
-    if (
-        "or below" in outcome_lower
-        and numbers
-    ):
-
-        upper = numbers[0]
-
-        return temperature < (
-            upper + 0.5
-        )
-
-    # Example:
-    #
-    #     "83° or above"
-    if (
-        "or above" in outcome_lower
-        and numbers
-    ):
-
-        lower = numbers[0]
-
-        return temperature >= (
-            lower - 0.5
-        )
-
-    # Example:
-    #
-    #     "77° to 78°"
-    if (
-        " to " in outcome_lower
-        and len(numbers) >= 2
-    ):
-
-        lower = numbers[0]
-        upper = numbers[1]
-
-        return (
-            temperature >= lower - 0.5
-            and temperature < upper + 0.5
-        )
-
-    return False
-# ---------------------------------------------------------
-# FIND WINNING CONTRACT
-# ---------------------------------------------------------
-
-def get_winning_market(
-    markets: list[dict],
-    ) -> dict | None:
-    """
-    Return the winning contract only when exactly
-    ONE contract resolved YES.
-
-    This is appropriate for mutually exclusive
-    range-bucket events.
-
-    If zero or multiple contracts resolved YES,
-    return None.
-    """
-
-    winners = [
-        market
-        for market in markets
-        if market.get(
-            "result"
-        ) == "yes"
-    ]
-
-    if len(winners) != 1:
-        return None
-
-    return winners[0]
 
 def get_predicted_market(
     markets: list[dict],
@@ -400,6 +118,7 @@ def get_predicted_market(
         if temperature_matches_outcome(
             forecast_temperature,
             outcome,
+            market=market,
         ):
             return market
 

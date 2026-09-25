@@ -32,6 +32,11 @@ from weather import (
 
 from nws import get_today_knyc_summary
 from kalshi.client import get_open_markets as fetch_open_markets
+from research.weather.resolution import (
+    get_event_date,
+    group_markets_by_event,
+    temperature_matches_outcome,
+)
 
 
 # ---------------------------------------------------------
@@ -115,86 +120,6 @@ def dollars_to_float(value: str | None) -> float:
     except (TypeError, ValueError):
         return 0.0
 
-def get_event_date(event_ticker: str) -> str | None:
-    """
-    Extract the calendar date from a Kalshi weather event ticker.
-
-    Example:
-
-        KXHIGHNY-26SEP12
-
-    becomes:
-
-        2026-09-12
-
-    Kalshi's NYC high-temperature event tickers currently end
-    with a date formatted like:
-
-        26SEP12
-        YYMMMDD
-    """
-
-    try:
-        # Split from the final hyphen.
-        #
-        # KXHIGHNY-26SEP12
-        #
-        # becomes:
-        #
-        # 26SEP12
-        date_code = event_ticker.rsplit("-", 1)[-1]
-
-        parsed_date = datetime.strptime(
-            date_code,
-            "%y%b%d",
-        )
-
-        return parsed_date.strftime("%Y-%m-%d")
-
-    except (ValueError, AttributeError):
-        # We do not want the entire application to crash
-        # if Kalshi ever changes its ticker format.
-        return None
-
-def group_markets_by_event(
-    markets: list[dict],
-) -> dict[str, list[dict]]:
-    """
-    Group individual Kalshi contracts by their parent event.
-
-    Example:
-
-        KXHIGHNY-26SEP12
-            74 or below
-            75-76
-            77-78
-            ...
-
-        KXHIGHNY-26SEP13
-            77 or below
-            78-79
-            80-81
-            ...
-
-    This prevents contracts from different dates from being
-    mixed together.
-    """
-
-    grouped_markets = defaultdict(list)
-
-    for market in markets:
-
-        event_ticker = market.get(
-            "event_ticker",
-            "UNKNOWN",
-        )
-
-        grouped_markets[event_ticker].append(
-            market
-        )
-
-    return dict(grouped_markets)
-
 def format_percent(value: float) -> str:
     """
     Convert a contract price into an approximate percentage.
@@ -242,116 +167,6 @@ def market_sort_value(market: dict) -> float:
         return float(cap) - 1
 
     return 0
-
-def temperature_matches_outcome(
-    temperature: float,
-    outcome: str,
-    ) -> bool:
-    """
-    Determine whether a forecast temperature belongs
-    in a Kalshi temperature bucket.
-
-    Examples:
-
-        73.8°F -> "74° or below"
-
-        77.4°F -> "77° to 78°"
-
-        79.1°F -> "79° to 80°"
-
-        83.2°F -> "83° or above"
-
-
-    IMPORTANT:
-
-    The weather model produces decimal temperatures,
-    while Kalshi's market labels use whole degrees.
-
-    For version 0.3 we treat each whole-degree value as
-    representing a +/- 0.5°F interval.
-
-    Example:
-
-        Kalshi 77° to 78°
-
-    corresponds approximately to:
-
-        76.5°F <= forecast < 78.5°F
-
-    This is a modeling assumption.
-
-    Later versions will verify the exact settlement/rounding
-    behavior and calibrate against historical outcomes.
-    """
-
-    # Extract numbers from labels like:
-    #
-    # "77° to 78°"
-    #
-    # producing:
-    #
-    # [77, 78]
-    numbers = [
-        int(number)
-        for number in re.findall(
-            r"-?\d+",
-            outcome,
-        )
-    ]
-
-    outcome_lower = outcome.lower()
-
-    # ---------------------------------------------
-    # Example:
-    #
-    # "74° or below"
-    # ---------------------------------------------
-
-    if (
-        "or below" in outcome_lower
-        and numbers
-    ):
-        upper = numbers[0]
-
-        return temperature < (
-            upper + 0.5
-        )
-
-    # ---------------------------------------------
-    # Example:
-    #
-    # "83° or above"
-    # ---------------------------------------------
-
-    if (
-        "or above" in outcome_lower
-        and numbers
-    ):
-        lower = numbers[0]
-
-        return temperature >= (
-            lower - 0.5
-        )
-
-    # ---------------------------------------------
-    # Example:
-    #
-    # "77° to 78°"
-    # ---------------------------------------------
-
-    if (
-        "to" in outcome_lower
-        and len(numbers) >= 2
-    ):
-        lower = numbers[0]
-        upper = numbers[1]
-
-        return (
-            temperature >= lower - 0.5
-            and temperature < upper + 0.5
-        )
-
-    return False
 
 def calculate_ensemble_probability(
     temperatures: list[float],

@@ -2,3 +2,6 @@ requests
 rich
 tzdata
 pytest
+fastapi
+uvicorn
+httpx

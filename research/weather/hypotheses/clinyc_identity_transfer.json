@@ -1,0 +1,26 @@
+{
+  "criteria": {
+    "decision_rule": "Do NOT auto-validate from sample count alone. transfer_validated becomes true only when prospective_n >= min_new_paired_settled_events AND prospective exact-integer mismatch rate and same-bucket mismatch rate are each <= development rates + 0 (strict: zero exact and zero bucket mismatches in the prospective window) AND mean |difference| <= 0.25F AND no material directional bias (|mean_difference| <= 0.25F). Human-auditable: decision is computed by evaluate_prospective_transfer_validation() only \u2014 never by a manual UI/API toggle.",
+    "max_abs_mean_difference_f": 0.25,
+    "max_prospective_bucket_mismatches": 0,
+    "max_prospective_exact_mismatches": 0,
+    "min_new_paired_settled_events": 20,
+    "report_fields": [
+      "exact_mismatch_count",
+      "same_bucket_mismatch_count",
+      "mean_difference",
+      "directional_bias"
+    ]
+  },
+  "development_pair_count": 42,
+  "hypothesis_id": "CLINYC_TRANSFER_V1",
+  "notes": [
+    "Development pairs (pre-registration) motivate identity transfer; they are NOT confirmation evidence.",
+    "Do not silently modify criteria after registration."
+  ],
+  "registered_at": "2026-09-25T21:24:11.903508+00:00",
+  "source_regime": "nws_cli_knyc",
+  "target_regime": "weather_company_clinyc",
+  "transfer_rule": "identity",
+  "validation_start_date": null
+}

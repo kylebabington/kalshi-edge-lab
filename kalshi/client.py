@@ -377,9 +377,29 @@ class KalshiClient:
             start_count=start_count,
         )
 
-    def get_event(self, event_ticker: str) -> dict[str, Any]:
-        data = self.get(f"/events/{encode_path_segment(event_ticker)}")
-        return data.get("event") or data
+    def get_event(
+        self,
+        event_ticker: str,
+        *,
+        with_nested_markets: bool = False,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] | None = None
+        if with_nested_markets:
+            params = {"with_nested_markets": "true"}
+        data = self.get(
+            f"/events/{encode_path_segment(event_ticker)}",
+            params=params,
+        )
+        event = data.get("event") or data
+        if not isinstance(event, dict):
+            return event
+        # Prefer nested markets; fall back to deprecated top-level markets.
+        if with_nested_markets and not event.get("markets"):
+            top_markets = data.get("markets")
+            if isinstance(top_markets, list):
+                event = dict(event)
+                event["markets"] = top_markets
+        return event
 
     def get_series(self, series_ticker: str) -> dict[str, Any]:
         data = self.get(f"/series/{encode_path_segment(series_ticker)}")

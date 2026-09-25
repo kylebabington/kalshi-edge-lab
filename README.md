@@ -2,16 +2,180 @@
 
 Research tools for Kalshi prediction markets.
 
-This repository currently contains two related but separate tracks:
+This repository has three conceptual layers:
 
-1. **NYC weather research** — live market display and historical GFS forecast skill for `KXHIGHNY`
-2. **Market efficiency research** — whole-Kalshi historical price-calibration / taker-efficiency study
+1. **NYC Weather External Probability Research** — estimate `KXHIGHNY` outcome probabilities from external weather information only (GFS residuals, GEFS, observations), with calibrated uncertainty
+2. **Whole-Kalshi Market Efficiency Research** — historical price-calibration / taker-efficiency study across Kalshi markets
+3. **Shared Historical Execution Infrastructure** — inventory, candles, executable ask, fee resolution, no-lookahead selection (`kalshi/`, `research/prices.py`, `efficiency_backtest.py`)
 
-Neither track places orders or uses account credentials. Public market data only.
+The weather system answers: *What probability should external weather evidence assign?*
+
+The efficiency system answers: *What prices were actually executable on Kalshi?*
+
+The eventual strategy combines them. Phase 1 does **not** optimize weather parameters against trading ROI and does **not** place orders.
+
+Neither track uses account credentials. Public market data only.
 
 ---
 
-## NYC weather (existing)
+## NYC Weather External Probability Research (Phase 1)
+
+```powershell
+.\.venv\Scripts\python.exe weather_model.py --build-calibration
+.\.venv\Scripts\python.exe weather_model.py --backtest
+.\.venv\Scripts\python.exe weather_model.py --live
+.\.venv\Scripts\python.exe weather_model.py --phase2-clinyc
+```
+
+Also still available:
+
+```powershell
+.\.venv\Scripts\python.exe main.py
+.\.venv\Scripts\python.exe backtest.py
+```
+
+### Separation (mandatory)
+
+```text
+WEATHER FORECASTER          TRADING EVALUATOR
+external weather only  →    forecast probability
+P(bucket YES)               + Kalshi executable price + fee
+                            → YES / NO / NO_BET
+```
+
+`WeatherPrediction` contains **no** Kalshi bid/ask/mid/result fields.
+
+Phase 1 trade evaluation defaults to `RESEARCH_ONLY` / `NO_BET`.
+
+### Residual convention
+
+```text
+residual_f = actual_high_f - forecast_high_f
+possible_actual = current_forecast + historical_residual
+```
+
+Do not reuse `backtest.py` signed errors (`forecast - actual`) without converting the sign.
+
+### Settlement-source regimes
+
+Historical calibration (through mid-2026 event rules) uses:
+
+```text
+nws_cli_knyc  — NWS Climatological Report (Daily), Central Park / KNYC
+```
+
+Current open markets often use:
+
+```text
+weather_company_clinyc  — The Weather Company, CLINYC
+```
+
+If `calibration_target_regime != live_target_regime` and no transfer calibration exists, live mode labels probabilities:
+
+```text
+EXPERIMENTAL — SETTLEMENT SOURCE MISMATCH
+```
+
+and does **not** claim TWC settlement calibration from NWS residuals.
+
+### GFS run policy
+
+Report previous-day 12Z / 18Z and event-day 00Z / 06Z **independently**.
+
+Do not pick the historically best Brier run and call it OOS.
+
+Operational live forecasting uses the latest exact GFS run with:
+
+```text
+run_init + GFS_PUBLICATION_LATENCY <= prediction_as_of
+```
+
+(latency is an explicit conservative constant, currently 6 hours).
+
+Residual pools never mix different GFS runs. Same-run hierarchy only:
+
+```text
+month + same run → season + same run → same-run global → insufficient_history
+```
+
+Burn-in: `MIN_RUN_HISTORY = 20` prior same-run residuals before an OOS calibrated prediction.
+
+### Package layout
+
+```text
+research/weather/   — resolution, calibration, probability, replay, reporting
+weather_model.py    — CLI
+weather.py / nws.py / historical_weather.py  — reused fetchers (not rewritten)
+```
+
+Caches: `data/cache/weather/` (with fallback read of root `gfs_run_cache.json`).
+Calibration CSV: `data/weather/calibration/gfs_errors.csv`.
+
+Phase 2 CLINYC recovery uses series-scoped settled markets only
+(`GET /markets?series_ticker=KXHIGHNY&status=settled` + historical series fetch),
+cached under `data/cache/weather/clinyc/`. It does **not** rebuild the full recent inventory.
+
+Settlement temperatures prefer event-level unanimous numeric `expiration_value`
+(not `settlement_value_dollars`). Conflicting values are rejected.
+
+---
+
+## Research UI (FastAPI + React)
+
+```text
+Python research engine
+        ↓
+   FastAPI layer (api/)
+        ↓
+   React frontend (frontend/)
+```
+
+- Python owns probability calculations, settlement parsing, and (later) fee/execution math
+- React owns presentation only
+- UI cannot generate trading recommendations yet (`RESEARCH_ONLY` / `NO_BET`)
+- `GET /api/weather/model/summary` reads existing artifacts only — never rebuilds calibration/backtest
+
+### Backend
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn api.app:app --reload
+```
+
+API base: `http://localhost:8000`
+
+- `GET /api/health`
+- `GET /api/weather/live` — may fetch current open markets / GFS / GEFS / observations
+- `GET /api/weather/events/{event_ticker}`
+- `GET /api/weather/model/summary` — read-only artifacts (`model_summary_available`)
+
+CORS allows only `http://localhost:5173`.
+
+### Frontend
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Optional mock mode (explicit; never silent fallback):
+
+```powershell
+$env:VITE_USE_MOCK="true"; npm run dev
+```
+
+### Tests
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+cd frontend
+npm test
+```
+
+---
+
+## NYC weather (legacy CLIs)
 
 ```powershell
 python main.py

@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mPbF4Cw.woff2") format("woff2");
+}
+
+:root {
+  --bg: #0b0f14;
+  --surface: #121821;
+  --surface-raised: #1a2330;
+  --border: #2a3545;
+  --text: #e8eef7;
+  --text-muted: #8b9bb0;
+
+  --positive: #5ec8a5;
+  --negative: #e07a7a;
+  --warning: #e0b35c;
+  --info: #6aa8e0;
+
+  --confidence-high: #5ec8a5;
+  --confidence-medium: #e0b35c;
+  --confidence-low: #e07a7a;
+
+  --accent: #7eb6ff;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --display: "Space Grotesk", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(126, 182, 255, 0.12), transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, rgba(94, 200, 165, 0.08), transparent 50%),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--display);
+  line-height: 1.45;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.panel {
+  background: linear-gradient(180deg, rgba(26, 35, 48, 0.95), rgba(18, 24, 33, 0.98));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+
+.badge-warning {
+  border-color: color-mix(in oklab, var(--warning) 55%, var(--border));
+  color: var(--warning);
+  background: color-mix(in oklab, var(--warning) 12%, transparent);
+}
+
+.badge-info {
+  border-color: color-mix(in oklab, var(--info) 55%, var(--border));
+  color: var(--info);
+  background: color-mix(in oklab, var(--info) 12%, transparent);
+}
+
+.badge-negative {
+  border-color: color-mix(in oklab, var(--negative) 55%, var(--border));
+  color: var(--negative);
+  background: color-mix(in oklab, var(--negative) 12%, transparent);
+}
+
+.warning-banner {
+  border: 1px solid color-mix(in oklab, var(--warning) 60%, var(--border));
+  background: color-mix(in oklab, var(--warning) 14%, var(--surface));
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+}
+
+.status-chip {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}

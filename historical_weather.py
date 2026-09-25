@@ -18,6 +18,8 @@ from pathlib import Path
 
 import requests
 
+from kalshi import cache as disk_cache
+
 
 # ---------------------------------------------------------
 # CONFIGURATION
@@ -44,12 +46,12 @@ NYC_LONGITUDE = -73.97
 # calibration actually measures GFS.
 GFS_MODEL = "ncep_gfs_global"
 
-# Store downloaded historical forecasts locally.
-#
-# This prevents us from repeatedly requesting the same
-# model run every time we rerun a backtest.
-CACHE_FILE = Path(
-    "gfs_run_cache.json"
+# Legacy root-level cache (still read for compatibility).
+CACHE_FILE = Path("gfs_run_cache.json")
+
+# Preferred weather-research cache location.
+WEATHER_GFS_CACHE = (
+    disk_cache.CACHE_ROOT / "weather" / "gfs" / "gfs_run_cache.json"
 )
 
 
@@ -61,53 +63,33 @@ def load_gfs_cache() -> dict:
     """
     Load previously downloaded GFS forecasts.
 
-    If the cache file does not exist yet, return
-    an empty dictionary.
+    Prefer data/cache/weather/gfs/; fall back to root
+    gfs_run_cache.json during migration.
     """
 
-    if not CACHE_FILE.exists():
-        return {}
-
-    try:
-        with CACHE_FILE.open(
-            "r",
-            encoding="utf-8",
-        ) as file:
-
-            return json.load(
-                file
-            )
-
-    except (
-        OSError,
-        json.JSONDecodeError,
-    ):
-
-        return {}
+    for path in (WEATHER_GFS_CACHE, CACHE_FILE):
+        if not path.exists():
+            continue
+        try:
+            payload = disk_cache.read_json(path, default=None)
+            if isinstance(payload, dict):
+                return payload
+        except (OSError, json.JSONDecodeError, TypeError):
+            continue
+    return {}
 
 
 def save_gfs_cache(
     cache: dict,
 ) -> None:
     """
-    Save downloaded GFS forecasts to disk.
+    Save downloaded GFS forecasts to disk (atomic write).
     """
 
     try:
-        with CACHE_FILE.open(
-            "w",
-            encoding="utf-8",
-        ) as file:
-
-            json.dump(
-                cache,
-                file,
-                indent=2,
-                sort_keys=True,
-            )
-
+        WEATHER_GFS_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        disk_cache.write_json(WEATHER_GFS_CACHE, cache)
     except OSError as error:
-
         print(
             "Could not save GFS cache: "
             f"{error}"
@@ -305,16 +287,15 @@ def get_gfs_run_high(
     cache_key = (
         f"{GFS_MODEL}|{date}|{run}"
     )
+    # Legacy keys written before model-name prefix.
+    legacy_cache_key = f"{date}|{run}"
 
     cache = load_gfs_cache()
 
     if cache_key in cache:
-
-        return float(
-            cache[
-                cache_key
-            ]
-        )
+        return float(cache[cache_key])
+    if legacy_cache_key in cache:
+        return float(cache[legacy_cache_key])
 
     params = {
         "latitude": NYC_LATITUDE,
