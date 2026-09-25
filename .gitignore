@@ -6,3 +6,6 @@ __pycache__/
 .cursor/
 .vscode/
 gfs_run_cache.json
+data/cache/
+data/results/
+.pytest_cache/

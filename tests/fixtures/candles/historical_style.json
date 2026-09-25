@@ -1,0 +1,12 @@
+{
+  "candlesticks": [
+    {
+      "end_period_ts": 1704110400,
+      "yes_bid": {"open": "0.40", "high": "0.41", "low": "0.39", "close": "0.40"},
+      "yes_ask": {"open": "0.42", "high": "0.43", "low": "0.41", "close": "0.42"},
+      "price": {"open": "0.41", "high": "0.42", "low": "0.40", "close": "0.41"},
+      "volume": 1200,
+      "open_interest": 800
+    }
+  ]
+}

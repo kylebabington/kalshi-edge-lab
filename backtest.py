@@ -19,7 +19,6 @@ from collections import defaultdict
 from datetime import datetime
 
 import re
-import requests
 
 from rich.console import Console
 from rich.table import Table
@@ -28,6 +27,7 @@ from historical_weather import (
     get_gfs_run_high,
 )
 from nws import get_historical_knyc_highs
+from kalshi.client import KalshiClient, get_historical_markets_for_series
 
 
 # ---------------------------------------------------------
@@ -88,86 +88,28 @@ def get_historical_markets() -> list[dict]:
     """
     Retrieve archived NYC daily-high markets.
 
-    Kalshi paginates historical results.
-
-    That means one request may not return everything.
-
-    We keep requesting pages until Kalshi returns
-    an empty cursor.
+    Uses the shared Kalshi client for pagination,
+    retry, and rate limiting. Behavior for KXHIGHNY
+    remains series-filtered historical markets only.
     """
 
-    url = (
-        f"{BASE_URL}/historical/markets"
+    client = KalshiClient(
+        progress=lambda message: console.print(message, style="dim"),
     )
 
-    all_markets = []
-
-    cursor = None
-
-    while True:
-
-        params = {
-            "series_ticker": SERIES_TICKER,
-
-            # Kalshi currently allows up to
-            # 1000 results per page.
-            "limit": 1000,
-        }
-
-        # The first request has no cursor.
-        #
-        # Every request after that uses the cursor
-        # returned by the previous page.
-        if cursor:
-            params["cursor"] = cursor
-
-        try:
-            response = requests.get(
-                url,
-                params=params,
-                timeout=20,
-            )
-
-            response.raise_for_status()
-
-        except requests.RequestException as error:
-
-            console.print(
-                "[bold red]"
-                "Could not retrieve historical "
-                f"Kalshi markets: {error}"
-                "[/bold red]"
-            )
-
-            break
-
-        data = response.json()
-
-        markets = data.get(
-            "markets",
-            [],
+    try:
+        return get_historical_markets_for_series(
+            SERIES_TICKER,
+            client=client,
         )
-
-        all_markets.extend(
-            markets
-        )
-
-        cursor = data.get(
-            "cursor"
-        )
-
+    except Exception as error:
         console.print(
-            f"Downloaded "
-            f"{len(all_markets)} "
-            f"historical contracts...",
-            style="dim",
+            "[bold red]"
+            "Could not retrieve historical "
+            f"Kalshi markets: {error}"
+            "[/bold red]"
         )
-
-        # No cursor means there are no more pages.
-        if not cursor:
-            break
-
-    return all_markets
+        return []
 
 
 # ---------------------------------------------------------
@@ -1718,6 +1660,59 @@ def display_day_00z_full_backtest(
 
     error_records = []
 
+    # -----------------------------------------------------
+    # WALK-FORWARD BIAS CALIBRATION
+    # -----------------------------------------------------
+
+    # We require at least 20 completed historical
+    # forecasts before allowing the model to correct
+    # itself.
+    #
+    # Those first 20 dates are TRAINING HISTORY only.
+    #
+    # Date 21 is the first date that can be tested using
+    # a bias learned exclusively from earlier information.
+    walk_forward_min_history = 20
+
+    # Store the raw GFS signed errors that were actually
+    # known BEFORE each future prediction.
+    #
+    # Positive:
+    #     GFS was too warm.
+    #
+    # Negative:
+    #     GFS was too cool.
+    past_signed_errors = []
+
+    # Number of dates on which we had enough earlier
+    # history to make a bias-adjusted prediction.
+    walk_forward_count = 0
+
+    # Raw GFS statistics measured ONLY on the same dates
+    # used by the walk-forward test.
+    #
+    # This gives us a fair apples-to-apples comparison.
+    walk_raw_absolute_error_sum = 0.0
+    walk_raw_signed_error_sum = 0.0
+    walk_raw_squared_error_sum = 0.0
+
+    walk_raw_bucket_tested = 0
+    walk_raw_bucket_correct = 0
+
+    # Bias-adjusted GFS statistics.
+    walk_adjusted_absolute_error_sum = 0.0
+    walk_adjusted_signed_error_sum = 0.0
+    walk_adjusted_squared_error_sum = 0.0
+
+    walk_adjusted_bucket_tested = 0
+    walk_adjusted_bucket_correct = 0
+
+    # Keep track of the bias corrections we actually used.
+    #
+    # This lets us see whether the learned correction
+    # stayed stable or moved around over time.
+    walk_bias_corrections = []
+
     total_events = len(
         usable_events
     )
@@ -1877,6 +1872,154 @@ def display_day_00z_full_backtest(
             if is_correct:
                 bucket_correct += 1
 
+        # -------------------------------------------------
+        # WALK-FORWARD BIAS CORRECTION
+        # -------------------------------------------------
+
+        # IMPORTANT:
+        #
+        # We calculate today's correction BEFORE adding
+        # today's error to past_signed_errors.
+        #
+        # That means today's prediction can only learn
+        # from dates that happened earlier.
+        if (
+            len(
+                past_signed_errors
+            )
+            >= walk_forward_min_history
+        ):
+
+            # Average signed GFS error observed BEFORE today.
+            #
+            # Example:
+            #
+            # Previous GFS forecasts averaged:
+            #
+            #     +2.4°F too warm
+            #
+            # Then:
+            #
+            #     raw forecast = 85.0°F
+            #
+            # becomes:
+            #
+            #     adjusted forecast = 82.6°F
+            learned_bias = (
+                sum(
+                    past_signed_errors
+                )
+                / len(
+                    past_signed_errors
+                )
+            )
+
+            adjusted_forecast = (
+                forecast_high
+                - learned_bias
+            )
+
+            walk_forward_count += 1
+
+            walk_bias_corrections.append(
+                learned_bias
+            )
+
+            # ---------------------------------------------
+            # RAW FORECAST ON WALK-FORWARD TEST DATES
+            # ---------------------------------------------
+
+            walk_raw_absolute_error_sum += (
+                absolute_error
+            )
+
+            walk_raw_signed_error_sum += (
+                signed_error
+            )
+
+            walk_raw_squared_error_sum += (
+                squared_error
+            )
+
+            if predicted_market is not None:
+
+                walk_raw_bucket_tested += 1
+
+                if is_correct:
+
+                    walk_raw_bucket_correct += 1
+
+            # ---------------------------------------------
+            # ADJUSTED FORECAST ERROR
+            # ---------------------------------------------
+
+            adjusted_signed_error = (
+                adjusted_forecast
+                - actual_high
+            )
+
+            adjusted_absolute_error = abs(
+                adjusted_signed_error
+            )
+
+            adjusted_squared_error = (
+                adjusted_signed_error ** 2
+            )
+
+            walk_adjusted_absolute_error_sum += (
+                adjusted_absolute_error
+            )
+
+            walk_adjusted_signed_error_sum += (
+                adjusted_signed_error
+            )
+
+            walk_adjusted_squared_error_sum += (
+                adjusted_squared_error
+            )
+
+            # ---------------------------------------------
+            # ADJUSTED KALSHI BUCKET
+            # ---------------------------------------------
+
+            adjusted_market = (
+                get_predicted_market(
+                    event_markets,
+                    adjusted_forecast,
+                )
+            )
+
+            if adjusted_market is not None:
+
+                walk_adjusted_bucket_tested += 1
+
+                adjusted_is_correct = (
+                    adjusted_market.get(
+                        "ticker"
+                    )
+                    == winner.get(
+                        "ticker"
+                    )
+                )
+
+                if adjusted_is_correct:
+
+                    walk_adjusted_bucket_correct += 1
+
+        # -------------------------------------------------
+        # UPDATE HISTORY FOR TOMORROW
+        # -------------------------------------------------
+
+        # Only NOW do we reveal today's actual GFS error
+        # to the calibration system.
+        #
+        # Tomorrow may learn from it.
+        #
+        # Today was not allowed to.
+        past_signed_errors.append(
+            signed_error
+        )
+
         # Save the individual result so we can later
         # inspect the largest forecast misses.
         error_records.append(
@@ -2008,9 +2151,174 @@ def display_day_00z_full_backtest(
             f"[/bold]"
         )
 
+        # -----------------------------------------------------
+    # WALK-FORWARD CALIBRATION RESULTS
+    # -----------------------------------------------------
+
+    console.print()
+
+    console.print(
+        "[bold]"
+        "Walk-Forward Bias Calibration"
+        "[/bold]"
+    )
+
+    console.print(
+        f"Minimum training history: "
+        f"[bold]"
+        f"{walk_forward_min_history} days"
+        f"[/bold]"
+    )
+
+    console.print(
+        f"Out-of-sample test dates: "
+        f"[bold]"
+        f"{walk_forward_count}"
+        f"[/bold]"
+    )
+
+    if walk_forward_count > 0:
+
+        # ---------------------------------------------
+        # RAW METRICS
+        # ---------------------------------------------
+
+        walk_raw_mae = (
+            walk_raw_absolute_error_sum
+            / walk_forward_count
+        )
+
+        walk_raw_bias = (
+            walk_raw_signed_error_sum
+            / walk_forward_count
+        )
+
+        walk_raw_rmse = (
+            walk_raw_squared_error_sum
+            / walk_forward_count
+        ) ** 0.5
+
+        # ---------------------------------------------
+        # ADJUSTED METRICS
+        # ---------------------------------------------
+
+        walk_adjusted_mae = (
+            walk_adjusted_absolute_error_sum
+            / walk_forward_count
+        )
+
+        walk_adjusted_bias = (
+            walk_adjusted_signed_error_sum
+            / walk_forward_count
+        )
+
+        walk_adjusted_rmse = (
+            walk_adjusted_squared_error_sum
+            / walk_forward_count
+        ) ** 0.5
+
+        # Average bias correction actually applied
+        # during the out-of-sample test.
+        average_learned_bias = (
+            sum(
+                walk_bias_corrections
+            )
+            / len(
+                walk_bias_corrections
+            )
+        )
+
+        console.print(
+            f"Average learned correction: "
+            f"[bold]"
+            f"{average_learned_bias:+.2f}°F"
+            f"[/bold]"
+        )
+
+        comparison_table = Table(
+            title=(
+                "Raw vs Walk-Forward Adjusted GFS"
+            )
+        )
+
+        comparison_table.add_column(
+            "Metric"
+        )
+
+        comparison_table.add_column(
+            "Raw GFS",
+            justify="right",
+        )
+
+        comparison_table.add_column(
+            "Adjusted",
+            justify="right",
+        )
+
+        comparison_table.add_row(
+            "MAE",
+            f"{walk_raw_mae:.2f}°F",
+            f"{walk_adjusted_mae:.2f}°F",
+        )
+
+        comparison_table.add_row(
+            "Bias",
+            f"{walk_raw_bias:+.2f}°F",
+            f"{walk_adjusted_bias:+.2f}°F",
+        )
+
+        comparison_table.add_row(
+            "RMSE",
+            f"{walk_raw_rmse:.2f}°F",
+            f"{walk_adjusted_rmse:.2f}°F",
+        )
+
+        # ---------------------------------------------
+        # BUCKET ACCURACY
+        # ---------------------------------------------
+
+        if (
+            walk_raw_bucket_tested > 0
+            and walk_adjusted_bucket_tested > 0
+        ):
+
+            walk_raw_bucket_accuracy = (
+                walk_raw_bucket_correct
+                / walk_raw_bucket_tested
+            )
+
+            walk_adjusted_bucket_accuracy = (
+                walk_adjusted_bucket_correct
+                / walk_adjusted_bucket_tested
+            )
+
+            comparison_table.add_row(
+                "Exact bucket",
+                (
+                    f"{walk_raw_bucket_correct}/"
+                    f"{walk_raw_bucket_tested} "
+                    f"("
+                    f"{walk_raw_bucket_accuracy * 100:.1f}%"
+                    f")"
+                ),
+                (
+                    f"{walk_adjusted_bucket_correct}/"
+                    f"{walk_adjusted_bucket_tested} "
+                    f"("
+                    f"{walk_adjusted_bucket_accuracy * 100:.1f}%"
+                    f")"
+                ),
+            )
+
+        console.print()
+
+        console.print(
+            comparison_table
+        )
+
     # -----------------------------------------------------
     # WORST FORECAST MISSES
-    # -----------------------------------------------------
+    # ----------------------------------------------------
 
     error_records.sort(
         key=lambda result: (

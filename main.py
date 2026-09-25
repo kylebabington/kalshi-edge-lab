@@ -17,7 +17,6 @@ We're just building the market-data foundation first.
 """
 
 import re
-import requests
 
 from collections import defaultdict
 from datetime import datetime
@@ -32,6 +31,7 @@ from weather import (
 )
 
 from nws import get_today_knyc_summary
+from kalshi.client import get_open_markets as fetch_open_markets
 
 
 # ---------------------------------------------------------
@@ -81,51 +81,13 @@ def get_open_markets(series_ticker: str) -> list[dict]:
         A list of market dictionaries from Kalshi.
     """
 
-    url = f"{BASE_URL}/markets"
-
-    # Using params is safer and cleaner than manually building:
-    #
-    # ?series_ticker=KXHIGHNY&status=open
-    params = {
-        "series_ticker": series_ticker,
-        "status": "open",
-    }
-
     try:
-        # timeout=10 prevents our program from hanging forever
-        # if Kalshi or our connection stops responding.
-        response = requests.get(
-            url,
-            params=params,
-            timeout=10,
-        )
-
-        # Raise an exception for HTTP errors such as:
-        #
-        # 404
-        # 500
-        # 503
-        response.raise_for_status()
-
-    except requests.RequestException as error:
+        return fetch_open_markets(series_ticker)
+    except Exception as error:
         console.print(
             f"[bold red]Could not retrieve Kalshi markets:[/bold red] {error}"
         )
-
         return []
-
-    # Convert the JSON response into normal Python objects.
-    data = response.json()
-
-    # Kalshi responds with something like:
-    #
-    # {
-    #     "markets": [...],
-    #     "cursor": "..."
-    # }
-    #
-    # .get() prevents a KeyError if markets is unexpectedly missing.
-    return data.get("markets", [])
 
 
 # ---------------------------------------------------------
