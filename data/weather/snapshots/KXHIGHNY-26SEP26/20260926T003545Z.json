@@ -1,0 +1,1143 @@
+{
+  "calibration_artifact_id": "296150cf57fa7676",
+  "calibration_method": "knyc_to_clinyc_identity_transfer",
+  "confidence": {
+    "calibration_quality": "same_run_global:adequate",
+    "label": "LOW",
+    "model_agreement": "LOW",
+    "score": 0.35
+  },
+  "created_at": "2026-09-26T00:36:00.932322+00:00",
+  "event_ticker": "KXHIGHNY-26SEP26",
+  "evidence": {
+    "agreement": {
+      "disagreement_label": "HIGH DISAGREEMENT",
+      "gfs_hrrr_difference_f": -2.4000000000000057,
+      "gfs_nws_difference_f": -2.700000000000003,
+      "hrrr_nws_difference_f": -0.29999999999999716,
+      "max_min_disagreement_f": 6.250442477876106,
+      "model_high_range": {
+        "max": 63.1,
+        "min": 56.849557522123895
+      },
+      "policy": "descriptive_only_no_blend",
+      "sources": {
+        "gefs_median": 63.1,
+        "gfs_expected": 56.849557522123895,
+        "gfs_raw": 59.3,
+        "high_so_far": 68.0,
+        "hrrr_raw": 61.7,
+        "nws_forecast_high": 62.0
+      },
+      "thresholds_f": {
+        "low_max": 2.0,
+        "moderate_max": 4.0
+      }
+    },
+    "as_of": "2026-09-26T00:35:45.735325+00:00",
+    "gefs": {
+      "available_at": null,
+      "coordinates": null,
+      "expected_high_f": 63.02903225806452,
+      "forecast_high_f": 63.1,
+      "freshness_seconds": 23745.735325,
+      "freshness_status": "stale",
+      "grid_metadata": {},
+      "hourly_high_f": null,
+      "hourly_series": [],
+      "issued_at": null,
+      "lead_hours": null,
+      "metadata": {
+        "max": 66.3,
+        "mean": 63.02903225806452,
+        "median": 63.1,
+        "member_count": 31,
+        "min": 60.1,
+        "spread": 6.199999999999996,
+        "std": 1.3863839128459785
+      },
+      "model": "ncep_gefs_seamless",
+      "model_run_at": null,
+      "prior_forecast_high_f": null,
+      "quality_status": "ok",
+      "raw_cache_path": null,
+      "recent_run_spread_f": null,
+      "recent_runs": [],
+      "residual_sample_size": null,
+      "retrieved_at": "2026-09-26T00:35:45.735325+00:00",
+      "run_to_run_trend_f": null,
+      "source_id": "gefs",
+      "source_name": "GEFS Ensemble",
+      "target_date": "2026-09-26",
+      "warnings": []
+    },
+    "gfs": {
+      "available_at": "2026-09-26T00:00:00+00:00",
+      "coordinates": null,
+      "expected_high_f": 56.849557522123895,
+      "forecast_high_f": 59.3,
+      "freshness_seconds": 23745.735325,
+      "freshness_status": "stale",
+      "grid_metadata": {},
+      "hourly_high_f": null,
+      "hourly_series": [],
+      "issued_at": null,
+      "lead_hours": 6.0,
+      "metadata": {
+        "calibration_n": 113,
+        "live_deterministic_high": 63.3,
+        "run_id": "prev_18z",
+        "run_label": "previous-day 18Z"
+      },
+      "model": "ncep_gfs_global",
+      "model_run_at": "2026-09-25T18:00:00+00:00",
+      "prior_forecast_high_f": null,
+      "quality_status": "ok",
+      "raw_cache_path": null,
+      "recent_run_spread_f": null,
+      "recent_runs": [],
+      "residual_sample_size": 113,
+      "retrieved_at": "2026-09-26T00:35:45.735325+00:00",
+      "run_to_run_trend_f": null,
+      "source_id": "gfs",
+      "source_name": "Calibrated GFS",
+      "target_date": "2026-09-26",
+      "warnings": []
+    },
+    "hrrr": {
+      "available_at": "2026-09-26T00:00:00+00:00",
+      "coordinates": {
+        "latitude": 40.77,
+        "longitude": -73.97
+      },
+      "expected_high_f": null,
+      "forecast_high_f": 61.7,
+      "freshness_seconds": 12945.735325,
+      "freshness_status": "aging",
+      "grid_metadata": {
+        "api": "open-meteo",
+        "model": "ncep_hrrr_conus"
+      },
+      "hourly_high_f": 63.3,
+      "hourly_series": [
+        {
+          "temperature_f": 63.3,
+          "timestamp": "2026-09-26T00:00"
+        },
+        {
+          "temperature_f": 56.5,
+          "timestamp": "2026-09-26T01:00"
+        },
+        {
+          "temperature_f": 55.8,
+          "timestamp": "2026-09-26T02:00"
+        },
+        {
+          "temperature_f": 56.1,
+          "timestamp": "2026-09-26T03:00"
+        },
+        {
+          "temperature_f": 55.8,
+          "timestamp": "2026-09-26T04:00"
+        },
+        {
+          "temperature_f": 54.4,
+          "timestamp": "2026-09-26T05:00"
+        },
+        {
+          "temperature_f": 53.8,
+          "timestamp": "2026-09-26T06:00"
+        },
+        {
+          "temperature_f": 54.1,
+          "timestamp": "2026-09-26T07:00"
+        },
+        {
+          "temperature_f": 54.7,
+          "timestamp": "2026-09-26T08:00"
+        },
+        {
+          "temperature_f": 55.3,
+          "timestamp": "2026-09-26T09:00"
+        },
+        {
+          "temperature_f": 56.4,
+          "timestamp": "2026-09-26T10:00"
+        },
+        {
+          "temperature_f": 56.8,
+          "timestamp": "2026-09-26T11:00"
+        },
+        {
+          "temperature_f": 57.5,
+          "timestamp": "2026-09-26T12:00"
+        },
+        {
+          "temperature_f": 58.6,
+          "timestamp": "2026-09-26T13:00"
+        },
+        {
+          "temperature_f": 58.6,
+          "timestamp": "2026-09-26T14:00"
+        },
+        {
+          "temperature_f": 60.9,
+          "timestamp": "2026-09-26T15:00"
+        },
+        {
+          "temperature_f": 59.6,
+          "timestamp": "2026-09-26T16:00"
+        },
+        {
+          "temperature_f": 59.6,
+          "timestamp": "2026-09-26T17:00"
+        },
+        {
+          "temperature_f": 59.4,
+          "timestamp": "2026-09-26T18:00"
+        },
+        {
+          "temperature_f": 58.6,
+          "timestamp": "2026-09-26T19:00"
+        },
+        {
+          "temperature_f": 57.9,
+          "timestamp": "2026-09-26T20:00"
+        },
+        {
+          "temperature_f": 57.9,
+          "timestamp": "2026-09-26T21:00"
+        },
+        {
+          "temperature_f": 57.8,
+          "timestamp": "2026-09-26T22:00"
+        },
+        {
+          "temperature_f": 57.4,
+          "timestamp": "2026-09-26T23:00"
+        }
+      ],
+      "issued_at": null,
+      "lead_hours": 3.0,
+      "metadata": {
+        "forecast_stream": "hrrr_exact_run",
+        "not_blended_into_prediction": true,
+        "operational_selection_policy": "latest_available_by_latency",
+        "phase5_candidate_nbm": true,
+        "publication_latency_hours": 3.0
+      },
+      "model": "ncep_hrrr_conus",
+      "model_run_at": "2026-09-25T21:00:00+00:00",
+      "prior_forecast_high_f": 60.9,
+      "quality_status": "ok",
+      "raw_cache_path": "C:\\dev\\Personal\\kalshi-edge-lab\\data\\cache\\weather\\hrrr\\latest_live.json",
+      "recent_run_spread_f": 0.8000000000000043,
+      "recent_runs": [
+        {
+          "available_at": "2026-09-26T00:00:00+00:00",
+          "forecast_high_f": 61.7,
+          "forecast_stream": "hrrr_exact_run",
+          "lead_hours": 3.0,
+          "model": "ncep_hrrr_conus",
+          "run_init": "2026-09-25T21:00:00+00:00"
+        },
+        {
+          "available_at": "2026-09-25T23:00:00+00:00",
+          "forecast_high_f": null,
+          "forecast_stream": "hrrr_exact_run",
+          "lead_hours": 4.0,
+          "model": "ncep_hrrr_conus",
+          "run_init": "2026-09-25T20:00:00+00:00"
+        },
+        {
+          "available_at": "2026-09-25T22:00:00+00:00",
+          "forecast_high_f": null,
+          "forecast_stream": "hrrr_exact_run",
+          "lead_hours": 5.0,
+          "model": "ncep_hrrr_conus",
+          "run_init": "2026-09-25T19:00:00+00:00"
+        },
+        {
+          "available_at": "2026-09-25T21:00:00+00:00",
+          "forecast_high_f": 60.9,
+          "forecast_stream": "hrrr_exact_run",
+          "lead_hours": 6.0,
+          "model": "ncep_hrrr_conus",
+          "run_init": "2026-09-25T18:00:00+00:00"
+        }
+      ],
+      "residual_sample_size": null,
+      "retrieved_at": "2026-09-26T00:35:45.735325+00:00",
+      "run_to_run_trend_f": 0.8000000000000043,
+      "source_id": "hrrr",
+      "source_name": "HRRR (ncep_hrrr_conus)",
+      "target_date": "2026-09-26",
+      "warnings": []
+    },
+    "items": [],
+    "nws_discussion": {
+      "cloud_cover_discussion": [],
+      "confidence_wording": [
+        "Jersey Coast (though there still remains some uncertainty with",
+        "...NY Metro (KEWR/KLGA/KJFK/KTEB) TAF Uncertainty..."
+      ],
+      "forecast_change_reasons": [
+        ".WHAT HAS CHANGED...",
+        "updated soon."
+      ],
+      "freshness_seconds": 2925.735325,
+      "freshness_status": "fresh",
+      "frontal_timing": [],
+      "issued_at": "2026-09-25T23:47:00+00:00",
+      "key_messages": [
+        ".KEY MESSAGES...",
+        ".DISCUSSION...",
+        ".KEY MESSAGE 1...",
+        "covered in following key messages.",
+        ".KEY MESSAGE 2...",
+        ".KEY MESSAGE 3..."
+      ],
+      "metadata": {
+        "note": "Supporting evidence only \u2014 does not alter probabilities"
+      },
+      "model_disagreement_mentions": [],
+      "model_references": [
+        "GFSWave by a few feet, felt wave heights are already within"
+      ],
+      "precipitation_timing": [
+        "strong winds and rainfall. A Wind Advisory is in place for most of",
+        "winds and rainfall. Other hazards associated with the nor'easter are",
+        "Spotty light rain showers are beginning to overspread southeast",
+        "portions of the area. These showers will overtake the rest of the",
+        "rain will then expand west to east Friday night through Saturday",
+        "precip come ashore has been challenging given differences still",
+        "to moderate rain could continue area-wide on Sunday as the weakening",
+        "nor'easter lingers nearby or to the south of the area. Rainfall will"
+      ],
+      "product_id": "7dba2118-e938-4e6f-91fb-0b10f594274a",
+      "quality_status": "ok",
+      "raw_cache_path": "C:\\dev\\Personal\\kalshi-edge-lab\\data\\cache\\weather\\nws\\afd_OKX_20260926T003600Z.json",
+      "raw_text": "\n000\nFXUS61 KOKX 252347\nAFDOKX\n\nArea Forecast Discussion\nNational Weather Service New York NY\n747 PM EDT Fri Sep 25 2026\n\n.WHAT HAS CHANGED...\nNew forecast discussion except coastal flooding. This will be\nupdated soon.\n\n&&\n\n.KEY MESSAGES...\n1) An early season nor'easter will bring a prolonged period of \nstrong winds and rainfall. A Wind Advisory is in place for most of \nthe area. \n\n2) Widespread coastal flooding impacts expected through the \nweekend. Greatest impacts expected Saturday and Sunday. \n\n3) High surf and rip current risk through at least Sunday.\n\n&&\n\n.DISCUSSION...\n.KEY MESSAGE 1... \nAn early season nor'easter will bring a prolonged period of strong \nwinds and rainfall. Other hazards associated with the nor'easter are \ncovered in following key messages.\n\nLow pressure about 200-250 miles off shore from Cape Hatteras is \nexpected to strengthen and deepen over tonight as it tracks up the \neast coast towards our area, west of the 40/70 benchmark. An upper \nlow will develop to the west of the surface low, causing the low to \nslowly deepen into the day Saturday, then the system becomes \nvertically stacked. Saturday night into Sunday the low will \nretrograde toward the coast, possibly coming onshore around the \nJersey Coast (though there still remains some uncertainty with \nthis). As it retrogrades, it will begin to weaken and occlude. It \nmay stall or weakly meander over or nearby the area to the south \nthrough Monday. Then the low will depart to the northeast on Tuesday \nas the upper-level low gets picked up by upper-level flow. \n\nSpotty light rain showers are beginning to overspread southeast \nportions of the area. These showers will overtake the rest of the \nCWA by late this evening. Periods of moderate to heavy stratiform \nrain will then expand west to east Friday night through Saturday \nnight. Timing out exactly when and where these heavier bands of \nprecip come ashore has been challenging given differences still \nexist in exact timing, strength, and track of the nor'easter. Light \nto moderate rain could continue area-wide on Sunday as the weakening \nnor'easter lingers nearby or to the south of the area. Rainfall will \ntaper Sunday night as the nor'easter occludes and eventually end \nsouthwest to northeast into Monday into Monday night. Dry by \nTuesday, as the nor'easter will have departed to the northeast. \n\nTotal rainfall Friday through Sunday looks to be 4-6\" across Long \nIsland and NYC and 1.5-3.5\" elsewhere, with lower amounts as you \nhead west. The highest axis of rainfall has shift to take on a more \nwest to east orientation, primarily due to the lingering nor'easter \nto our south. Persistent and prolonged banding of light to moderate \nstratiform rainfall Friday night through Monday will lead to some \nhigh totals. But keep in mind, all of this is falling over a very \nlong period, not a short period. \n\nHowever, given the increase of QPF across Long Island and NYC, WPC \nhas expanded their slight risk (level 2 out of 4) for excessive\nrainfall to include all of Long Island and NYC. Most flash \nflood concerns are mitigated by the gradual, prolonged nature of\nthe rainfall. However, there are some training bands that could\npivot into the area that could lead to some isolated rainfall \nrates of 0.25\"/hr. 0.5\"/hr appears more unlikely, but seeing \nthis briefly is not out of the realm of possibility.\n\nDepending on the track of the nor'easter, if it retrogrades west too \nearly towards the Jersey Shore, it is possible the highest bands of \nQPF could shift to the south, just off shore, instead of making it \non land. \n\nThe nor'easter will also bring strong winds. NE/N winds will \ncontinue to ramp up into this evening under an increasing pressure \ngradient from the approaching deepening low. Peak winds will be\nFriday night through Saturday night. Then, winds will gradually\ndiminish through Sunday into Sunday night as the nor'easter \nweakens over or near the area. Peak wind speeds will be 20-25 \nmph with higher localized speeds around 35 mph. Wind gusts will \npeak around 40-50 mph with localized higher gusts nearing 55 \nmph. The localized highest gusts are currently most likely to \noccur on the eastern end of Long Island or at immediate south \nshorelines of Long Island. NE wind directions are expected \nFriday, becoming N on Saturday. Winds will become more E or ENE \non Sunday as the low moves south towards the Jersey Shore.\n\nA Wind Advisory continues for most of the area through early Sunday \nmorning. Many places may not actually see gusts in excess of 45 mph, \nbut the long duration rain (saturating the soil) and strong winds \nmay allow for a many trees/power lines to come down during this time \nframe at wind speeds of 46 mph or higher. This is exacerbated by our \nfull foliage given the early Fall timing of this nor'easter. \n\n.KEY MESSAGE 2...\nCoastal flooding will occur around the times of high tide\nthrough at least Sunday.\n\nPeak of coastal flooding will be Saturday AM into Sunday AM \nhigh tides with gale to storm force NNE winds. At this point \nguidance is indicating Sat AM high tide to be the highest, but \nwith tidal piling, gradually riusing astrotide levels, and a \npossible backing of winds to the NE/E by Sunday, water levels \nwill have trouble falling too much with the Sat PM and Sun AM \nhigh tides. \n\nWidespread moderate to locally major flooding coastal flooding \nis likely for LI and Queens thru the Sun AM high tide. Greatest \nthreat for major is for southern Nassau and SW Suffolk, \nincluding the north facing portions of the barrier islands. \nWater levels may not fall below minor flood threholds in a few \nof these spots even during low tide. Wave action will exacerbate\nmoderate shoreline impacts along the north shore of the south \nfork and north shore of LI. \n\nFor NYC/NJ harbor, coastal CT and westchester, and the tidally \neffected waters of NE NJ and the lower Hudson Valley the\nnortherly flow should keep impacts to gnerally minor to lovcally\nmoderate through these tidal cycles. \n\nThe current Forecast is based on a blend of P-ETSS, STOFS, and \nthe Stevens NYHOPS central (50th percentile) forecasts. Note: This\nforecat can tend to run high with a N/NE flow regime, so \ncurrent forecast has a safety margin built in through Sun AM \nhigh tides. \n\n\n.KEY MESSAGE 3... \nHigh risk of rip currents and high surf through Saturday along \nocean shorelines. While ocean swells in outer ocean reach near\n13-16 ft, surf height of near 7-11 ft expected closer to shore.\nThere will be some variation due to swell orientation, with \noccasionally more ENE vs more ESE swell direction. The lack of \northogonal component to shoreline really limits the surf heights\ncloser to the shore.\n\nHowever, with current buoy observations running higher than\nGFSWave by a few feet, felt wave heights are already within \nadvisory range within the surf zone. Beach flooding and erosion \ncan be expected Friday into Saturday.\n\n&&\n\n.AVIATION /00Z SATURDAY THROUGH WEDNESDAY/...\nA developing offshore low will slowly approach from the south and\neast into the weekend. The low will bring a prolonged period \nof strong N/NE winds and periods of rain.\n\nMainly VFR through this evening. Rain should gradually develop \nfrom east to west from late this afternoon / evening, and through\ntonight. MVFR conditions increasingly likely after midnight, except\nfor the more western terminals (KSWF, KTEB, KEWR) where MVFR \nconditions will take longer to develop, possibly not until after\n12z Saturday. \n\nN-NE winds will increase this afternoon, reaching mainly 20-25 kt\nwith gusts over 30 kt at the NYC metro and coastal terminals. \nGusts 35-40 kt expected tonight into Sat AM. Some peak gusts\nto 45 kt possible towards 06z possible for far eastern terminals\nlike KISP and KGON.\n\n\n ...NY Metro (KEWR/KLGA/KJFK/KTEB) TAF Uncertainty...\n\nNo unscheduled AMD expected.\n\n.OUTLOOK FOR 18Z SATURDAY THROUGH WEDNESDAY...\n\nSaturday afternoon - Saturday night: Flight cats mainly MVFR through \nthe day and MVFR/IFR at night as the coastal storm nears the area. \nN/NE gusts 30-40 kt Friday night into Saturday. Winds/gusts may \nbe up to 5-10 kt higher than fcst if the storm is closer to the \narea. LLWS Saturday into Saturday night. \n\nSunday: MVFR/IFR in rain. N winds 15-20kt, G25-30kt. \n\nMonday: MVFR, possibly IFR early with a chance of showers,\nimproving to VFR in the afternoon. N gusts around 20kt in \nthe morning.\n\nTuesday and Wednesday: VFR. Light winds.\n\nDetailed information, including hourly TAF wind component\nforecasts, can be found at: https:/www.weather.gov/zny/n90\n\n&&\n\n.MARINE...\nA nor'easter will impact waters through Monday before high pressure \nmoves back into the area thereafter. \n\nStorm Warnings take over this evening on all ocean waters. Gale \nWarnings will be in place on all non-ocean waters. These will remain \nin place for gale level and storm level winds anticipated through \nSunday morning. Winds and seas will then gradually subside through \nSunday night. All waters should be below SCA-levels on Monday.\n\n&&\n\n.OKX WATCHES/WARNINGS/ADVISORIES...\nCT...Wind Advisory until 6 AM EDT Sunday for CTZ005>012.\n     Coastal Flood Warning until 6 PM EDT Sunday for CTZ009-010.\n     Coastal Flood Advisory until 6 PM EDT Sunday for CTZ011-012.\nNY...Wind Advisory until 6 AM EDT Sunday for NYZ069>075-078>081-\n     176>179.\n     Coastal Flood Warning until 6 PM EDT Sunday for NYZ071>075-\n     078>081-176>179.\n     High Risk for Rip Currents through Sunday evening for NYZ075-080-\n     081-178-179.\n     High Surf Advisory until 8 PM EDT Sunday for NYZ075-080-081-\n     178-179.\nNJ...Wind Advisory until 6 AM EDT Sunday for NJZ004-006-103>108.\n     Coastal Flood Warning until 6 PM EDT Sunday for NJZ006-104-106-\n     108.\nMARINE...Gale Warning until 6 AM EDT Sunday for ANZ331-332-335-338-340-\n     345.\n     Storm Warning until 6 AM EDT Sunday for ANZ350-353-355-380-383-\n     385.\n\n&&\n\n$$\n\nDISCUSSION...JE/BR/NV\nAVIATION...JE\nMARINE...JE/BR/NV\n",
+      "retrieved_at": "2026-09-26T00:35:59.799425+00:00",
+      "temperature_discussion": [],
+      "warnings": [],
+      "wfo": "KOKX"
+    },
+    "nws_forecast": {
+      "available_at": "2026-09-25T21:22:24+00:00",
+      "coordinates": {
+        "latitude": 40.77,
+        "longitude": -73.97
+      },
+      "expected_high_f": null,
+      "forecast_high_f": 62.0,
+      "freshness_seconds": 11601.735325,
+      "freshness_status": "aging",
+      "grid_metadata": {
+        "cwa": "OKX",
+        "forecastOffice": "https://api.weather.gov/offices/OKX",
+        "gridId": "OKX",
+        "gridX": 34,
+        "gridY": 45,
+        "grid_day": {
+          "dewpoint": [
+            {
+              "valid_time": "2026-09-26T04:00:00+00:00",
+              "value": 9.444444444444445
+            },
+            {
+              "valid_time": "2026-09-26T05:00:00+00:00",
+              "value": 10.555555555555555
+            },
+            {
+              "valid_time": "2026-09-26T06:00:00+00:00",
+              "value": 11.11111111111111
+            },
+            {
+              "valid_time": "2026-09-26T08:00:00+00:00",
+              "value": 11.666666666666666
+            },
+            {
+              "valid_time": "2026-09-26T10:00:00+00:00",
+              "value": 11.11111111111111
+            },
+            {
+              "valid_time": "2026-09-26T13:00:00+00:00",
+              "value": 11.666666666666666
+            },
+            {
+              "valid_time": "2026-09-26T14:00:00+00:00",
+              "value": 12.222222222222221
+            },
+            {
+              "valid_time": "2026-09-26T15:00:00+00:00",
+              "value": 12.777777777777779
+            },
+            {
+              "valid_time": "2026-09-26T18:00:00+00:00",
+              "value": 13.333333333333334
+            },
+            {
+              "valid_time": "2026-09-26T23:00:00+00:00",
+              "value": 12.777777777777779
+            },
+            {
+              "valid_time": "2026-09-27T00:00:00+00:00",
+              "value": 12.222222222222221
+            },
+            {
+              "valid_time": "2026-09-27T02:00:00+00:00",
+              "value": 12.777777777777779
+            }
+          ],
+          "probabilityOfPrecipitation": [
+            {
+              "valid_time": "2026-09-26T06:00:00+00:00",
+              "value": 58
+            },
+            {
+              "valid_time": "2026-09-26T09:00:00+00:00",
+              "value": 66
+            },
+            {
+              "valid_time": "2026-09-26T12:00:00+00:00",
+              "value": 78
+            },
+            {
+              "valid_time": "2026-09-26T18:00:00+00:00",
+              "value": 87
+            },
+            {
+              "valid_time": "2026-09-26T21:00:00+00:00",
+              "value": 71
+            },
+            {
+              "valid_time": "2026-09-27T00:00:00+00:00",
+              "value": 78
+            },
+            {
+              "valid_time": "2026-09-27T03:00:00+00:00",
+              "value": 95
+            }
+          ],
+          "relativeHumidity": [
+            {
+              "valid_time": "2026-09-26T04:00:00+00:00",
+              "value": 62
+            },
+            {
+              "valid_time": "2026-09-26T05:00:00+00:00",
+              "value": 70
+            },
+            {
+              "valid_time": "2026-09-26T06:00:00+00:00",
+              "value": 75
+            },
+            {
+              "valid_time": "2026-09-26T08:00:00+00:00",
+              "value": 78
+            },
+            {
+              "valid_time": "2026-09-26T09:00:00+00:00",
+              "value": 80
+            },
+            {
+              "valid_time": "2026-09-26T10:00:00+00:00",
+              "value": 78
+            },
+            {
+              "valid_time": "2026-09-26T12:00:00+00:00",
+              "value": 75
+            },
+            {
+              "valid_time": "2026-09-26T13:00:00+00:00",
+              "value": 78
+            },
+            {
+              "valid_time": "2026-09-26T14:00:00+00:00",
+              "value": 81
+            },
+            {
+              "valid_time": "2026-09-26T15:00:00+00:00",
+              "value": 84
+            },
+            {
+              "valid_time": "2026-09-26T16:00:00+00:00",
+              "value": 81
+            },
+            {
+              "valid_time": "2026-09-26T18:00:00+00:00",
+              "value": 84
+            },
+            {
+              "valid_time": "2026-09-26T19:00:00+00:00",
+              "value": 81
+            },
+            {
+              "valid_time": "2026-09-26T20:00:00+00:00",
+              "value": 84
+            },
+            {
+              "valid_time": "2026-09-26T21:00:00+00:00",
+              "value": 87
+            },
+            {
+              "valid_time": "2026-09-26T23:00:00+00:00",
+              "value": 84
+            },
+            {
+              "valid_time": "2026-09-27T00:00:00+00:00",
+              "value": 81
+            },
+            {
+              "valid_time": "2026-09-27T02:00:00+00:00",
+              "value": 84
+            }
+          ],
+          "skyCover": [
+            {
+              "valid_time": "2026-09-26T04:00:00+00:00",
+              "value": 88
+            },
+            {
+              "valid_time": "2026-09-26T05:00:00+00:00",
+              "value": 86
+            },
+            {
+              "valid_time": "2026-09-26T06:00:00+00:00",
+              "value": 90
+            },
+            {
+              "valid_time": "2026-09-26T07:00:00+00:00",
+              "value": 87
+            },
+            {
+              "valid_time": "2026-09-26T08:00:00+00:00",
+              "value": 88
+            },
+            {
+              "valid_time": "2026-09-26T09:00:00+00:00",
+              "value": 92
+            },
+            {
+              "valid_time": "2026-09-26T11:00:00+00:00",
+              "value": 88
+            },
+            {
+              "valid_time": "2026-09-26T13:00:00+00:00",
+              "value": 87
+            },
+            {
+              "valid_time": "2026-09-26T14:00:00+00:00",
+              "value": 86
+            },
+            {
+              "valid_time": "2026-09-26T15:00:00+00:00",
+              "value": 88
+            },
+            {
+              "valid_time": "2026-09-26T16:00:00+00:00",
+              "value": 86
+            },
+            {
+              "valid_time": "2026-09-26T17:00:00+00:00",
+              "value": 92
+            },
+            {
+              "valid_time": "2026-09-26T18:00:00+00:00",
+              "value": 94
+            },
+            {
+              "valid_time": "2026-09-26T21:00:00+00:00",
+              "value": 97
+            },
+            {
+              "valid_time": "2026-09-26T22:00:00+00:00",
+              "value": 98
+            },
+            {
+              "valid_time": "2026-09-26T23:00:00+00:00",
+              "value": 95
+            },
+            {
+              "valid_time": "2026-09-27T00:00:00+00:00",
+              "value": 97
+            },
+            {
+              "valid_time": "2026-09-27T01:00:00+00:00",
+              "value": 92
+            },
+            {
+              "valid_time": "2026-09-27T02:00:00+00:00",
+              "value": 90
+            },
+            {
+              "valid_time": "2026-09-27T03:00:00+00:00",
+              "value": 97
+            }
+          ],
+          "temperature": [
+            {
+              "valid_time": "2026-09-26T04:00:00+00:00",
+              "value": 16.666666666666668
+            },
+            {
+              "valid_time": "2026-09-26T05:00:00+00:00",
+              "value": 16.11111111111111
+            },
+            {
+              "valid_time": "2026-09-26T06:00:00+00:00",
+              "value": 15.555555555555555
+            },
+            {
+              "valid_time": "2026-09-26T09:00:00+00:00",
+              "value": 15
+            },
+            {
+              "valid_time": "2026-09-26T12:00:00+00:00",
+              "value": 15.555555555555555
+            },
+            {
+              "valid_time": "2026-09-26T16:00:00+00:00",
+              "value": 16.11111111111111
+            },
+            {
+              "valid_time": "2026-09-26T19:00:00+00:00",
+              "value": 16.666666666666668
+            },
+            {
+              "valid_time": "2026-09-26T20:00:00+00:00",
+              "value": 16.11111111111111
+            },
+            {
+              "valid_time": "2026-09-26T21:00:00+00:00",
+              "value": 15.555555555555555
+            }
+          ],
+          "temperature_max_c": 16.666666666666668,
+          "temperature_max_f": 62.0,
+          "weather": [
+            {
+              "valid_time": "2026-09-26T06:00:00+00:00",
+              "value": [
+                {
+                  "attributes": [],
+                  "coverage": "likely",
+                  "intensity": "moderate",
+                  "visibility": {
+                    "unitCode": "wmoUnit:km",
+                    "value": 4.828032
+                  },
+                  "weather": "rain"
+                }
+              ]
+            },
+            {
+              "valid_time": "2026-09-26T12:00:00+00:00",
+              "value": [
+                {
+                  "attributes": [],
+                  "coverage": "definite",
+                  "intensity": "moderate",
+                  "visibility": {
+                    "unitCode": "wmoUnit:km",
+                    "value": 4.828032
+                  },
+                  "weather": "rain"
+                }
+              ]
+            },
+            {
+              "valid_time": "2026-09-26T21:00:00+00:00",
+              "value": [
+                {
+                  "attributes": [],
+                  "coverage": "likely",
+                  "intensity": "moderate",
+                  "visibility": {
+                    "unitCode": "wmoUnit:km",
+                    "value": 4.828032
+                  },
+                  "weather": "rain"
+                }
+              ]
+            },
+            {
+              "valid_time": "2026-09-27T00:00:00+00:00",
+              "value": [
+                {
+                  "attributes": [],
+                  "coverage": "definite",
+                  "intensity": "moderate",
+                  "visibility": {
+                    "unitCode": "wmoUnit:km",
+                    "value": 4.828032
+                  },
+                  "weather": "rain"
+                }
+              ]
+            }
+          ],
+          "windSpeed": [
+            {
+              "valid_time": "2026-09-26T04:00:00+00:00",
+              "value": 29.632
+            },
+            {
+              "valid_time": "2026-09-26T05:00:00+00:00",
+              "value": 27.78
+            },
+            {
+              "valid_time": "2026-09-26T06:00:00+00:00",
+              "value": 29.632
+            },
+            {
+              "valid_time": "2026-09-26T09:00:00+00:00",
+              "value": 31.484
+            },
+            {
+              "valid_time": "2026-09-26T15:00:00+00:00",
+              "value": 29.632
+            },
+            {
+              "valid_time": "2026-09-26T16:00:00+00:00",
+              "value": 31.484
+            },
+            {
+              "valid_time": "2026-09-26T19:00:00+00:00",
+              "value": 33.336
+            },
+            {
+              "valid_time": "2026-09-26T21:00:00+00:00",
+              "value": 31.484
+            },
+            {
+              "valid_time": "2026-09-27T00:00:00+00:00",
+              "value": 29.632
+            }
+          ]
+        },
+        "grid_day_fields": [
+          "temperature",
+          "dewpoint",
+          "relativeHumidity",
+          "skyCover",
+          "probabilityOfPrecipitation",
+          "windSpeed",
+          "weather",
+          "temperature_max_c",
+          "temperature_max_f"
+        ],
+        "wfo": "OKX"
+      },
+      "hourly_high_f": 62.0,
+      "hourly_series": [
+        {
+          "shortForecast": "Chance Light Rain",
+          "temperature_f": 62.0,
+          "timestamp": "2026-09-26T00:00:00-04:00",
+          "windSpeed": "18 mph"
+        },
+        {
+          "shortForecast": "Chance Light Rain",
+          "temperature_f": 61.0,
+          "timestamp": "2026-09-26T01:00:00-04:00",
+          "windSpeed": "17 mph"
+        },
+        {
+          "shortForecast": "Rain Likely",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T02:00:00-04:00",
+          "windSpeed": "18 mph"
+        },
+        {
+          "shortForecast": "Rain Likely",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T03:00:00-04:00",
+          "windSpeed": "18 mph"
+        },
+        {
+          "shortForecast": "Rain Likely",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T04:00:00-04:00",
+          "windSpeed": "18 mph"
+        },
+        {
+          "shortForecast": "Rain Likely",
+          "temperature_f": 59.0,
+          "timestamp": "2026-09-26T05:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain Likely",
+          "temperature_f": 59.0,
+          "timestamp": "2026-09-26T06:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain Likely",
+          "temperature_f": 59.0,
+          "timestamp": "2026-09-26T07:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T08:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T09:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T10:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T11:00:00-04:00",
+          "windSpeed": "18 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 61.0,
+          "timestamp": "2026-09-26T12:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 61.0,
+          "timestamp": "2026-09-26T13:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 61.0,
+          "timestamp": "2026-09-26T14:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 62.0,
+          "timestamp": "2026-09-26T15:00:00-04:00",
+          "windSpeed": "21 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 61.0,
+          "timestamp": "2026-09-26T16:00:00-04:00",
+          "windSpeed": "21 mph"
+        },
+        {
+          "shortForecast": "Rain Likely",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T17:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain Likely",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T18:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain Likely",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T19:00:00-04:00",
+          "windSpeed": "20 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T20:00:00-04:00",
+          "windSpeed": "18 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T21:00:00-04:00",
+          "windSpeed": "18 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T22:00:00-04:00",
+          "windSpeed": "18 mph"
+        },
+        {
+          "shortForecast": "Rain",
+          "temperature_f": 60.0,
+          "timestamp": "2026-09-26T23:00:00-04:00",
+          "windSpeed": "18 mph"
+        }
+      ],
+      "issued_at": "2026-09-25T21:22:24+00:00",
+      "lead_hours": null,
+      "metadata": {
+        "cache_paths": {
+          "forecast": "C:\\dev\\Personal\\kalshi-edge-lab\\data\\cache\\weather\\nws\\forecast_20260926T003559Z.json",
+          "forecastGridData": "C:\\dev\\Personal\\kalshi-edge-lab\\data\\cache\\weather\\nws\\forecastGridData_20260926T003559Z.json",
+          "hourly": "C:\\dev\\Personal\\kalshi-edge-lab\\data\\cache\\weather\\nws\\forecastHourly_20260926T003559Z.json"
+        },
+        "live_only": true,
+        "no_historical_backfill": true
+      },
+      "model": "nws_api",
+      "model_run_at": null,
+      "prior_forecast_high_f": null,
+      "quality_status": "ok",
+      "raw_cache_path": "C:\\dev\\Personal\\kalshi-edge-lab\\data\\cache\\weather\\nws\\forecast_20260926T003559Z.json",
+      "recent_run_spread_f": null,
+      "recent_runs": [],
+      "residual_sample_size": null,
+      "retrieved_at": "2026-09-26T00:35:58.761587+00:00",
+      "run_to_run_trend_f": null,
+      "source_id": "nws_forecast",
+      "source_name": "NWS Point/Hourly/Grid Forecast",
+      "target_date": "2026-09-26",
+      "warnings": []
+    },
+    "observations": {
+      "change_1h_f": null,
+      "change_3h_f": null,
+      "freshness_seconds": null,
+      "freshness_status": "unavailable",
+      "high_so_far_f": 68.0,
+      "latest_temperature_f": 68.0,
+      "latest_timestamp": "2026-09-25T19:51:00-04:00",
+      "metadata": {
+        "legacy_knyc_summary": {
+          "date": "2026-09-25",
+          "high_temperature": 68.0,
+          "high_time": "2026-09-25T12:51:00-04:00",
+          "latest_temperature": 68.0,
+          "latest_time": "2026-09-25T19:51:00-04:00",
+          "observation_count": 24
+        }
+      },
+      "morning_warming_rate_f_per_hour": null,
+      "quality_status": "missing",
+      "retrieved_at": "2026-09-26T00:35:45.735325+00:00",
+      "station_id": "KNYC",
+      "target_date": "2026-09-26",
+      "time_of_high": "2026-09-25T12:51:00-04:00",
+      "trajectory": [],
+      "warnings": [
+        "No KNYC observations for target date at as_of"
+      ]
+    },
+    "retrieved_at": "2026-09-26T00:35:45.735325+00:00",
+    "target_date": "2026-09-26",
+    "warnings": []
+  },
+  "external_probability_distribution": {
+    "61\u00b0 or below": 0.9380530973451328,
+    "62\u00b0 to 63\u00b0": 0.035398230088495575,
+    "64\u00b0 to 65\u00b0": 0.02654867256637168,
+    "66\u00b0 to 67\u00b0": 0.0,
+    "68\u00b0 to 69\u00b0": 0.0,
+    "70\u00b0 or above": 0.0
+  },
+  "kalshi_quote_sidecar": {
+    "markets": [
+      {
+        "label": "70\u00b0 or above",
+        "mid_dollars": 0.005,
+        "result": "",
+        "spread_dollars": 0.01,
+        "status": "active",
+        "ticker": "KXHIGHNY-26SEP26-T69",
+        "yes_ask_dollars": 0.01,
+        "yes_bid_dollars": 0.0
+      },
+      {
+        "label": "61\u00b0 or below",
+        "mid_dollars": 0.46499999999999997,
+        "result": "",
+        "spread_dollars": 0.009999999999999953,
+        "status": "active",
+        "ticker": "KXHIGHNY-26SEP26-T62",
+        "yes_ask_dollars": 0.47,
+        "yes_bid_dollars": 0.46
+      },
+      {
+        "label": "68\u00b0 to 69\u00b0",
+        "mid_dollars": 0.005,
+        "result": "",
+        "spread_dollars": 0.01,
+        "status": "active",
+        "ticker": "KXHIGHNY-26SEP26-B68.5",
+        "yes_ask_dollars": 0.01,
+        "yes_bid_dollars": 0.0
+      },
+      {
+        "label": "66\u00b0 to 67\u00b0",
+        "mid_dollars": 0.015,
+        "result": "",
+        "spread_dollars": 0.01,
+        "status": "active",
+        "ticker": "KXHIGHNY-26SEP26-B66.5",
+        "yes_ask_dollars": 0.02,
+        "yes_bid_dollars": 0.01
+      },
+      {
+        "label": "64\u00b0 to 65\u00b0",
+        "mid_dollars": 0.08499999999999999,
+        "result": "",
+        "spread_dollars": 0.009999999999999995,
+        "status": "active",
+        "ticker": "KXHIGHNY-26SEP26-B64.5",
+        "yes_ask_dollars": 0.09,
+        "yes_bid_dollars": 0.08
+      },
+      {
+        "label": "62\u00b0 to 63\u00b0",
+        "mid_dollars": 0.415,
+        "result": "",
+        "spread_dollars": 0.010000000000000009,
+        "status": "active",
+        "ticker": "KXHIGHNY-26SEP26-B62.5",
+        "yes_ask_dollars": 0.42,
+        "yes_bid_dollars": 0.41
+      }
+    ],
+    "note": "Sidecar only \u2014 not used as WeatherPrediction features"
+  },
+  "methodology_constants": {
+    "GFS_PUBLICATION_LATENCY_hours": 6.0,
+    "HRRR_MODEL": "ncep_hrrr_conus",
+    "HRRR_OPERATIONAL_SELECTION_POLICY": "latest_available_by_latency",
+    "HRRR_PUBLICATION_LATENCY_hours": 3.0,
+    "decision": "RESEARCH_ONLY",
+    "model_combination_policy": "none",
+    "no_bet": "NO_BET",
+    "snapshot_schema_version": "4.0.0"
+  },
+  "prediction": {
+    "as_of": "2026-09-26T00:35:45.735325+00:00",
+    "bucket_probabilities": {
+      "61\u00b0 or below": 0.9380530973451328,
+      "62\u00b0 to 63\u00b0": 0.035398230088495575,
+      "64\u00b0 to 65\u00b0": 0.02654867256637168,
+      "66\u00b0 to 67\u00b0": 0.0,
+      "68\u00b0 to 69\u00b0": 0.0,
+      "70\u00b0 or above": 0.0
+    },
+    "calibration_method": "knyc_to_clinyc_identity_transfer",
+    "calibration_quality": "same_run_global:adequate",
+    "calibration_target_regime": "nws_cli_knyc",
+    "confidence_label": "LOW",
+    "confidence_score": 0.35,
+    "event_ticker": "KXHIGHNY-26SEP26",
+    "expected_high": 56.849557522123895,
+    "forecast_run": "previous-day 18Z (live GFS fallback)",
+    "gefs_max": 66.3,
+    "gefs_mean": 63.02903225806452,
+    "gefs_median": 63.1,
+    "gefs_member_count": 31,
+    "gefs_min": 60.1,
+    "gefs_raw_probabilities": {
+      "61\u00b0 or below": 0.0967741935483871,
+      "62\u00b0 to 63\u00b0": 0.5161290322580645,
+      "64\u00b0 to 65\u00b0": 0.3225806451612903,
+      "66\u00b0 to 67\u00b0": 0.06451612903225806,
+      "68\u00b0 to 69\u00b0": 0.0,
+      "70\u00b0 or above": 0.0
+    },
+    "gefs_std": 1.3863839128459785,
+    "live_target_regime": "weather_company_clinyc",
+    "median_high": 57.0,
+    "model_agreement": "LOW",
+    "p10_high": 53.0,
+    "p25_high": 54.0,
+    "p50_high": 57.0,
+    "p75_high": 59.0,
+    "p90_high": 60.8,
+    "point_forecast_high": 59.3,
+    "prediction_status": "OK",
+    "provenance": {
+      "calibration_method": "knyc_to_clinyc_identity_transfer",
+      "clinyc_residual_rows": 167,
+      "confidence_reasons": [
+        "calibration N=113 (>= run threshold 80)",
+        "historical RMSE=3.93\u00b0F",
+        "residual std=3.08\u00b0F",
+        "GEFS std=1.39\u00b0F",
+        "model_agreement=LOW",
+        "lead_hours=6.0",
+        "resolution_certainty=verified_weather_company",
+        "settlement_source_transfer_validated=false",
+        "settlement source mismatch \u2014 experimental display only"
+      ],
+      "decision": "RESEARCH_ONLY",
+      "direct_clinyc_dataset_exists": true,
+      "direct_clinyc_operationally_eligible": false,
+      "equivalent_decision": "NO_BET",
+      "historical_replay_excludes_observations": true,
+      "live_deterministic_gfs_fallback": true,
+      "live_has_observations": true,
+      "methodology_thresholds": {
+        "MIN_N_MONTH": 30,
+        "MIN_N_RUN": 80,
+        "MIN_N_SEASON": 50,
+        "MIN_RUN_HISTORY": 20
+      },
+      "no_bet": "NO_BET",
+      "operational_run_policy": "latest exact GFS run with run_init + GFS_PUBLICATION_LATENCY <= prediction_as_of",
+      "research_gate": "RESEARCH_ONLY",
+      "residual_convention": "residual_f = actual_high_f - forecast_high_f",
+      "residual_pool_level": "same_run_global",
+      "residual_pool_meta": {
+        "N": 113,
+        "threshold": 80
+      },
+      "target_regime_match": "EXPERIMENTAL_IDENTITY_TRANSFER",
+      "transfer_status": "experimental"
+    },
+    "residual_sample_size": 113,
+    "run_id": "prev_18z",
+    "settlement_source_transfer_validated": false,
+    "target_date": "2026-09-26",
+    "transfer_status": "experimental",
+    "warnings": [
+      "EXPERIMENTAL - SETTLEMENT SOURCE MISMATCH: calibration_target_regime=nws_cli_knyc live_target_regime=weather_company_clinyc",
+      "knyc_to_clinyc_identity_transfer: experimental research display only; settlement_source_transfer_validated=false",
+      "RESEARCH_ONLY / NO_BET: knyc_to_clinyc_identity_transfer is experimental; settlement_source_transfer_validated=false"
+    ]
+  },
+  "prediction_as_of": "2026-09-26T00:35:45.735325+00:00",
+  "prediction_status": "OK",
+  "research_status": {
+    "calibration_method": "knyc_to_clinyc_identity_transfer",
+    "decision": "RESEARCH_ONLY",
+    "direct_clinyc_dataset_exists": true,
+    "direct_clinyc_operationally_eligible": false,
+    "mode": "RESEARCH_ONLY",
+    "model_combination_policy": "none",
+    "settlement_source_transfer_validated": false,
+    "target_regime_match": "EXPERIMENTAL_IDENTITY_TRANSFER",
+    "trade_recommendations": "DISABLED",
+    "transfer_status": "experimental"
+  },
+  "resolution_certainty": "verified_weather_company",
+  "resolution_regime": "weather_company_clinyc",
+  "schema_version": "4.0.0",
+  "snapshot_id": "KXHIGHNY-26SEP26__20260926T003545Z",
+  "target_date": "2026-09-26",
+  "transfer_status": "experimental",
+  "warnings": [
+    "Live/current settlement uses Weather Company CLINYC; historical residual calibration uses NWS CLI KNYC.",
+    "EXPERIMENTAL - SETTLEMENT SOURCE MISMATCH: calibration_target_regime=nws_cli_knyc live_target_regime=weather_company_clinyc",
+    "knyc_to_clinyc_identity_transfer: experimental research display only; settlement_source_transfer_validated=false",
+    "RESEARCH_ONLY / NO_BET: knyc_to_clinyc_identity_transfer is experimental; settlement_source_transfer_validated=false",
+    "EXPERIMENTAL - SETTLEMENT SOURCE MISMATCH: calibration_target_regime=nws_cli_knyc live_target_regime=weather_company_clinyc",
+    "knyc_to_clinyc_identity_transfer: experimental research display only; settlement_source_transfer_validated=false",
+    "RESEARCH_ONLY / NO_BET: knyc_to_clinyc_identity_transfer is experimental; settlement_source_transfer_validated=false"
+  ]
+}

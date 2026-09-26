@@ -17,6 +17,8 @@ export type WeatherPrediction = {
   settlement_source_transfer_validated: boolean | null
   residual_sample_size: number | null
   model_agreement?: string | null
+  calibration_method?: string | null
+  transfer_status?: string | null
   warnings: string[]
   provenance?: Record<string, unknown>
   point_forecast_high?: number | null
@@ -65,11 +67,21 @@ export type LiveWeatherResponse = {
   events: WeatherEvent[]
 }
 
+export type PredictionSnapshotMeta = {
+  snapshot_id: string
+  prediction_as_of: string
+  created_at?: string
+  event_ticker?: string
+  target_date?: string
+  prediction_status?: string
+  path?: string
+}
+
 export type ModelSummary = {
   model_summary_available: boolean
   generated_at: string
   mode: string
-  methodology_constants: Record<string, number>
+  methodology_constants: Record<string, number | string>
   calibration: Record<string, unknown>
   forecast_error_by_run?: Record<string, Record<string, number>>
   oos?: Record<string, unknown> | null
@@ -78,5 +90,7 @@ export type ModelSummary = {
   settlement_transfer?: Record<string, unknown>
   direct_clinyc?: Record<string, unknown>
   research_status?: Record<string, string>
+  multi_source_evidence?: Record<string, string>
+  prospective_journal?: Record<string, unknown>
   notes?: string[]
 }

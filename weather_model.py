@@ -8,8 +8,12 @@ Commands:
   python weather_model.py --backtest
   python weather_model.py --live
   python weather_model.py --phase2-clinyc
+  python weather_model.py --phase3-transfer
+  python weather_model.py --phase4-hrrr
+  python weather_model.py --snapshot-live
+  python weather_model.py --score-snapshots
 
-Phase 1 does NOT place orders and does NOT optimize against trading ROI.
+Phase 1–4 do NOT place orders and do NOT optimize against trading ROI.
 """
 
 from __future__ import annotations
@@ -77,6 +81,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Phase 3: provenance audit, identity-transfer assessment, "
             "direct CLINYC eligibility / walk-forward (no trading ROI)"
+        ),
+    )
+    group.add_argument(
+        "--phase4-hrrr",
+        action="store_true",
+        help=(
+            "Phase 4: independent HRRR residual history + walk-forward "
+            "vs GFS on identical dates (no blending, no trading ROI)"
+        ),
+    )
+    group.add_argument(
+        "--snapshot-live",
+        action="store_true",
+        help=(
+            "Write immutable prospective PredictionSnapshots for open events "
+            "(explicit only — never a GET side effect)"
+        ),
+    )
+    group.add_argument(
+        "--score-snapshots",
+        action="store_true",
+        help=(
+            "Score existing snapshots after settlement is known "
+            "(writes separate score artifacts; does not mutate snapshots)"
         ),
     )
     parser.add_argument(
@@ -285,6 +313,98 @@ def cmd_phase3_transfer() -> int:
     return 0
 
 
+def cmd_phase4_hrrr() -> int:
+    from research.weather.phase4 import run_phase4_hrrr_evaluation, write_methodology_report
+
+    console.print("[bold]Phase 4 independent HRRR evaluation[/bold]")
+    console.print("Does NOT blend HRRR into WeatherPrediction.")
+    console.print("Does NOT pool HRRR residuals with GFS residuals.")
+    console.print("Streams hrrr_exact_run and hrrr_previous_day1 stay separate.")
+    write_methodology_report()
+    client = KalshiClient(
+        progress=lambda message: console.print(message, style="dim"),
+    )
+    markets = get_historical_markets_for_series(SERIES_TICKER, client=client)
+    report = run_phase4_hrrr_evaluation(
+        markets,
+        progress=lambda m: console.print(m, style="dim"),
+    )
+    console.print(f"HRRR rows: {report.get('row_count')}")
+    console.print(
+        f"  exact-run rows={report.get('hrrr_exact_run_rows')}  "
+        f"previous_day1 rows={report.get('hrrr_previous_day1_rows')}"
+    )
+    console.print(
+        f"  operational_selection_policy={report.get('operational_selection_policy')}"
+    )
+    coverage = report.get("coverage_by_stream_run") or {}
+    for key, metrics in sorted(coverage.items()):
+        console.print(
+            f"  {key}: N={metrics.get('N')}  "
+            f"MAE={metrics.get('MAE')}  RMSE={metrics.get('RMSE')}  "
+            f"bias={metrics.get('bias')}  kind={metrics.get('benchmark_kind')}"
+        )
+    shared = report.get("shared_gfs_hrrr_calibrated") or {}
+    for key, cmp_ in shared.items():
+        console.print(
+            f"Shared calibrated {key}: N={cmp_.get('shared_evaluation_n')}  "
+            f"policy={cmp_.get('policy')}"
+        )
+        cont = cmp_.get("continuous_forecast_error") or {}
+        if cont:
+            console.print(f"  continuous GFS={cont.get('gfs')}  HRRR={cont.get('hrrr')}")
+        prob = cmp_.get("probabilistic_forecast_quality") or {}
+        if prob:
+            console.print(
+                f"  calibrated GFS={prob.get('calibrated_gfs')}  "
+                f"HRRR={prob.get('calibrated_hrrr')}"
+            )
+    console.print(f"Report: data/results/hrrr_independent_evaluation.json")
+    return 0
+
+
+def cmd_snapshot_live() -> int:
+    from research.weather.service import snapshot_live_events
+
+    ensure_weather_cache_dirs()
+    console.print("[bold]Prospective PredictionSnapshot (immutable)[/bold]")
+    console.print("GET endpoints never create snapshots — this CLI is explicit.")
+    result = snapshot_live_events()
+    console.print(
+        f"written={result.get('count_written')}  "
+        f"idempotent_reuses={result.get('count_idempotent_reuses')}  "
+        f"conflicts={result.get('count_conflicts')}"
+    )
+    for row in result.get("written") or []:
+        console.print(f"  + {row.get('snapshot_id')} -> {row.get('path')}")
+    for row in result.get("idempotent_reuses") or []:
+        console.print(f"  = {row.get('snapshot_id')} (unchanged)")
+    for row in result.get("conflicts") or []:
+        console.print(f"  ! CONFLICT {row.get('snapshot_id')}: {row.get('error')}")
+    return 0 if not result.get("count_conflicts") else 1
+
+
+def cmd_score_snapshots() -> int:
+    from research.weather.service import score_settled_snapshots
+
+    ensure_weather_cache_dirs()
+    console.print("[bold]Score settled PredictionSnapshots[/bold]")
+    console.print("Writes separate score artifacts — original snapshots unchanged.")
+    result = score_settled_snapshots()
+    console.print(
+        f"scored={result.get('count_scored')}  skipped={result.get('count_skipped')}"
+    )
+    by_lead = result.get("by_lead_bin") or {}
+    for label, stats in by_lead.items():
+        if stats.get("N"):
+            console.print(
+                f"  {label}: N={stats.get('N')}  "
+                f"mean_brier={stats.get('mean_brier')}  "
+                f"top_acc={stats.get('top_bucket_accuracy')}"
+            )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.build_calibration:
@@ -297,6 +417,12 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_phase2_clinyc()
     if args.phase3_transfer:
         return cmd_phase3_transfer()
+    if args.phase4_hrrr:
+        return cmd_phase4_hrrr()
+    if args.snapshot_live:
+        return cmd_snapshot_live()
+    if args.score_snapshots:
+        return cmd_score_snapshots()
     return 1
 
 

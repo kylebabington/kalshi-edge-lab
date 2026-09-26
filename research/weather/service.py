@@ -24,22 +24,32 @@ from research.weather.calibration import (
     nws_cli_rows,
     parse_float,
 )
+from research.weather.evidence import (
+    WeatherEvidenceBundle,
+    compute_source_agreement,
+)
 from research.weather.models import (
     CALIBRATION_METHOD_DIRECT_CLINYC,
     CALIBRATION_METHOD_NWS,
     CALIBRATION_METHOD_TRANSFER,
     DECISION_NO_BET,
     DECISION_RESEARCH_ONLY,
+    FRESHNESS_AGING_SECONDS,
+    FRESHNESS_FRESH_SECONDS,
     GFS_PUBLICATION_LATENCY,
+    HRRR_MODEL,
+    HRRR_PUBLICATION_LATENCY,
     MIN_N_MONTH,
     MIN_N_RUN,
     MIN_N_SEASON,
     MIN_REQUIRED_EDGE,
     MIN_RUN_HISTORY,
+    MODEL_COMBINATION_POLICY,
     PREDICTION_STATUS_INSUFFICIENT_TARGET_REGIME_HISTORY,
     REGIME_NWS_CLI_KNYC,
     REGIME_WEATHER_COMPANY_CLINYC,
     SERIES_TICKER,
+    SNAPSHOT_SCHEMA_VERSION,
     STANDARDIZED_RUNS,
     TARGET_REGIME_MATCH_DIRECT,
     TARGET_REGIME_MATCH_EXPERIMENTAL_TRANSFER,
@@ -52,6 +62,8 @@ from research.weather.models import (
     WeatherPrediction,
     WeatherTradeEvaluation,
 )
+from research.weather.evidence import apply_freshness
+from research.weather.evidence import ForecastSourceSnapshot
 from research.weather.probability import (
     choose_operational_run,
     predict_from_calibration,
@@ -368,6 +380,19 @@ def build_live_event_bundle(
         ],
     )
 
+    # Evidence collection is independent of WeatherPrediction — never mutates it.
+    evidence_bundle = collect_live_evidence(
+        target_date=target_date,
+        as_of=as_of,
+        prediction=prediction,
+        gfs_run_id=run_id,
+        gfs_run_label=str(run["label"]),
+        gfs_init=init,
+        gfs_forecast_high=forecast_high,
+        gfs_live_point=live_point,
+        knyc_summary=knyc_summary,
+    )
+
     return {
         "event_ticker": event_ticker,
         "target_date": target_date,
@@ -388,37 +413,184 @@ def build_live_event_bundle(
                 "direct_clinyc_dataset_exists"
             ),
             "direct_clinyc_operationally_eligible": clinyc_eligible,
+            "model_combination_policy": MODEL_COMBINATION_POLICY,
         },
-        "evidence": {
-            "gfs": {
-                "run_id": run_id,
-                "run_label": run["label"],
-                "initialized_at": init.isoformat(),
-                "considered_available_at": (
-                    init + GFS_PUBLICATION_LATENCY
-                ).isoformat(),
-                "forecast_high": forecast_high,
-                "live_deterministic_high": live_point,
-            },
-            "gefs": {
-                "member_count": prediction.gefs_member_count,
-                "mean": prediction.gefs_mean,
-                "median": prediction.gefs_median,
-                "std": prediction.gefs_std,
-                "min": prediction.gefs_min,
-                "max": prediction.gefs_max,
-            },
-            "observations": {
-                "note": (
-                    "KNYC observations are supporting meteorological evidence. "
-                    "Current settlement source may be CLINYC."
-                ),
-                "knyc": knyc_summary,
-            },
-        },
+        "evidence": evidence_bundle.to_dict(),
         "kalshi_markets": [_market_quote(m) for m in event_markets],
-        "warnings": list(resolution.warnings) + list(prediction.warnings),
+        "warnings": list(resolution.warnings)
+        + list(prediction.warnings)
+        + list(evidence_bundle.warnings),
     }
+
+
+def collect_live_evidence(
+    *,
+    target_date: str,
+    as_of: datetime,
+    prediction: WeatherPrediction,
+    gfs_run_id: str,
+    gfs_run_label: str,
+    gfs_init: datetime,
+    gfs_forecast_high: float | None,
+    gfs_live_point: float | None,
+    knyc_summary: dict[str, Any] | None,
+) -> WeatherEvidenceBundle:
+    """Gather independent evidence streams. Failures become unavailable cards."""
+    from research.weather.sources.discussion import collect_nws_discussion
+    from research.weather.sources.hrrr import collect_hrrr_live
+    from research.weather.sources.nws_forecast import collect_nws_forecast
+    from research.weather.sources.observations import collect_observation_trajectory
+
+    retrieved_at = as_of.isoformat()
+    warnings: list[str] = []
+
+    gfs_fresh_s, gfs_fresh = apply_freshness(gfs_init.isoformat(), as_of=as_of)
+    gfs_snap = ForecastSourceSnapshot(
+        source_id="gfs",
+        source_name="Calibrated GFS",
+        model="ncep_gfs_global",
+        target_date=target_date,
+        model_run_at=gfs_init.isoformat(),
+        available_at=(gfs_init + GFS_PUBLICATION_LATENCY).isoformat(),
+        retrieved_at=retrieved_at,
+        forecast_high_f=gfs_forecast_high,
+        expected_high_f=prediction.expected_high,
+        residual_sample_size=prediction.residual_sample_size,
+        lead_hours=(
+            (datetime.strptime(target_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) - gfs_init)
+            .total_seconds()
+            / 3600.0
+        ),
+        freshness_seconds=gfs_fresh_s,
+        freshness_status=gfs_fresh,
+        metadata={
+            "run_id": gfs_run_id,
+            "run_label": gfs_run_label,
+            "live_deterministic_high": gfs_live_point,
+            "calibration_n": prediction.residual_sample_size,
+        },
+    )
+
+    gefs_snap = ForecastSourceSnapshot(
+        source_id="gefs",
+        source_name="GEFS Ensemble",
+        model="ncep_gefs_seamless",
+        target_date=target_date,
+        retrieved_at=retrieved_at,
+        forecast_high_f=prediction.gefs_median,
+        expected_high_f=prediction.gefs_mean,
+        freshness_seconds=gfs_fresh_s,
+        freshness_status=gfs_fresh,
+        metadata={
+            "member_count": prediction.gefs_member_count,
+            "mean": prediction.gefs_mean,
+            "median": prediction.gefs_median,
+            "std": prediction.gefs_std,
+            "min": prediction.gefs_min,
+            "max": prediction.gefs_max,
+            "spread": (
+                (prediction.gefs_max - prediction.gefs_min)
+                if prediction.gefs_max is not None and prediction.gefs_min is not None
+                else None
+            ),
+        },
+        quality_status="ok" if prediction.gefs_member_count else "unavailable",
+    )
+
+    try:
+        hrrr_snap = collect_hrrr_live(target_date, as_of=as_of)
+    except Exception as error:  # noqa: BLE001
+        warnings.append(f"HRRR evidence failed: {error}")
+        hrrr_snap = ForecastSourceSnapshot(
+            source_id="hrrr",
+            source_name="HRRR",
+            model=HRRR_MODEL,
+            target_date=target_date,
+            retrieved_at=retrieved_at,
+            quality_status="unavailable",
+            warnings=[str(error)],
+        )
+
+    try:
+        nws_forecast = collect_nws_forecast(target_date, as_of=as_of)
+    except Exception as error:  # noqa: BLE001
+        warnings.append(f"NWS forecast evidence failed: {error}")
+        nws_forecast = ForecastSourceSnapshot(
+            source_id="nws_forecast",
+            source_name="NWS Forecast",
+            target_date=target_date,
+            retrieved_at=retrieved_at,
+            quality_status="unavailable",
+            warnings=[str(error)],
+        )
+
+    wfo = None
+    if nws_forecast and nws_forecast.grid_metadata:
+        wfo = nws_forecast.grid_metadata.get("wfo")
+    try:
+        nws_discussion = collect_nws_discussion(wfo=wfo, as_of=as_of)
+    except Exception as error:  # noqa: BLE001
+        warnings.append(f"NWS AFD evidence failed: {error}")
+        from research.weather.evidence import ForecastDiscussionSnapshot
+
+        nws_discussion = ForecastDiscussionSnapshot(
+            retrieved_at=retrieved_at,
+            quality_status="unavailable",
+            warnings=[str(error)],
+        )
+
+    try:
+        observations = collect_observation_trajectory(
+            target_date=target_date, as_of=as_of
+        )
+        # Preserve legacy knyc_summary fields when trajectory sparse.
+        if knyc_summary and observations.latest_temperature_f is None:
+            observations.latest_temperature_f = knyc_summary.get("latest_temperature")
+            observations.high_so_far_f = knyc_summary.get("high_temperature")
+            ht = knyc_summary.get("high_time")
+            lt = knyc_summary.get("latest_time")
+            observations.time_of_high = ht.isoformat() if hasattr(ht, "isoformat") else ht
+            observations.latest_timestamp = (
+                lt.isoformat() if hasattr(lt, "isoformat") else lt
+            )
+            observations.metadata["legacy_knyc_summary"] = {
+                k: (v.isoformat() if hasattr(v, "isoformat") else v)
+                for k, v in knyc_summary.items()
+            }
+    except Exception as error:  # noqa: BLE001
+        warnings.append(f"Observation evidence failed: {error}")
+        from research.weather.evidence import ObservationSnapshot
+
+        observations = ObservationSnapshot(
+            target_date=target_date,
+            retrieved_at=retrieved_at,
+            quality_status="unavailable",
+            warnings=[str(error)],
+        )
+
+    agreement = compute_source_agreement(
+        gfs_raw_high=gfs_forecast_high,
+        gfs_expected_high=prediction.expected_high,
+        hrrr_raw_high=hrrr_snap.forecast_high_f if hrrr_snap else None,
+        hrrr_expected_high=hrrr_snap.expected_high_f if hrrr_snap else None,
+        gefs_median=prediction.gefs_median,
+        nws_forecast_high=nws_forecast.forecast_high_f if nws_forecast else None,
+        high_so_far=observations.high_so_far_f if observations else None,
+    )
+
+    return WeatherEvidenceBundle(
+        target_date=target_date,
+        as_of=as_of.isoformat(),
+        retrieved_at=retrieved_at,
+        gfs=gfs_snap,
+        gefs=gefs_snap,
+        hrrr=hrrr_snap,
+        nws_forecast=nws_forecast,
+        nws_discussion=nws_discussion,
+        observations=observations,
+        agreement=agreement,
+        warnings=warnings,
+    )
 
 
 def get_live_weather_events(
@@ -612,6 +784,23 @@ def get_model_summary() -> dict[str, Any]:
     # Never expose VALIDATED from a request-time toggle; only artifact flag.
     transfer_validated = bool(settlement_transfer.get("transfer_validated"))
 
+    from research.weather.phase4 import HRRR_CALIBRATION_CSV, HRRR_EVAL_REPORT
+    from research.weather.snapshots import (
+        SCORE_ROOT,
+        SNAPSHOT_ROOT,
+        iter_all_snapshots,
+        load_all_scores,
+    )
+    from research.weather.sources.nws_forecast import POINT_CACHE_PATH
+
+    snapshot_count = len(iter_all_snapshots())
+    score_count = len(load_all_scores())
+    hrrr_status = (
+        "ACTIVE" if HRRR_CALIBRATION_CSV.exists() or HRRR_EVAL_REPORT.exists() else "LIVE"
+    )
+    nws_status = "ACTIVE" if POINT_CACHE_PATH.exists() else "LIVE"
+    afd_status = "LIVE"
+
     return {
         "model_summary_available": model_summary_available,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -619,11 +808,18 @@ def get_model_summary() -> dict[str, Any]:
         "methodology_constants": {
             "GFS_PUBLICATION_LATENCY_hours": GFS_PUBLICATION_LATENCY.total_seconds()
             / 3600.0,
+            "HRRR_PUBLICATION_LATENCY_hours": HRRR_PUBLICATION_LATENCY.total_seconds()
+            / 3600.0,
+            "HRRR_MODEL": HRRR_MODEL,
             "MIN_RUN_HISTORY": MIN_RUN_HISTORY,
             "MIN_N_MONTH": MIN_N_MONTH,
             "MIN_N_SEASON": MIN_N_SEASON,
             "MIN_N_RUN": MIN_N_RUN,
             "MIN_REQUIRED_EDGE": MIN_REQUIRED_EDGE,
+            "FRESHNESS_FRESH_SECONDS": FRESHNESS_FRESH_SECONDS,
+            "FRESHNESS_AGING_SECONDS": FRESHNESS_AGING_SECONDS,
+            "snapshot_schema_version": SNAPSHOT_SCHEMA_VERSION,
+            "model_combination_policy": MODEL_COMBINATION_POLICY,
         },
         "calibration": {
             "csv_path": str(CALIBRATION_CSV),
@@ -684,12 +880,18 @@ def get_model_summary() -> dict[str, Any]:
         },
         "method_comparison_available": isinstance(method_cmp, dict),
         "pairs_report_available": isinstance(pairs_report, dict),
+        "hrrr_evaluation": {
+            "calibration_csv_exists": HRRR_CALIBRATION_CSV.exists(),
+            "report_exists": HRRR_EVAL_REPORT.exists(),
+            "report_path": str(HRRR_EVAL_REPORT),
+        },
         "research_status": {
             "weather_phase_1": "COMPLETE",
             "weather_phase_2": "COMPLETE",
             "weather_phase_3_transfer": (
                 "EXPERIMENTAL" if not transfer_validated else "VALIDATED"
             ),
+            "weather_phase_4_evidence": "ACTIVE",
             "clinyc_target_calibration": (
                 "OPERATIONAL"
                 if eligibility.get("direct_clinyc_operationally_eligible")
@@ -697,6 +899,30 @@ def get_model_summary() -> dict[str, Any]:
             ),
             "weather_kalshi_execution_backtest": "BLOCKED",
             "live_recommendations": "DISABLED",
+            "model_combination_policy": MODEL_COMBINATION_POLICY,
+        },
+        "multi_source_evidence": {
+            "GFS": "ACTIVE",
+            "GEFS": "ACTIVE",
+            "HRRR": hrrr_status,
+            "NWS": nws_status,
+            "AFD": afd_status,
+            "OBS": "ACTIVE",
+        },
+        "prospective_journal": {
+            "snapshots": snapshot_count,
+            "scored_snapshots": score_count,
+            "settled_events_scored": score_count,
+            "snapshot_root": str(SNAPSHOT_ROOT),
+            "score_root": str(SCORE_ROOT),
+            "recommended_checkpoints": [
+                "~24h before target day",
+                "~12h",
+                "morning of event",
+                "midday",
+                "afternoon",
+            ],
+            "note": "Explicit CLI snapshots only — GET endpoints never create snapshots",
         },
         "notes": []
         if model_summary_available
@@ -704,6 +930,249 @@ def get_model_summary() -> dict[str, Any]:
             "No calibration CSV or backtest report found. "
             "Run weather_model.py --build-calibration / --backtest explicitly."
         ],
+    }
+
+
+def snapshot_live_events(
+    *,
+    client: KalshiClient | None = None,
+) -> dict[str, Any]:
+    """Explicit prospective snapshot — never called by GET handlers."""
+    from research.weather.snapshots import (
+        SnapshotConflictError,
+        build_prediction_snapshot,
+        write_snapshot,
+    )
+
+    payload = get_live_weather_events(client=client)
+    written: list[dict[str, Any]] = []
+    idempotent_reuses: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+    for event in payload.get("events") or []:
+        snap = build_prediction_snapshot(event)
+        try:
+            path, is_new = write_snapshot(snap)
+        except SnapshotConflictError as error:
+            conflicts.append(
+                {
+                    "snapshot_id": snap.snapshot_id,
+                    "event_ticker": snap.event_ticker,
+                    "path": str(error.path),
+                    "error": str(error),
+                }
+            )
+            continue
+        row = {
+            "snapshot_id": snap.snapshot_id,
+            "event_ticker": snap.event_ticker,
+            "path": str(path),
+            "wrote_new": is_new,
+        }
+        if is_new:
+            written.append(row)
+        else:
+            idempotent_reuses.append(row)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": DECISION_RESEARCH_ONLY,
+        "written": written,
+        "idempotent_reuses": idempotent_reuses,
+        "conflicts": conflicts,
+        "count_written": len(written),
+        "count_idempotent_reuses": len(idempotent_reuses),
+        "count_conflicts": len(conflicts),
+        "snapshot_conflicts_encountered": len(conflicts),
+        "snapshot_idempotent_reuses": len(idempotent_reuses),
+    }
+
+
+def list_snapshots_for_event(event_ticker: str) -> dict[str, Any]:
+    from research.weather.snapshots import list_event_snapshots
+
+    rows = list_event_snapshots(event_ticker)
+    return {
+        "event_ticker": event_ticker,
+        "snapshots": rows,
+        "count": len(rows),
+    }
+
+
+def get_snapshot(snapshot_id: str) -> dict[str, Any] | None:
+    from research.weather.snapshots import load_snapshot
+
+    return load_snapshot(snapshot_id)
+
+
+def get_snapshot_scores() -> dict[str, Any]:
+    from research.weather.snapshots import load_all_scores, summarize_scores_by_lead
+
+    scores = load_all_scores()
+    return {
+        "scores": scores,
+        "count": len(scores),
+        "by_lead_bin": summarize_scores_by_lead(scores),
+    }
+
+
+def score_settled_snapshots(
+    *,
+    client: KalshiClient | None = None,
+) -> dict[str, Any]:
+    """Post-settlement scoring. May use settlement info. Never mutates snapshots.
+
+    Settlement truth is regime-specific:
+      weather_company_clinyc → finalized Kalshi expiration_value only
+      nws_cli_knyc → verified NWS/CLI actuals (calibration CSV / CLI)
+    Never silently fall back across regimes.
+    """
+    from research.weather.snapshots import (
+        SCORE_STATUS_BUCKET_UNIDENTIFIABLE,
+        SCORE_STATUS_EVENT_NOT_FINALIZED,
+        SCORE_STATUS_MISSING_OUTCOME,
+        SCORE_STATUS_OK,
+        SCORE_STATUS_REGIME_UNKNOWN,
+        SCORE_STATUS_SETTLEMENT_UNAVAILABLE,
+        iter_all_snapshots,
+        score_snapshot,
+        write_score_artifact,
+    )
+    from research.weather.calibration import parse_float
+    from research.weather.clinyc import audit_expiration_values
+    from research.weather.models import (
+        ACTUAL_SOURCE_KALSHI_EXPIRATION,
+        REGIME_NWS_CLI_KNYC,
+        REGIME_WEATHER_COMPANY_CLINYC,
+    )
+    from research.weather.resolution import (
+        get_outcome_label,
+        group_markets_by_event,
+        is_range_bucket_event,
+    )
+    from kalshi.client import get_historical_markets_for_series
+
+    client = client or KalshiClient()
+    markets = get_historical_markets_for_series(SERIES_TICKER, client=client)
+    grouped = group_markets_by_event(markets)
+    # NWS-regime actuals from calibration CSV only (never used for CLINYC).
+    rows = load_calibration_csv()
+    nws_actual_by_date: dict[str, float] = {}
+    for row in rows:
+        if (row.get("settlement_source_regime") or "") != REGIME_NWS_CLI_KNYC:
+            continue
+        date = str(row.get("target_date") or "")
+        actual = parse_float(row.get("actual_high_f"))
+        if date and actual is not None:
+            nws_actual_by_date[date] = actual
+
+    scored: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    unscored_reasons: dict[str, int] = {}
+
+    def _skip(snap: dict[str, Any], status: str, reason: str) -> None:
+        artifact = score_snapshot(
+            snap,
+            actual_high_f=None,
+            winning_bucket=None,
+            score_status=status,
+            skip_reason=reason,
+        )
+        write_score_artifact(artifact)
+        skipped.append(
+            {
+                "snapshot_id": snap.get("snapshot_id"),
+                "score_status": status,
+                "reason": reason,
+            }
+        )
+        unscored_reasons[reason] = unscored_reasons.get(reason, 0) + 1
+
+    for snap in iter_all_snapshots():
+        event_ticker = str(snap.get("event_ticker") or "")
+        target_date = str(snap.get("target_date") or "")
+        regime = str(snap.get("resolution_regime") or "unknown")
+        event_markets = grouped.get(event_ticker) or []
+
+        if regime in ("unknown", "", "conflicting"):
+            _skip(snap, SCORE_STATUS_REGIME_UNKNOWN, f"resolution_regime={regime}")
+            continue
+
+        if not event_markets or not is_range_bucket_event(event_markets):
+            _skip(snap, SCORE_STATUS_EVENT_NOT_FINALIZED, "event markets unavailable")
+            continue
+
+        statuses = {str(m.get("status") or "").lower() for m in event_markets}
+        finalized = any(s in {"finalized", "determined", "settled"} for s in statuses) or all(
+            m.get("result") not in (None, "") for m in event_markets
+        )
+        if not finalized and not any(
+            m.get("expiration_value") not in (None, "") for m in event_markets
+        ):
+            _skip(snap, SCORE_STATUS_EVENT_NOT_FINALIZED, "event not finalized")
+            continue
+
+        winner = get_outcome_label(event_markets)
+        if not winner:
+            _skip(
+                snap,
+                SCORE_STATUS_BUCKET_UNIDENTIFIABLE,
+                "winning canonical bucket not identifiable",
+            )
+            continue
+
+        actual: float | None = None
+        settlement_source: str | None = None
+
+        if regime == REGIME_WEATHER_COMPANY_CLINYC:
+            audit = audit_expiration_values(event_markets)
+            if not audit.agreement or audit.normalized_expiration_value is None:
+                _skip(
+                    snap,
+                    SCORE_STATUS_SETTLEMENT_UNAVAILABLE,
+                    "CLINYC expiration_value unavailable — refusing KNYC fallback",
+                )
+                continue
+            actual = float(audit.normalized_expiration_value)
+            settlement_source = ACTUAL_SOURCE_KALSHI_EXPIRATION
+        elif regime == REGIME_NWS_CLI_KNYC:
+            actual = nws_actual_by_date.get(target_date)
+            if actual is None:
+                _skip(
+                    snap,
+                    SCORE_STATUS_SETTLEMENT_UNAVAILABLE,
+                    "NWS/CLI settlement actual unavailable",
+                )
+                continue
+            settlement_source = "nws_cli_knyc"
+        else:
+            _skip(
+                snap,
+                SCORE_STATUS_REGIME_UNKNOWN,
+                f"unsupported resolution_regime={regime}",
+            )
+            continue
+
+        if actual is None:
+            _skip(snap, SCORE_STATUS_MISSING_OUTCOME, "exact outcome unavailable")
+            continue
+
+        score = score_snapshot(
+            snap,
+            actual_high_f=float(actual),
+            winning_bucket=winner,
+            settlement_source=settlement_source,
+            score_status=SCORE_STATUS_OK,
+        )
+        path = write_score_artifact(score)
+        scored.append({**score, "path": str(path)})
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "scored": scored,
+        "skipped": skipped,
+        "count_scored": len(scored),
+        "count_skipped": len(skipped),
+        "unscored_reasons": unscored_reasons,
+        "by_lead_bin": get_snapshot_scores().get("by_lead_bin"),
     }
 
 
@@ -716,4 +1185,7 @@ def serialize_event_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     prediction = out.get("prediction")
     if isinstance(prediction, WeatherPrediction):
         out["prediction"] = prediction.to_dict()
+    evidence = out.get("evidence")
+    if isinstance(evidence, WeatherEvidenceBundle):
+        out["evidence"] = evidence.to_dict()
     return out

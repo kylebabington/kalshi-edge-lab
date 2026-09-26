@@ -6,7 +6,10 @@ from api.schemas import LiveWeatherResponse, ModelSummaryResponse, WeatherEventR
 from research.weather.service import (
     get_live_weather_events,
     get_model_summary,
+    get_snapshot,
+    get_snapshot_scores,
     get_weather_event_detail,
+    list_snapshots_for_event,
     serialize_event_bundle,
 )
 
@@ -35,6 +38,27 @@ def weather_event(event_ticker: str) -> dict:
     if detail is None:
         raise HTTPException(status_code=404, detail=f"Event not found or not open: {event_ticker}")
     return serialize_event_bundle(detail)
+
+
+@router.get("/events/{event_ticker}/snapshots")
+def weather_event_snapshots(event_ticker: str) -> dict:
+    """Read-only list of immutable snapshot metadata. Does not create snapshots."""
+    return list_snapshots_for_event(event_ticker)
+
+
+@router.get("/snapshots/{snapshot_id}")
+def weather_snapshot(snapshot_id: str) -> dict:
+    """Read one historical PredictionSnapshot. Does not create or score."""
+    payload = get_snapshot(snapshot_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"Snapshot not found: {snapshot_id}")
+    return payload
+
+
+@router.get("/snapshot-scores")
+def weather_snapshot_scores() -> dict:
+    """Read existing score artifacts if present. Does not score."""
+    return get_snapshot_scores()
 
 
 @router.get("/model/summary", response_model=ModelSummaryResponse)

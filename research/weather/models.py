@@ -21,6 +21,35 @@ from typing import Any
 
 GFS_PUBLICATION_LATENCY = timedelta(hours=6)
 
+# HRRR via Open-Meteo: NCEP production typically finishes ~60–100 min after
+# initialization; Open-Meteo spatial→temporal rechunking can push public
+# availability toward ~2.5–3 h (see Open-Meteo S3 data_run timestamps).
+# Conservative research constant — NOT tuned on forecast skill.
+HRRR_PUBLICATION_LATENCY = timedelta(hours=3)
+HRRR_MODEL = "ncep_hrrr_conus"
+
+# HRRR forecast streams — NEVER pool residuals across streams.
+HRRR_STREAM_EXACT = "hrrr_exact_run"
+HRRR_STREAM_PREVIOUS_DAY1 = "hrrr_previous_day1"
+
+# Live / prospective operational selection (not skill-tuned).
+# Historical fixed-cycle (00/06/12/18Z) benchmarks are labeled separately.
+HRRR_OPERATIONAL_SELECTION_POLICY = "latest_available_by_latency"
+HRRR_FIXED_CYCLE_BENCHMARK_LABEL = "fixed-cycle benchmark"
+
+# Evidence freshness thresholds (seconds) — documented, not ROI-tuned.
+FRESHNESS_FRESH_SECONDS = 2 * 3600
+FRESHNESS_AGING_SECONDS = 6 * 3600
+# Beyond AGING → stale. Missing/unavailable → unavailable.
+
+# Multi-source high disagreement labels (absolute °F spread across sources).
+DISAGREEMENT_LOW_MAX_F = 2.0
+DISAGREEMENT_MODERATE_MAX_F = 4.0
+# Above MODERATE_MAX → HIGH DISAGREEMENT
+
+SNAPSHOT_SCHEMA_VERSION = "4.0.0"
+MODEL_COMBINATION_POLICY = "none"
+
 # Hierarchical residual pool — same GFS run only. Never mix runs.
 MIN_N_MONTH = 30
 MIN_N_SEASON = 50

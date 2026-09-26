@@ -67,3 +67,28 @@ def test_weather_prediction_has_no_kalshi_price_fields():
         "last_price",
     ):
         assert banned not in keys
+
+
+def test_snapshot_endpoints_are_read_only():
+    response = client.get("/api/weather/events/KXHIGHNY-26SEP26/snapshots")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "snapshots" in payload
+    assert "count" in payload
+
+    missing = client.get("/api/weather/snapshots/DOES-NOT-EXIST__20260101T000000Z")
+    assert missing.status_code == 404
+
+    scores = client.get("/api/weather/snapshot-scores")
+    assert scores.status_code == 200
+    assert "scores" in scores.json()
+
+
+def test_model_summary_includes_phase4_fields():
+    response = client.get("/api/weather/model/summary")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload.get("research_status", {}).get("weather_phase_4_evidence") == "ACTIVE"
+    assert "multi_source_evidence" in payload
+    assert "prospective_journal" in payload
+    assert payload["methodology_constants"].get("model_combination_policy") == "none"

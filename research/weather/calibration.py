@@ -79,6 +79,8 @@ def ensure_weather_cache_dirs() -> None:
         "weather",
         "weather/gfs",
         "weather/gefs",
+        "weather/hrrr",
+        "weather/nws",
         "weather/observations",
         "weather/resolution",
         "weather/calibration",
@@ -86,6 +88,10 @@ def ensure_weather_cache_dirs() -> None:
         (cache.CACHE_ROOT / sub).mkdir(parents=True, exist_ok=True)
     CALIBRATION_DIR.mkdir(parents=True, exist_ok=True)
     (cache.REPO_ROOT / "data" / "weather").mkdir(parents=True, exist_ok=True)
+    (cache.REPO_ROOT / "data" / "weather" / "snapshots").mkdir(parents=True, exist_ok=True)
+    (cache.REPO_ROOT / "data" / "weather" / "snapshot_scores").mkdir(
+        parents=True, exist_ok=True
+    )
 
 
 def model_run_init_utc(target_date: str, run_date_offset: int, run_hour: int) -> datetime:
