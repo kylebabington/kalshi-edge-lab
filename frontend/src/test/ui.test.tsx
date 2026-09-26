@@ -159,6 +159,33 @@ describe('UI foundation', () => {
     expect(screen.getByText(/0\s*\/\s*20/)).toBeInTheDocument()
     expect(screen.queryByText(/\bBUY\b/)).toBeNull()
   })
+
+  it('research page shows Phase 5 prospective validation and SHADOW ONLY', () => {
+    render(
+      <MemoryRouter>
+        <ResearchPage loading={false} error={null} summary={mockModelSummary} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText(/PROSPECTIVE WEATHER VALIDATION/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/SHADOW ONLY/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/d0_1200/i)).toBeInTheDocument()
+    expect(screen.getByText(/1\s*\/\s*1/)).toBeInTheDocument()
+  })
+
+  it('market detail shows shadow labeled and keeps incumbent probabilities', () => {
+    render(
+      <MemoryRouter>
+        <MarketDetailPage loading={false} error={null} event={mockWeatherEvent} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText(/SHADOW MODELS/i)).toBeInTheDocument()
+    expect(screen.getByText(/SHADOW — NOT USED FOR DECISION/i)).toBeInTheDocument()
+    expect(screen.getByText(/Probability Distribution/i)).toBeInTheDocument()
+    // Incumbent 60–61 is 42%; shadow is 38% — both visible, main chart remains incumbent.
+    expect(screen.getAllByText(/42%/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/\bBUY\b/)).toBeNull()
+    expect(screen.queryByText(/\bSELL\b/)).toBeNull()
+  })
 })
 
 void vi

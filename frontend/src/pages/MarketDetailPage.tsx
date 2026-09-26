@@ -259,6 +259,9 @@ export function MarketDetailPage({ loading, error, event }: Props) {
   if (!display) return <EmptyState title="Snapshot unavailable" detail="Could not load selected As Of snapshot." />
 
   const pred = display.prediction
+  const shadowBlock =
+    display.shadow_predictions?.SHADOW_GFS_HRRR_EQUAL_V1 ??
+    Object.values(display.shadow_predictions || {})[0]
   const evidence = (display.evidence ?? {}) as Record<string, Record<string, unknown>>
   const gfs = evidence.gfs ?? {}
   const gefs = evidence.gefs ?? {}
@@ -561,6 +564,36 @@ export function MarketDetailPage({ loading, error, event }: Props) {
           ))}
         </div>
       </section>
+
+      {shadowBlock ? (
+        <section className="panel space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold">SHADOW MODELS</h3>
+            <span className="badge badge-warning">SHADOW — NOT USED FOR DECISION</span>
+          </div>
+          <p className="text-sm text-[var(--text-muted)]">
+            GFS + HRRR Equal (research only). Main probability above remains calibrated GFS incumbent.
+          </p>
+          {shadowBlock.status === 'available' && shadowBlock.probabilities ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {Object.entries(shadowBlock.probabilities).map(([label, probability]) => (
+                <div
+                  key={label}
+                  className="flex justify-between text-sm mono border-b border-[var(--border)] py-1"
+                >
+                  <span>{label}</span>
+                  <span>{pct(Number(probability))}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm mono text-[var(--text-muted)]">
+              unavailable
+              {shadowBlock.unavailable_reason ? `: ${shadowBlock.unavailable_reason}` : ''}
+            </p>
+          )}
+        </section>
+      ) : null}
 
       <section className="panel space-y-3">
         <h3 className="font-semibold">Probability Comparison</h3>

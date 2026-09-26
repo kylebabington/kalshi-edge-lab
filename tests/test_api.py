@@ -88,7 +88,12 @@ def test_model_summary_includes_phase4_fields():
     response = client.get("/api/weather/model/summary")
     assert response.status_code == 200
     payload = response.json()
-    assert payload.get("research_status", {}).get("weather_phase_4_evidence") == "ACTIVE"
+    assert payload.get("research_status", {}).get("weather_phase_4_evidence") == "COMPLETE"
+    assert payload.get("research_status", {}).get("weather_phase_5_shadow") == "SHADOW_ONLY"
+    assert payload.get("research_status", {}).get("nbm") == "PHASE_6_CANDIDATE"
     assert "multi_source_evidence" in payload
     assert "prospective_journal" in payload
+    assert "prospective_validation" in payload
+    assert payload["prospective_validation"].get("status") == "SHADOW ONLY"
     assert payload["methodology_constants"].get("model_combination_policy") == "none"
+    assert payload["methodology_constants"].get("snapshot_schema_version") == "5.0.0"

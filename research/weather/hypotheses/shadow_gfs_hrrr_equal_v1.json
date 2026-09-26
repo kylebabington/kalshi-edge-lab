@@ -1,0 +1,31 @@
+{
+  "bucket_alignment": "canonical_ticker_and_boundaries_required",
+  "candidate_id": "SHADOW_GFS_HRRR_EQUAL_V1",
+  "definition": "0.5 * P_gfs_transferred + 0.5 * P_hrrr_transferred per canonical bucket; renormalize only for floating-point drift",
+  "evaluation_metrics": [
+    "brier",
+    "log_loss",
+    "top_bucket_accuracy",
+    "mean_p_winner",
+    "paired_delta_brier_bootstrap"
+  ],
+  "incumbent_model": "calibrated_gfs",
+  "no_afd_adjustment": true,
+  "no_confidence_weighting": true,
+  "no_dynamic_switching": true,
+  "no_gefs_weighting": true,
+  "no_kalshi_prices": true,
+  "no_learned_weights": true,
+  "registered_at": "2026-09-26T12:02:38.376679+00:00",
+  "required_sources": [
+    "calibrated_gfs_operational",
+    "calibrated_hrrr_operational"
+  ],
+  "status": "shadow",
+  "target_regime_semantics": {
+    "frozen": true,
+    "note": "Do not silently switch this candidate to direct CLINYC calibration; register a new version instead",
+    "nws_cli_knyc": "direct NWS residual calibration for both components",
+    "weather_company_clinyc": "NWS-calibrated GFS + HRRR with experimental KNYC\u2192CLINYC identity transfer for BOTH components"
+  }
+}

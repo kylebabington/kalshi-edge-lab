@@ -393,11 +393,29 @@ def build_live_event_bundle(
         knyc_summary=knyc_summary,
     )
 
+    from research.weather.prospective import (
+        build_shadow_predictions_block,
+        infer_checkpoint_for_as_of,
+    )
+
+    checkpoint_id = infer_checkpoint_for_as_of(target_date, as_of)
+    shadow_predictions = build_shadow_predictions_block(
+        prediction=prediction,
+        evidence=evidence_bundle.to_dict(),
+        markets=event_markets,
+        target_date=target_date,
+        event_ticker=event_ticker,
+        checkpoint_id=checkpoint_id,
+        as_of=as_of,
+    )
+
     return {
         "event_ticker": event_ticker,
         "target_date": target_date,
         "resolution": resolution,
         "prediction": prediction,
+        "shadow_predictions": shadow_predictions,
+        "checkpoint_id_inferred": checkpoint_id,
         "research_status": {
             "mode": DECISION_RESEARCH_ONLY,
             "decision": evaluation.decision,
@@ -414,9 +432,11 @@ def build_live_event_bundle(
             ),
             "direct_clinyc_operationally_eligible": clinyc_eligible,
             "model_combination_policy": MODEL_COMBINATION_POLICY,
+            "shadow_status": "SHADOW ONLY",
         },
         "evidence": evidence_bundle.to_dict(),
         "kalshi_markets": [_market_quote(m) for m in event_markets],
+        "_raw_markets": event_markets,
         "warnings": list(resolution.warnings)
         + list(prediction.warnings)
         + list(evidence_bundle.warnings),
@@ -891,7 +911,8 @@ def get_model_summary() -> dict[str, Any]:
             "weather_phase_3_transfer": (
                 "EXPERIMENTAL" if not transfer_validated else "VALIDATED"
             ),
-            "weather_phase_4_evidence": "ACTIVE",
+            "weather_phase_4_evidence": "COMPLETE",
+            "weather_phase_5_shadow": "SHADOW_ONLY",
             "clinyc_target_calibration": (
                 "OPERATIONAL"
                 if eligibility.get("direct_clinyc_operationally_eligible")
@@ -900,6 +921,7 @@ def get_model_summary() -> dict[str, Any]:
             "weather_kalshi_execution_backtest": "BLOCKED",
             "live_recommendations": "DISABLED",
             "model_combination_policy": MODEL_COMBINATION_POLICY,
+            "nbm": "PHASE_6_CANDIDATE",
         },
         "multi_source_evidence": {
             "GFS": "ACTIVE",
@@ -916,20 +938,127 @@ def get_model_summary() -> dict[str, Any]:
             "snapshot_root": str(SNAPSHOT_ROOT),
             "score_root": str(SCORE_ROOT),
             "recommended_checkpoints": [
-                "~24h before target day",
-                "~12h",
-                "morning of event",
-                "midday",
-                "afternoon",
+                "dminus1_1800",
+                "d0_0600",
+                "d0_0900",
+                "d0_1200",
+                "d0_1500",
             ],
-            "note": "Explicit CLI snapshots only — GET endpoints never create snapshots",
+            "note": (
+                "Explicit CLI --prospective-cycle / --snapshot-live only — "
+                "GET endpoints never create snapshots. Scheduler: HH:05 ET hourly."
+            ),
         },
+        "prospective_validation": _prospective_validation_summary(),
         "notes": []
         if model_summary_available
         else [
             "No calibration CSV or backtest report found. "
             "Run weather_model.py --build-calibration / --backtest explicitly."
         ],
+    }
+
+
+def _prospective_validation_summary() -> dict[str, Any]:
+    """Read-only Phase 5 prospective / shadow status for Research page."""
+    from research.weather.checkpoints import (
+        CHECKPOINT_IDS,
+        RECEIPT_STATUS_CAPTURED,
+        RECEIPT_STATUS_MISSED,
+        list_receipts,
+        methodology_checkpoint_block,
+    )
+    from research.weather.phase5 import (
+        ERROR_CORRELATION_PATH,
+        OPERATIONAL_COMPARISON_PATH,
+        PROSPECTIVE_SUMMARY_PATH,
+        SHADOW_EVAL_PATH,
+    )
+
+    # Read-only: do not create hypothesis from GET if missing — report unavailable.
+    hyp_path = (
+        cache.REPO_ROOT
+        / "research"
+        / "weather"
+        / "hypotheses"
+        / "shadow_gfs_hrrr_equal_v1.json"
+    )
+    hyp = cache.read_json(hyp_path, default=None) if hyp_path.exists() else None
+    summary = cache.read_json(PROSPECTIVE_SUMMARY_PATH, default=None)
+    comparison = cache.read_json(OPERATIONAL_COMPARISON_PATH, default=None)
+    shadow_eval = cache.read_json(SHADOW_EVAL_PATH, default=None)
+    correlation = cache.read_json(ERROR_CORRELATION_PATH, default=None)
+    receipts = list_receipts()
+
+    coverage: dict[str, Any] = {}
+    for checkpoint_id in CHECKPOINT_IDS:
+        c = sum(
+            1
+            for r in receipts
+            if r.get("checkpoint_id") == checkpoint_id
+            and r.get("status") == RECEIPT_STATUS_CAPTURED
+        )
+        m = sum(
+            1
+            for r in receipts
+            if r.get("checkpoint_id") == checkpoint_id
+            and r.get("status") == RECEIPT_STATUS_MISSED
+        )
+        n = c + m
+        coverage[checkpoint_id] = {
+            "captured": c,
+            "missed": m,
+            "total": n,
+            "display": f"{c} / {n}" if n else "0 / 0",
+        }
+
+    incumbent = None
+    shadow = None
+    paired_delta = None
+    if isinstance(shadow_eval, dict):
+        # Prefer pooled / first available checkpoint metrics for dashboard.
+        per = shadow_eval.get("per_checkpoint") or {}
+        for cid in CHECKPOINT_IDS:
+            block = per.get(cid) or {}
+            probs = block.get("probabilistic") or {}
+            if probs.get("gfs", {}).get("n"):
+                incumbent = probs.get("gfs")
+                shadow = probs.get("shadow")
+                paired_delta = (block.get("paired_delta_brier") or {}).get(
+                    "shadow_minus_gfs"
+                )
+                break
+        if shadow_eval.get("pooled_delta_brier_shadow_minus_gfs"):
+            paired_delta = shadow_eval["pooled_delta_brier_shadow_minus_gfs"]
+
+    return {
+        "status": "SHADOW ONLY",
+        "available": bool(summary) or bool(comparison) or bool(receipts),
+        "checkpoints": methodology_checkpoint_block(),
+        "checkpoint_coverage": coverage,
+        "scored_events": (summary or {}).get("totals", {}).get("scored_snapshots", 0)
+        if isinstance(summary, dict)
+        else 0,
+        "captured_checkpoints": sum(v["captured"] for v in coverage.values()),
+        "missed_checkpoints": sum(v["missed"] for v in coverage.values()),
+        "incumbent_gfs": incumbent,
+        "shadow_gfs_hrrr_equal": shadow,
+        "paired_delta_brier": paired_delta,
+        "shadow_candidate": hyp
+        if isinstance(hyp, dict)
+        else {"candidate_id": "SHADOW_GFS_HRRR_EQUAL_V1", "status": "unregistered"},
+        "experimental_transfer_status": "experimental",
+        "historical_replay": {
+            "asof_observations_available": False,
+            "intraday": "MODEL_ONLY_REPLAY",
+            "dminus1_1800": "FULL_OPERATIONAL_REPLAY",
+        },
+        "error_correlation_available": isinstance(correlation, dict),
+        "artifacts": {
+            "prospective_summary": str(PROSPECTIVE_SUMMARY_PATH),
+            "operational_comparison": str(OPERATIONAL_COMPARISON_PATH),
+            "shadow_evaluation": str(SHADOW_EVAL_PATH),
+        },
     }
 
 
@@ -1188,4 +1317,6 @@ def serialize_event_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     evidence = out.get("evidence")
     if isinstance(evidence, WeatherEvidenceBundle):
         out["evidence"] = evidence.to_dict()
+    # Internal-only raw markets — never required by API clients.
+    out.pop("_raw_markets", None)
     return out

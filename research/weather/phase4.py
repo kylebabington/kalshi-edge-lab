@@ -127,14 +127,15 @@ def write_methodology_report() -> Path:
         "model_combination_policy": MODEL_COMBINATION_POLICY,
         "snapshot_schema_version": SNAPSHOT_SCHEMA_VERSION,
         "snapshot_cadence_recommended": [
-            "~24h before target day",
-            "~12h before",
-            "morning of event",
-            "midday",
-            "afternoon",
+            "dminus1_1800",
+            "d0_0600",
+            "d0_0900",
+            "d0_1200",
+            "d0_1500",
         ],
         "snapshot_cadence_note": (
-            "Manual prospective checkpoints via --snapshot-live only. "
+            "Registered Phase 5 checkpoints in America/New_York. "
+            "Prospective capture via --prospective-cycle only (never GET). "
             "Never invent fake historical snapshots."
         ),
         "sources": [
@@ -207,8 +208,8 @@ def write_methodology_report() -> Path:
             },
             {
                 "source_id": "nbm",
-                "status": "PHASE_5_CANDIDATE",
-                "note": "Not implemented in Phase 4",
+                "status": "PHASE_6_CANDIDATE",
+                "note": "Deferred — Phase 5 answers whether HRRR adds independent signal to GFS first",
             },
         ],
         "freshness_thresholds_seconds": {
@@ -867,7 +868,8 @@ def run_phase4_hrrr_evaluation(
         "raw_point_shared_dates": raw_shared,
         "shared_gfs_hrrr_calibrated": shared_comparisons,
         "model_combination_policy": MODEL_COMBINATION_POLICY,
-        "phase5_candidate": "NBM",
+        "phase6_candidate": "NBM",
+        "phase5_status": "SHADOW_ONLY",
         # Unused by design — kept so callers see GFS STANDARDIZED_RUNS is not ops policy.
         "gfs_standardized_runs_note": (
             f"{len(STANDARDIZED_RUNS)} GFS runs are independent of HRRR operational policy"

@@ -10,10 +10,14 @@ Commands:
   python weather_model.py --phase2-clinyc
   python weather_model.py --phase3-transfer
   python weather_model.py --phase4-hrrr
+  python weather_model.py --phase5-operational
   python weather_model.py --snapshot-live
   python weather_model.py --score-snapshots
+  python weather_model.py --prospective-cycle
 
-Phase 1–4 do NOT place orders and do NOT optimize against trading ROI.
+Phase 1–5 do NOT place orders and do NOT optimize against trading ROI.
+Prospective cycle: schedule externally at HH:05 America/New_York hourly
+(inside the frozen 30-minute checkpoint capture window). Never via GET.
 """
 
 from __future__ import annotations
@@ -92,6 +96,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     group.add_argument(
+        "--phase5-operational",
+        action="store_true",
+        help=(
+            "Phase 5: operational GFS/HRRR replay, shared-date comparison, "
+            "error correlation, equal-weight shadow eval (SHADOW ONLY — no promotion)"
+        ),
+    )
+    group.add_argument(
         "--snapshot-live",
         action="store_true",
         help=(
@@ -105,6 +117,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Score existing snapshots after settlement is known "
             "(writes separate score artifacts; does not mutate snapshots)"
+        ),
+    )
+    group.add_argument(
+        "--prospective-cycle",
+        action="store_true",
+        help=(
+            "Phase 5 WRITE job: capture due checkpoints for open events, "
+            "mark MISSED for reconciliation universe, score snapshots, "
+            "refresh CLINYC_TRANSFER_V1. Schedule at HH:05 ET hourly. "
+            "Never call from GET endpoints."
         ),
     )
     parser.add_argument(
@@ -405,6 +427,59 @@ def cmd_score_snapshots() -> int:
     return 0
 
 
+def cmd_phase5_operational() -> int:
+    from research.weather.phase5 import run_phase5_operational_evaluation
+
+    ensure_weather_cache_dirs()
+    console.print("[bold]Phase 5 operational replay + shadow evaluation[/bold]")
+    console.print("SHADOW ONLY — incumbent WeatherPrediction remains calibrated GFS.")
+    client = KalshiClient(
+        progress=lambda message: console.print(message, style="dim"),
+    )
+    markets = get_historical_markets_for_series(SERIES_TICKER, client=client)
+    result = run_phase5_operational_evaluation(
+        markets,
+        progress=lambda m: console.print(m, style="dim"),
+        rebuild_replay=True,
+    )
+    console.print(f"GFS operational rows: {result.get('gfs_rows')}")
+    console.print(f"HRRR operational rows: {result.get('hrrr_rows')}")
+    console.print(f"comparison → {result.get('comparison_path')}")
+    console.print(f"correlation → {result.get('correlation_path')}")
+    console.print(f"shadow eval → {result.get('shadow_eval_path')}")
+    hyp = result.get("hypothesis") or {}
+    console.print(
+        f"SHADOW_GFS_HRRR_EQUAL_V1 registered_at={hyp.get('registered_at')}"
+    )
+    return 0
+
+
+def cmd_prospective_cycle() -> int:
+    from research.weather.prospective import run_prospective_cycle
+
+    ensure_weather_cache_dirs()
+    console.print("[bold]Prospective checkpoint cycle[/bold]")
+    console.print(
+        "CAPTURE=open events; RECONCILE=open+recently settled. "
+        "Scheduler: HH:05 ET hourly (30m capture window)."
+    )
+    result = run_prospective_cycle()
+    cap = result.get("capture_universe") or {}
+    rec = result.get("reconciliation_universe") or {}
+    totals = result.get("totals") or {}
+    console.print(
+        f"captured_this_run={cap.get('captured_this_run')}  "
+        f"missed_this_run={rec.get('missed_this_run')}  "
+        f"reconcile_events={rec.get('events_processed')}"
+    )
+    console.print(
+        f"totals captured={totals.get('captured_checkpoints')}  "
+        f"missed={totals.get('missed_checkpoints')}  "
+        f"scored={totals.get('scored_snapshots')}"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.build_calibration:
@@ -419,10 +494,14 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_phase3_transfer()
     if args.phase4_hrrr:
         return cmd_phase4_hrrr()
+    if args.phase5_operational:
+        return cmd_phase5_operational()
     if args.snapshot_live:
         return cmd_snapshot_live()
     if args.score_snapshots:
         return cmd_score_snapshots()
+    if args.prospective_cycle:
+        return cmd_prospective_cycle()
     return 1
 
 

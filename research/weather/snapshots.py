@@ -18,12 +18,15 @@ from kalshi import cache
 from research.weather.models import (
     DECISION_NO_BET,
     DECISION_RESEARCH_ONLY,
+    EVIDENCE_CLASS_PHASE5,
     GFS_PUBLICATION_LATENCY,
     HRRR_MODEL,
     HRRR_OPERATIONAL_SELECTION_POLICY,
     HRRR_PUBLICATION_LATENCY,
     MODEL_COMBINATION_POLICY,
+    SHADOW_CANDIDATE_ID,
     SNAPSHOT_SCHEMA_VERSION,
+    SNAPSHOT_SCHEMA_VERSION_V4,
 )
 
 SNAPSHOT_ROOT = cache.REPO_ROOT / "data" / "weather" / "snapshots"
@@ -96,6 +99,12 @@ class PredictionSnapshot:
     prediction: dict[str, Any] = field(default_factory=dict)
     research_status: dict[str, Any] = field(default_factory=dict)
 
+    # Phase 5 extensions (schema 5.0.0). Absent on immutable 4.0.0 snapshots.
+    shadow_predictions: dict[str, Any] = field(default_factory=dict)
+    evidence_class: str | None = None
+    candidate_registered_before_snapshot: bool | None = None
+    checkpoint_id: str | None = None
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -133,8 +142,15 @@ def build_prediction_snapshot(
     bundle: dict[str, Any],
     *,
     created_at: datetime | None = None,
+    checkpoint_id: str | None = None,
+    evidence_class: str | None = None,
+    candidate_registered_before_snapshot: bool | None = None,
+    shadow_predictions: dict[str, Any] | None = None,
 ) -> PredictionSnapshot:
-    """Build snapshot from a live event bundle. Does not write."""
+    """Build snapshot from a live event bundle. Does not write.
+
+    New writes use schema 5.0.0. Existing 4.0.0 files remain immutable.
+    """
     created_at = created_at or datetime.now(timezone.utc)
     prediction = bundle.get("prediction")
     if hasattr(prediction, "to_dict"):
@@ -160,6 +176,10 @@ def build_prediction_snapshot(
     evidence = bundle.get("evidence") or {}
     if hasattr(evidence, "to_dict"):
         evidence = evidence.to_dict()
+
+    shadow_block = shadow_predictions
+    if shadow_block is None:
+        shadow_block = dict(bundle.get("shadow_predictions") or {})
 
     return PredictionSnapshot(
         snapshot_id=snapshot_id,
@@ -197,9 +217,11 @@ def build_prediction_snapshot(
             "HRRR_MODEL": HRRR_MODEL,
             "HRRR_OPERATIONAL_SELECTION_POLICY": HRRR_OPERATIONAL_SELECTION_POLICY,
             "snapshot_schema_version": SNAPSHOT_SCHEMA_VERSION,
+            "legacy_snapshot_schema_version": SNAPSHOT_SCHEMA_VERSION_V4,
             "model_combination_policy": MODEL_COMBINATION_POLICY,
             "decision": DECISION_RESEARCH_ONLY,
             "no_bet": DECISION_NO_BET,
+            "shadow_candidate_id": SHADOW_CANDIDATE_ID,
         },
         kalshi_quote_sidecar={
             "markets": list(bundle.get("kalshi_markets") or []),
@@ -207,6 +229,16 @@ def build_prediction_snapshot(
         },
         prediction=pred_dict,
         research_status=dict(bundle.get("research_status") or {}),
+        shadow_predictions=shadow_block,
+        evidence_class=evidence_class
+        or bundle.get("evidence_class")
+        or EVIDENCE_CLASS_PHASE5,
+        candidate_registered_before_snapshot=(
+            candidate_registered_before_snapshot
+            if candidate_registered_before_snapshot is not None
+            else bundle.get("candidate_registered_before_snapshot")
+        ),
+        checkpoint_id=checkpoint_id or bundle.get("checkpoint_id"),
     )
 
 
@@ -386,6 +418,33 @@ def score_snapshot(
         except ValueError:
             lead_hours = None
 
+    candidate_scores: dict[str, Any] = {}
+    shadows = snapshot.get("shadow_predictions") or {}
+    if isinstance(shadows, dict):
+        for cand_id, block in shadows.items():
+            if not isinstance(block, dict):
+                continue
+            status = block.get("status")
+            cprobs = block.get("probabilities")
+            if status != "available" or not isinstance(cprobs, dict) or not cprobs:
+                candidate_scores[str(cand_id)] = {
+                    "status": status or "unavailable",
+                    "brier": None,
+                    "log_loss": None,
+                    "top_correct": None,
+                    "p_winner": None,
+                    "unavailable_reason": block.get("unavailable_reason"),
+                }
+                continue
+            c_top = max(cprobs, key=cprobs.get)
+            candidate_scores[str(cand_id)] = {
+                "status": "available",
+                "brier": multiclass_brier(cprobs, winning_bucket),
+                "log_loss": log_loss(cprobs, winning_bucket),
+                "top_correct": c_top == winning_bucket,
+                "p_winner": cprobs.get(winning_bucket),
+            }
+
     return {
         "snapshot_id": snapshot.get("snapshot_id"),
         "event_ticker": snapshot.get("event_ticker"),
@@ -398,9 +457,14 @@ def score_snapshot(
         "settlement_source": settlement_source,
         "brier": brier,
         "log_loss": ll,
+        "incumbent_brier": brier,
+        "incumbent_log_loss": ll,
         "top_prediction": top_label,
         "top_prediction_correct": top_correct,
         "probability_on_winner": p_winner,
+        "candidate_scores": candidate_scores,
+        "evidence_class": snapshot.get("evidence_class"),
+        "checkpoint_id": snapshot.get("checkpoint_id"),
         "lead_hours_to_settlement_approx": lead_hours,
         "lead_bin": lead_bin_hours(lead_hours),
         "scored_at": datetime.now(timezone.utc).isoformat(),

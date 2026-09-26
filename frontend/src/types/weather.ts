@@ -57,24 +57,34 @@ export type WeatherEvent = {
   evidence?: Record<string, unknown>
   kalshi_markets: KalshiMarket[]
   research_status?: Record<string, unknown>
+  shadow_predictions?: Record<string, ShadowPredictionBlock>
   warnings?: string[]
 }
 
-export type LiveWeatherResponse = {
-  generated_at: string
-  mode: string
-  calibration_csv_loaded?: boolean
-  events: WeatherEvent[]
+export type ShadowPredictionBlock = {
+  status?: string
+  probabilities?: Record<string, number> | null
+  unavailable_reason?: string | null
+  candidate_id?: string
+  transfer_status?: string
+  live_target_regime?: string
 }
 
-export type PredictionSnapshotMeta = {
-  snapshot_id: string
-  prediction_as_of: string
-  created_at?: string
-  event_ticker?: string
-  target_date?: string
-  prediction_status?: string
-  path?: string
+export type ProspectiveValidation = {
+  status?: string
+  available?: boolean
+  checkpoint_coverage?: Record<
+    string,
+    { captured?: number; missed?: number; total?: number; display?: string }
+  >
+  scored_events?: number
+  captured_checkpoints?: number
+  missed_checkpoints?: number
+  incumbent_gfs?: Record<string, number | null> | null
+  shadow_gfs_hrrr_equal?: Record<string, number | null> | null
+  paired_delta_brier?: Record<string, unknown> | null
+  experimental_transfer_status?: string
+  historical_replay?: Record<string, unknown>
 }
 
 export type ModelSummary = {
@@ -92,5 +102,23 @@ export type ModelSummary = {
   research_status?: Record<string, string>
   multi_source_evidence?: Record<string, string>
   prospective_journal?: Record<string, unknown>
+  prospective_validation?: ProspectiveValidation
   notes?: string[]
+}
+
+export type LiveWeatherResponse = {
+  generated_at: string
+  mode: string
+  calibration_csv_loaded?: boolean
+  events: WeatherEvent[]
+}
+
+export type PredictionSnapshotMeta = {
+  snapshot_id: string
+  prediction_as_of: string
+  created_at?: string
+  event_ticker?: string
+  target_date?: string
+  prediction_status?: string
+  path?: string
 }

@@ -381,7 +381,7 @@ def collect_hrrr_live(
             "operational_selection_policy": HRRR_OPERATIONAL_SELECTION_POLICY,
             "forecast_stream": HRRR_STREAM_EXACT,
             "not_blended_into_prediction": True,
-            "phase5_candidate_nbm": True,
+            "phase6_candidate_nbm": True,
         },
         raw_cache_path=raw_cache_path,
     )
