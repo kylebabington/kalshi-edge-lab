@@ -1,8 +1,9 @@
 """Hourly series for already-selected GFS / HRRR Single Runs (Phase 6).
 
 Fetches the full hourly temperature_2m series of one exact run from the
-Open-Meteo Single Runs API in UTC (timezone=GMT) so America/New_York
-windows and DST are computed locally with zoneinfo. Raw responses are cached
+Open-Meteo Single Runs API in UTC (timezone=GMT); the remaining-day window
+is computed locally on the NWS CLI climate day (midnight EST to midnight EST,
+the same bounds as the as-of observation window). Raw responses are cached
 per (model, run_init). Run selection and publication latency are NOT decided
 here — callers pass the run Phase 5 already selected.
 """
@@ -17,7 +18,7 @@ from typing import Any
 import requests
 
 from kalshi import cache
-from research.weather.asof_observations import local_day_bounds_utc
+from research.weather.asof_observations import climate_day_bounds_utc
 
 SINGLE_RUNS_URL = "https://single-runs-api.open-meteo.com/v1/forecast"
 HOURLY_CACHE_DIR = cache.CACHE_ROOT / "weather" / "single_runs_hourly"
@@ -25,6 +26,8 @@ NYC_LATITUDE = 40.77
 NYC_LONGITUDE = -73.97
 REQUEST_TIMEOUT_S = 30
 REQUEST_PAUSE_S = 0.15
+
+MODEL_WINDOW_BASIS = "checkpoint_to_nws_cli_climate_day_end_local_standard_time_utc-5"
 
 WINDOW_STATUS_OK = "OK"
 WINDOW_STATUS_UNAVAILABLE = "UNAVAILABLE"
@@ -128,25 +131,45 @@ def _ceil_hour(dt: datetime) -> datetime:
     return floored if floored == dt else floored + timedelta(hours=1)
 
 
-def remaining_day_high(
-    series: list[tuple[datetime, float | None]] | None,
+def expected_window_hours(
     *,
     target_date: str,
     checkpoint_as_of: datetime,
-) -> dict[str, Any]:
-    """Max forecast temperature at valid times in [checkpoint, end of NY target date).
+) -> tuple[datetime, datetime, list[datetime]]:
+    """(start, exclusive end, hourly valid times) of the version-C remaining window.
 
-    Every hourly valid time in the window must be present with a value;
-    otherwise the window is UNAVAILABLE with a reason (never a partial max).
+    The window is [checkpoint, end of the NWS CLI climate day), with the climate
+    day taken from climate_day_bounds_utc (midnight EST to midnight EST all year),
+    so during EDT it includes 00:00 EDT of the following calendar date and
+    excludes 00:00 EDT of the target date.
     """
     as_of = checkpoint_as_of.astimezone(timezone.utc)
-    day_start, day_end = local_day_bounds_utc(target_date)
+    day_start, day_end = climate_day_bounds_utc(target_date)
     window_start = _ceil_hour(max(as_of, day_start))
     expected: list[datetime] = []
     cursor = window_start
     while cursor < day_end:
         expected.append(cursor)
         cursor += timedelta(hours=1)
+    return window_start, day_end, expected
+
+
+def remaining_day_high(
+    series: list[tuple[datetime, float | None]] | None,
+    *,
+    target_date: str,
+    checkpoint_as_of: datetime,
+) -> dict[str, Any]:
+    """Max forecast temperature at valid times in [checkpoint, end of CLI climate day).
+
+    Every hourly valid time in the window must be present with a value;
+    otherwise the window is UNAVAILABLE with a reason (never a partial max).
+    An absent final timestamp is a short horizon; a present timestamp with a
+    null temperature is a missing/null hour.
+    """
+    window_start, day_end, expected = expected_window_hours(
+        target_date=target_date, checkpoint_as_of=checkpoint_as_of
+    )
 
     base: dict[str, Any] = {
         "status": WINDOW_STATUS_UNAVAILABLE,
@@ -154,6 +177,7 @@ def remaining_day_high(
         "model_remaining_day_high_f": None,
         "window_start_utc": window_start.isoformat(),
         "window_end_utc_exclusive": day_end.isoformat(),
+        "window_basis": MODEL_WINDOW_BASIS,
         "expected_hours": len(expected),
         "covered_hours": 0,
     }
@@ -167,16 +191,13 @@ def remaining_day_high(
     values = {t: v for t, v in series}
     covered = [values[t] for t in expected if values.get(t) is not None]
     base["covered_hours"] = len(covered)
-    if not covered:
-        base["reason"] = WINDOW_REASON_NO_VALUES
-        return base
     if len(covered) < len(expected):
-        first_valid = min(t for t, v in series if v is not None)
-        last_valid = max(t for t, v in series if v is not None)
-        if last_valid < expected[-1]:
+        if expected[-1] not in values:
             base["reason"] = WINDOW_REASON_HORIZON_SHORT
-        elif first_valid > expected[0]:
+        elif expected[0] not in values and min(values) > expected[0]:
             base["reason"] = WINDOW_REASON_STARTS_LATE
+        elif not covered:
+            base["reason"] = WINDOW_REASON_NO_VALUES
         else:
             base["reason"] = WINDOW_REASON_MISSING_HOURS
         return base

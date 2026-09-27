@@ -6,8 +6,9 @@ Three replay versions, each recalibrated walk-forward on its own residuals:
        no observations; intraday = MODEL_ONLY_REPLAY)
     B  diagnostic bridge: Phase 5 model value + as-of KNYC observed high
        (OBS_BRIDGE_DIAGNOSTIC — the model value may include past hours)
-    C  Phase 6 primary: remaining-day model max over [checkpoint, end of NY
-       target date] from the SAME selected run + as-of observed high
+    C  Phase 6 primary: remaining-day model max over [checkpoint, end of the
+       NWS CLI climate day = next midnight EST) from the SAME selected run +
+       as-of observed high (same climate-day bounds as the observations)
        (FULL_OPERATIONAL_REPLAY per eligible row)
 
 projected_final_high_f = max(observed_high_so_far_f, model_remaining_day_high_f)
@@ -105,6 +106,7 @@ from research.weather.sources.knyc_history import (
     load_knyc_observations,
 )
 from research.weather.sources.single_run_hourly import (
+    MODEL_WINDOW_BASIS,
     WINDOW_REASON_SERIES_UNAVAILABLE,
     WINDOW_STATUS_OK,
     WINDOW_STATUS_UNAVAILABLE,
@@ -113,24 +115,50 @@ from research.weather.sources.single_run_hourly import (
     remaining_day_high,
 )
 
-PHASE6_VERSION = "v1"
+# v1 ended the version-C model window at America/New_York midnight; v2 ends it
+# at the CLI climate-day end (midnight EST). v1 artifacts are kept as-is.
+PHASE6_VERSION = "v2"
+PHASE6_PREVIOUS_VERSION = "v1"
 
 VERSION_A = "A_phase5_model_only"
 VERSION_B = "B_phase5_model_max_plus_obs"
 VERSION_C = "C_remaining_day_max_plus_obs"
 VERSIONS = (VERSION_A, VERSION_B, VERSION_C)
 
-GFS_OBS_REPLAY_CSV = CALIBRATION_DIR / "gfs_operational_replay_obs_v1.csv"
-HRRR_OBS_REPLAY_CSV = CALIBRATION_DIR / "hrrr_operational_replay_obs_v1.csv"
-GFS_OBS_BRIDGE_CSV = CALIBRATION_DIR / "gfs_operational_replay_obs_bridge_v1.csv"
-HRRR_OBS_BRIDGE_CSV = CALIBRATION_DIR / "hrrr_operational_replay_obs_bridge_v1.csv"
-ASOF_OBS_CSV = CALIBRATION_DIR / "knyc_asof_observations_v1.csv"
-OBS_NORMALIZED_CSV = CALIBRATION_DIR / "knyc_iem_observations_v1.csv"
 
-PHASE6_COVERAGE_PATH = RESULTS_DIR / "phase6_obs_coverage_v1.json"
-PHASE6_COMPARISON_PATH = RESULTS_DIR / "phase6_operational_comparison_v1.json"
-PHASE6_SHADOW_EVAL_PATH = RESULTS_DIR / "phase6_shadow_evaluation_v1.json"
-PHASE6_METHODOLOGY_PATH = RESULTS_DIR / "phase6_methodology_v1.json"
+def calibration_paths(version: str) -> dict[str, Path]:
+    return {
+        "gfs_obs_replay_csv": CALIBRATION_DIR / f"gfs_operational_replay_obs_{version}.csv",
+        "hrrr_obs_replay_csv": CALIBRATION_DIR / f"hrrr_operational_replay_obs_{version}.csv",
+        "gfs_obs_bridge_csv": CALIBRATION_DIR / f"gfs_operational_replay_obs_bridge_{version}.csv",
+        "hrrr_obs_bridge_csv": CALIBRATION_DIR / f"hrrr_operational_replay_obs_bridge_{version}.csv",
+        "asof_obs_csv": CALIBRATION_DIR / f"knyc_asof_observations_{version}.csv",
+        "obs_normalized_csv": CALIBRATION_DIR / f"knyc_iem_observations_{version}.csv",
+    }
+
+
+def result_paths(version: str) -> dict[str, Path]:
+    return {
+        "coverage": RESULTS_DIR / f"phase6_obs_coverage_{version}.json",
+        "comparison": RESULTS_DIR / f"phase6_operational_comparison_{version}.json",
+        "shadow_eval": RESULTS_DIR / f"phase6_shadow_evaluation_{version}.json",
+        "methodology": RESULTS_DIR / f"phase6_methodology_{version}.json",
+    }
+
+
+_CAL = calibration_paths(PHASE6_VERSION)
+_RES = result_paths(PHASE6_VERSION)
+GFS_OBS_REPLAY_CSV = _CAL["gfs_obs_replay_csv"]
+HRRR_OBS_REPLAY_CSV = _CAL["hrrr_obs_replay_csv"]
+GFS_OBS_BRIDGE_CSV = _CAL["gfs_obs_bridge_csv"]
+HRRR_OBS_BRIDGE_CSV = _CAL["hrrr_obs_bridge_csv"]
+ASOF_OBS_CSV = _CAL["asof_obs_csv"]
+OBS_NORMALIZED_CSV = _CAL["obs_normalized_csv"]
+
+PHASE6_COVERAGE_PATH = _RES["coverage"]
+PHASE6_COMPARISON_PATH = _RES["comparison"]
+PHASE6_SHADOW_EVAL_PATH = _RES["shadow_eval"]
+PHASE6_METHODOLOGY_PATH = _RES["methodology"]
 
 INTRADAY_CHECKPOINTS = tuple(c for c in CHECKPOINT_IDS if is_intraday_checkpoint(c))
 OBS_EXCEEDS_FINAL_QA_F = 1.0
@@ -143,6 +171,8 @@ PHASE6_EXTRA_FIELDS = [
     "remaining_window_status",
     "remaining_window_reason",
     "remaining_window_start_utc",
+    "remaining_window_end_utc_exclusive",
+    "remaining_window_basis",
     "remaining_window_expected_hours",
     "remaining_window_covered_hours",
     "remaining_day_model_high_f",
@@ -411,6 +441,8 @@ def build_version_rows(
                 "remaining_window_status": window.get("status"),
                 "remaining_window_reason": _fmt(window.get("reason")),
                 "remaining_window_start_utc": _fmt(window.get("window_start_utc")),
+                "remaining_window_end_utc_exclusive": _fmt(window.get("window_end_utc_exclusive")),
+                "remaining_window_basis": _fmt(window.get("window_basis")),
                 "remaining_window_expected_hours": _fmt(window.get("expected_hours")),
                 "remaining_window_covered_hours": _fmt(window.get("covered_hours")),
                 "remaining_day_model_high_f": _fmt(window.get("model_remaining_day_high_f")),
@@ -872,13 +904,30 @@ def methodology_payload(hyp: dict[str, Any]) -> dict[str, Any]:
         "model_window": {
             "version_A_B": "Phase 5 value: selected run's max over the whole NY target date (GFS) "
             "or over target-date hours from run init (same-day HRRR); may include past hours",
-            "version_C": "max hourly forecast at valid times in [checkpoint, next America/New_York "
-            "midnight) from the same selected run; every hour must be present or the row is "
-            "REPLAY_UNAVAILABLE",
-            "known_difference_from_climate_day": (
-                "during EDT the CLI climate day also includes 00:00-00:59 EDT of the next "
-                "calendar day; that hour is outside the specified model window"
+            "version_C": "max hourly forecast at valid times in [checkpoint, next midnight EST "
+            "after the target climate date) from the same selected run; start and end come from "
+            "climate_day_bounds_utc, end exclusive; every hour must be present with a value or "
+            "the row is REPLAY_UNAVAILABLE (never a partial max, never a Phase 5 fallback)",
+            "window_basis": MODEL_WINDOW_BASIS,
+            "shared_with_observation_window": (
+                "observation and model windows both use the NWS CLI climate day "
+                "(midnight EST to midnight EST all year); during EDT this includes 00:00 EDT "
+                "of the next calendar date and excludes 00:00 EDT of the target date"
             ),
+            "completeness_reasons": {
+                "final_expected_timestamp_absent": "run_horizon_ends_before_end_of_target_date",
+                "timestamp_present_with_null_temperature": "missing_or_null_hours_in_remaining_window",
+            },
+            "supersedes": {
+                "version": PHASE6_PREVIOUS_VERSION,
+                "defect": (
+                    "v1 ended the model window at the next America/New_York calendar midnight, "
+                    "which during EDT omitted the final 00:00-00:59 EDT hour of the CLI climate "
+                    "day (and for pre-day checkpoints included the target date's 00:00 EDT hour, "
+                    "which belongs to the previous climate day)"
+                ),
+                "v1_artifacts_retained": True,
+            },
             "run_selection_and_latency": {
                 "inherited_from": "Phase 5 CSVs (unchanged)",
                 "gfs_latency_hours": GFS_PUBLICATION_LATENCY.total_seconds() / 3600.0,

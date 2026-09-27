@@ -48,6 +48,7 @@ from research.weather.phase6 import (
 from research.weather.sources.knyc_history import month_chunks, parse_iem_asos_csv
 from research.weather.sources.single_run_hourly import (
     WINDOW_REASON_HORIZON_SHORT,
+    WINDOW_REASON_MISSING_HOURS,
     WINDOW_STATUS_OK,
     WINDOW_STATUS_UNAVAILABLE,
     parse_hourly_series,
@@ -325,7 +326,7 @@ def test_remaining_window_excludes_past_hours():
     late = remaining_day_high(series, target_date="2026-07-15", checkpoint_as_of=checkpoint_as_of_utc("2026-07-15", "d0_1200"))
     assert early["status"] == WINDOW_STATUS_OK and early["model_remaining_day_high_f"] == 95.0
     assert late["status"] == WINDOW_STATUS_OK and late["model_remaining_day_high_f"] == 80.0
-    assert late["expected_hours"] == 12  # 12:00..23:00 EDT
+    assert late["expected_hours"] == 13  # 12:00 EDT .. 00:00 EDT next day
 
 
 def test_remaining_window_horizon_short_is_unavailable():
@@ -337,12 +338,164 @@ def test_remaining_window_horizon_short_is_unavailable():
     assert res["model_remaining_day_high_f"] is None
 
 
-def test_remaining_window_dst_fall_back_has_25_hours_for_dminus1():
+def test_remaining_window_dst_fall_back_dminus1_is_climate_day_24_hours():
     run_init = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
     series = parse_hourly_series(_payload(run_init, 72, lambda t: 60.0))
     res = remaining_day_high(series, target_date="2026-11-01", checkpoint_as_of=checkpoint_as_of_utc("2026-11-01", "dminus1_1800"))
     assert res["status"] == WINDOW_STATUS_OK
-    assert res["expected_hours"] == 25
+    assert res["expected_hours"] == 24
+    assert res["window_start_utc"] == datetime(2026, 11, 1, 5, 0, tzinfo=UTC).isoformat()  # 01:00 EDT
+    assert res["window_end_utc_exclusive"] == datetime(2026, 11, 2, 5, 0, tzinfo=UTC).isoformat()  # 00:00 EST
+
+
+def _series(start_utc: datetime, hours: int, overrides: dict[datetime, float | None] | None = None, base: float = 80.0):
+    overrides = overrides or {}
+    out = []
+    for h in range(hours):
+        t = start_utc + timedelta(hours=h)
+        out.append((t, overrides.get(t, base)))
+    return out
+
+
+def test_april_next_day_0000_edt_hour_is_included_and_can_be_the_max():
+    d = "2026-04-15"
+    midnight_edt_next = _local(2026, 4, 16, 0).astimezone(UTC)  # 04Z = final climate-day hour
+    climate_end = midnight_edt_next + timedelta(hours=1)  # 05Z = 00:00 EST, exclusive
+    assert climate_end == climate_day_bounds_utc(d)[1]
+    series = _series(
+        datetime(2026, 4, 15, 6, tzinfo=UTC), 48, {midnight_edt_next: 91.0, climate_end: 99.0}
+    )
+    res = remaining_day_high(series, target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "d0_1200"))
+    assert res["status"] == WINDOW_STATUS_OK
+    assert res["model_remaining_day_high_f"] == 91.0  # 99 at the exclusive end is ignored
+    assert res["expected_hours"] == 13
+    assert res["window_end_utc_exclusive"] == climate_end.isoformat()
+
+
+def test_winter_window_ends_at_midnight_est_exclusive():
+    d = "2026-01-15"
+    last_hour = datetime(2026, 1, 16, 4, tzinfo=UTC)  # 23:00 EST
+    end = datetime(2026, 1, 16, 5, tzinfo=UTC)  # 00:00 EST
+    series = _series(datetime(2026, 1, 15, 6, tzinfo=UTC), 48, {last_hour: 85.0, end: 99.0}, base=40.0)
+    res = remaining_day_high(series, target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "d0_1200"))
+    assert res["status"] == WINDOW_STATUS_OK
+    assert res["model_remaining_day_high_f"] == 85.0
+    assert res["expected_hours"] == 12  # 12:00 .. 23:00 EST
+    assert res["window_end_utc_exclusive"] == end.isoformat()
+
+
+@pytest.mark.parametrize(
+    "target,dm1_start,end,d0_1200_hours",
+    [
+        # Spring forward: climate day 05Z..05Z; noon EDT = 16Z → 16Z..04Z.
+        ("2026-03-08", datetime(2026, 3, 8, 5, tzinfo=UTC), datetime(2026, 3, 9, 5, tzinfo=UTC), 13),
+        # Fall back: climate day 05Z..05Z; noon EST = 17Z → 17Z..04Z.
+        ("2026-11-01", datetime(2026, 11, 1, 5, tzinfo=UTC), datetime(2026, 11, 2, 5, tzinfo=UTC), 12),
+    ],
+)
+def test_dst_transition_dates_use_climate_day_bounds(target, dm1_start, end, d0_1200_hours):
+    series = _series(dm1_start - timedelta(hours=12), 72, {end - timedelta(hours=1): 90.0, end: 99.0}, base=50.0)
+    dm1 = remaining_day_high(series, target_date=target, checkpoint_as_of=checkpoint_as_of_utc(target, "dminus1_1800"))
+    assert dm1["status"] == WINDOW_STATUS_OK
+    assert dm1["window_start_utc"] == dm1_start.isoformat()
+    assert dm1["window_end_utc_exclusive"] == end.isoformat()
+    assert dm1["expected_hours"] == 24
+    assert dm1["model_remaining_day_high_f"] == 90.0
+    noon = remaining_day_high(series, target_date=target, checkpoint_as_of=checkpoint_as_of_utc(target, "d0_1200"))
+    assert noon["status"] == WINDOW_STATUS_OK
+    assert noon["expected_hours"] == d0_1200_hours
+    assert noon["model_remaining_day_high_f"] == 90.0
+
+
+def test_dminus1_edt_excludes_target_date_0000_edt_hour():
+    d = "2026-07-15"
+    target_midnight_edt = _local(2026, 7, 15, 0).astimezone(UTC)  # previous climate day
+    series = _series(datetime(2026, 7, 14, 12, tzinfo=UTC), 72, {target_midnight_edt: 99.0})
+    res = remaining_day_high(series, target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "dminus1_1800"))
+    assert res["status"] == WINDOW_STATUS_OK
+    assert res["window_start_utc"] == (target_midnight_edt + timedelta(hours=1)).isoformat()
+    assert res["model_remaining_day_high_f"] == 80.0
+
+
+def test_absent_final_hour_is_horizon_short_never_partial_max():
+    d = "2026-07-15"
+    final = _local(2026, 7, 16, 0).astimezone(UTC)  # 04Z
+    start = datetime(2026, 7, 15, 6, tzinfo=UTC)
+    series = _series(start, int((final - start).total_seconds() // 3600))  # ends 03Z
+    assert series[-1][0] == final - timedelta(hours=1)
+    res = remaining_day_high(series, target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "d0_1200"))
+    assert res["status"] == WINDOW_STATUS_UNAVAILABLE
+    assert res["reason"] == WINDOW_REASON_HORIZON_SHORT
+    assert res["model_remaining_day_high_f"] is None
+    assert res["covered_hours"] == res["expected_hours"] - 1
+
+
+def test_null_final_hour_is_missing_or_null_never_partial_max():
+    d = "2026-07-15"
+    final = _local(2026, 7, 16, 0).astimezone(UTC)
+    series = _series(datetime(2026, 7, 15, 6, tzinfo=UTC), 48, {final: None})
+    res = remaining_day_high(series, target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "d0_1200"))
+    assert res["status"] == WINDOW_STATUS_UNAVAILABLE
+    assert res["reason"] == WINDOW_REASON_MISSING_HOURS
+    assert res["model_remaining_day_high_f"] is None
+
+
+def test_missing_final_hour_makes_version_c_unavailable_and_leaves_b_unchanged():
+    d = "2026-07-15"
+    g = MODEL_GFS_OPERATIONAL_LATEST
+    final = _local(2026, 7, 16, 0).astimezone(UTC)
+    start = datetime(2026, 7, 15, 6, tzinfo=UTC)
+    short = _series(start, int((final - start).total_seconds() // 3600))
+    window = remaining_day_high(short, target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "d0_1200"))
+    rows = [_p5_row(g, d, "d0_1200", p5_value=85.0)]
+    rows_b, rows_c = build_version_rows(rows, {(d, "d0_1200"): _obs_ok(82.0)}, {(g, d, "d0_1200"): window})
+    assert rows_c[0]["replay_mode"] == REPLAY_MODE_UNAVAILABLE
+    assert WINDOW_REASON_HORIZON_SHORT in rows_c[0]["replay_reason"]
+    assert rows_c[0]["model_remaining_day_high_f"] == ""
+    assert rows_c[0]["residual_f"] == ""
+    assert rows_b[0]["replay_mode"] == REPLAY_MODE_OBS_BRIDGE_DIAGNOSTIC
+    assert rows_b[0]["projected_final_high_f"] == 85.0
+
+
+def test_window_diff_detects_same_count_shift_for_dminus1():
+    from research.weather.phase6_window_diff import v1_expected_hours, v2_expected_hours, window_diff
+
+    d = "2026-07-15"
+    g = MODEL_GFS_OPERATIONAL_LATEST
+    as_of = checkpoint_as_of_utc(d, "dminus1_1800")
+    v1 = {
+        "model": g, "target_date": d, "checkpoint_id": "dminus1_1800", "checkpoint_as_of": as_of.isoformat(),
+        "remaining_window_start_utc": _local(2026, 7, 15, 0).astimezone(UTC).isoformat(),
+        "remaining_window_expected_hours": "24", "remaining_window_status": "OK",
+        "remaining_day_model_high_f": "80.0", "replay_mode": REPLAY_MODE_FULL_OPERATIONAL,
+    }
+    s, e = climate_day_bounds_utc(d)
+    v2 = dict(v1, remaining_window_start_utc=s.isoformat(), remaining_window_end_utc_exclusive=e.isoformat(),
+              remaining_day_model_high_f="82.0")
+    h1, h2 = v1_expected_hours(v1), v2_expected_hours(v2)
+    assert len(h1) == len(h2) == 24 and set(h1) != set(h2)
+    out = window_diff([v1], [v2])
+    c = out["by_model_checkpoint"][g]["dminus1_1800"]
+    assert c["rows_gained_final_hour_only"] == 1
+    assert c["rows_lost_leading_hour_only"] == 1
+    assert c["rows_shifted_same_count"] == 1
+    assert c.get("window_identical", 0) == 0
+    assert c["max_changed"] == 1
+    assert out["v1_reconstruction_check"]["n_mismatches"] == 0
+
+
+def test_phase6_v2_paths_do_not_collide_with_v1():
+    assert phase6_mod.PHASE6_VERSION == "v2"
+    v1_paths = set(phase6_mod.calibration_paths("v1").values()) | set(phase6_mod.result_paths("v1").values())
+    current = {
+        phase6_mod.GFS_OBS_REPLAY_CSV, phase6_mod.HRRR_OBS_REPLAY_CSV,
+        phase6_mod.GFS_OBS_BRIDGE_CSV, phase6_mod.HRRR_OBS_BRIDGE_CSV,
+        phase6_mod.ASOF_OBS_CSV, phase6_mod.OBS_NORMALIZED_CSV,
+        phase6_mod.PHASE6_COVERAGE_PATH, phase6_mod.PHASE6_COMPARISON_PATH,
+        phase6_mod.PHASE6_SHADOW_EVAL_PATH, phase6_mod.PHASE6_METHODOLOGY_PATH,
+    }
+    assert not (current & v1_paths)
+    assert all("_v2." in p.name for p in current)
 
 
 def test_hourly_payload_must_be_utc():
