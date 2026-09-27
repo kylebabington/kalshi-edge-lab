@@ -118,6 +118,71 @@ cached under `data/cache/weather/clinyc/`. It does **not** rebuild the full rece
 Settlement temperatures prefer event-level unanimous numeric `expiration_value`
 (not `settlement_value_dollars`). Conflicting values are rejected.
 
+### Phase 6 — historical KNYC as-of observations + operational replay
+
+```bash
+python weather_model.py --phase6-obs-replay            # uses caches when present
+python weather_model.py --phase6-obs-replay --refresh-phase6-cache
+```
+
+Reads the Phase 5 operational CSVs (read-only; run selection and publication
+latency unchanged) and adds what was knowable at each checkpoint.
+
+- **Observation source:** Iowa Environmental Mesonet ASOS/METAR archive
+  (`asos.py`, station `NYC` = KNYC), routine + SPECI reports, UTC timestamps.
+  Raw monthly CSVs cached in `data/cache/weather/knyc_obs_iem/` with
+  retrieval metadata. Never derived from the CLI daily high.
+- **Availability assumption (frozen):** IEM gives no publication time, so a
+  report counts as available 20 minutes after its observation time. The :51
+  routine report is therefore never usable at the next :00 checkpoint.
+- **Observation window:** the NWS CLI climate day that settles `nws_cli_knyc`
+  events — midnight Local Standard Time (UTC−5) all year, so during EDT it runs
+  01:00 EDT → 00:59 EDT and 00:xx EDT reports belong to the previous day.
+  (The model window below stays on America/New_York calendar days, as specified.)
+- **Trust rules:** newest usable report ≤ 120 min old; no gap > 180 min
+  (including climate-day start → first report). Wrong-station,
+  missing/invalid, out-of-range, conflicting-duplicate and not-yet-available
+  reports are rejected with counts.
+- **Model window:** the hourly series of each already-selected GFS/HRRR run is
+  fetched from Open-Meteo Single Runs (UTC) and cached in
+  `data/cache/weather/single_runs_hourly/`. `model_remaining_day_high_f` is the
+  max forecast at valid times from the checkpoint through the end of the NY
+  target date; any missing hour makes the row `REPLAY_UNAVAILABLE`.
+- `projected_final_high_f = max(observed_high_so_far_f, model_remaining_day_high_f)`.
+
+Three versions, each recalibrated walk-forward on its own residuals and
+scored on the identical eligible cohort (both models FULL in version C):
+
+| Version | Model value | Observations |
+|---|---|---|
+| A | Phase 5 full-run max | none |
+| B (diagnostic bridge) | Phase 5 full-run max | as-of |
+| C (Phase 6 primary) | remaining-day max | as-of |
+
+A→B is the effect of adding observations under the old window; B→C is the
+effect of correcting the window. Replay labels are per row:
+`FULL_OPERATIONAL_REPLAY` only for version-C rows with trusted observations and
+full remaining-day coverage; `OBS_BRIDGE_DIAGNOSTIC` for B; `MODEL_ONLY_REPLAY`
+when observations are missing/untrustworthy; `REPLAY_UNAVAILABLE` when the run
+lacks remaining-day coverage. Phase 5's `HISTORICAL_ASOF_OBS_AVAILABLE` stays `False`.
+
+Coverage of the v1 run (Phase 5 dates 2026-04-02 → 2026-07-25, 114 events):
+3,642 KNYC reports, 0 rejected; all 4 intraday checkpoints OK on all 114 dates
+(newest usable report 20–69 min old; ~1 delayed report excluded per
+date-checkpoint); all 725 selected runs (341 GFS, 384 HRRR) cover the
+remaining-day window, so no `REPLAY_UNAVAILABLE` rows. Walk-forward burn-in and
+residual-pool thresholds leave 44 scored dates per intraday checkpoint (42 at
+`dminus1_1800`) — the same cohort Phase 5 scored.
+
+Outputs (`_v1`): `data/weather/calibration/{gfs,hrrr}_operational_replay_obs_v1.csv`
+(C), `..._obs_bridge_v1.csv` (B), `knyc_asof_observations_v1.csv`,
+`knyc_iem_observations_v1.csv`; `data/results/phase6_obs_coverage_v1.json`,
+`phase6_operational_comparison_v1.json`, `phase6_shadow_evaluation_v1.json`,
+`phase6_methodology_v1.json`. Phase 5 artifacts and the frozen shadow
+hypothesis are not modified. RESEARCH_ONLY / NO_BET; the shadow stays
+shadow-only and CLINYC transfer status is unchanged. A confidence interval
+excluding zero is not validation.
+
 ---
 
 ## Research UI (FastAPI + React)

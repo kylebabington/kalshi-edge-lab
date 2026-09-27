@@ -59,6 +59,10 @@ EVIDENCE_CLASS_PHASE4 = "development_phase4"
 EVIDENCE_CLASS_PHASE5 = "prospective_phase5"
 REPLAY_MODE_FULL_OPERATIONAL = "FULL_OPERATIONAL_REPLAY"
 REPLAY_MODE_MODEL_ONLY = "MODEL_ONLY_REPLAY"
+# Phase 6: as-of observations + Phase 5 full-run target-date maximum (may include past hours).
+REPLAY_MODE_OBS_BRIDGE_DIAGNOSTIC = "OBS_BRIDGE_DIAGNOSTIC"
+# Phase 6: selected run cannot supply the remaining-day window.
+REPLAY_MODE_UNAVAILABLE = "REPLAY_UNAVAILABLE"
 SHADOW_STATUS_AVAILABLE = "available"
 SHADOW_STATUS_UNAVAILABLE = "unavailable"
 SHADOW_STATUS_BUCKET_ALIGNMENT_ERROR = "BUCKET_ALIGNMENT_ERROR"

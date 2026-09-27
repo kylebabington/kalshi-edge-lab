@@ -11,6 +11,7 @@ Commands:
   python weather_model.py --phase3-transfer
   python weather_model.py --phase4-hrrr
   python weather_model.py --phase5-operational
+  python weather_model.py --phase6-obs-replay [--refresh-phase6-cache]
   python weather_model.py --snapshot-live
   python weather_model.py --score-snapshots
   python weather_model.py --prospective-cycle
@@ -104,6 +105,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     group.add_argument(
+        "--phase6-obs-replay",
+        action="store_true",
+        help=(
+            "Phase 6: historical KNYC as-of observations + remaining-day model window; "
+            "versions A/B/C on a common cohort (SHADOW ONLY — no promotion)"
+        ),
+    )
+    group.add_argument(
         "--snapshot-live",
         action="store_true",
         help=(
@@ -128,6 +137,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "refresh CLINYC_TRANSFER_V1. Schedule at HH:05 ET hourly. "
             "Never call from GET endpoints."
         ),
+    )
+    parser.add_argument(
+        "--refresh-phase6-cache",
+        action="store_true",
+        help="With --phase6-obs-replay, re-download cached KNYC obs and hourly run series",
     )
     parser.add_argument(
         "--example-json",
@@ -454,6 +468,47 @@ def cmd_phase5_operational() -> int:
     return 0
 
 
+def cmd_phase6_obs_replay(*, refresh: bool = False) -> int:
+    from research.weather.phase6 import VERSIONS, run_phase6_obs_replay
+
+    ensure_weather_cache_dirs()
+    console.print("[bold]Phase 6 as-of observation replay (A/B/C)[/bold]")
+    console.print("SHADOW ONLY — RESEARCH_ONLY / NO_BET. Phase 5 artifacts untouched.")
+    client = KalshiClient(
+        progress=lambda message: console.print(message, style="dim"),
+    )
+    markets = get_historical_markets_for_series(SERIES_TICKER, client=client)
+    result = run_phase6_obs_replay(
+        markets,
+        refresh=refresh,
+        progress=lambda m: console.print(m, style="dim"),
+    )
+    cov = result["coverage"]
+    src = cov["observation_source"]
+    console.print(
+        f"KNYC obs raw={src['raw_records']} valid={src['valid_records']} "
+        f"rejections={src['rejections']}"
+    )
+    for cid, stats in cov["per_checkpoint_observations"].items():
+        console.print(f"  {cid}: {stats['status_counts']} age={stats['newest_usable_age_min']}")
+    console.print(f"eligible pairs: {cov['eligible_pairs_by_checkpoint']}")
+    console.print(f"common cohort: {cov['common_cohort_by_checkpoint']}")
+    results = result["comparison"]["common_cohort"]["results"]
+    for version in VERSIONS:
+        block = results[version]["pooled_intraday"]
+        prob = block["probabilistic"]
+        delta = block["paired_delta_brier"]["shadow_minus_gfs"]
+        console.print(
+            f"{version} pooled_intraday n={block['n']} "
+            f"brier gfs={prob['gfs'].get('brier')} hrrr={prob['hrrr'].get('brier')} "
+            f"shadow={prob['shadow'].get('brier')} "
+            f"shadow-gfs={delta.get('mean')} ci95={delta.get('ci95')}"
+        )
+    for name, path in result["paths"].items():
+        console.print(f"{name}: {path}")
+    return 0
+
+
 def cmd_prospective_cycle() -> int:
     from research.weather.prospective import run_prospective_cycle
 
@@ -496,6 +551,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_phase4_hrrr()
     if args.phase5_operational:
         return cmd_phase5_operational()
+    if args.phase6_obs_replay:
+        return cmd_phase6_obs_replay(refresh=args.refresh_phase6_cache)
     if args.snapshot_live:
         return cmd_snapshot_live()
     if args.score_snapshots:
