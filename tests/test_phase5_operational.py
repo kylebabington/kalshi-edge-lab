@@ -441,6 +441,44 @@ def test_refresh_clinyc_transfer_failure_does_not_crash(monkeypatch):
     assert result["refresh_status"].startswith("failed")
 
 
+def test_score_artifact_skip_is_provisional_but_ok_is_frozen(tmp_path, monkeypatch):
+    monkeypatch.setattr(snapshots_mod, "SNAPSHOT_ROOT", tmp_path / "snaps")
+    monkeypatch.setattr(snapshots_mod, "SCORE_ROOT", tmp_path / "scores")
+    skip = {"snapshot_id": "s1", "score_status": "EVENT_NOT_FINALIZED"}
+    ok = {"snapshot_id": "s1", "score_status": "OK", "brier": 0.4}
+    later = {"snapshot_id": "s1", "score_status": "OK", "brier": 0.9}
+
+    path = snapshots_mod.write_score_artifact(skip)
+    snapshots_mod.write_score_artifact(ok)
+    assert snapshots_mod.cache.read_json(path)["brier"] == 0.4
+    snapshots_mod.write_score_artifact(later)
+    snapshots_mod.write_score_artifact(skip)
+    assert snapshots_mod.cache.read_json(path)["brier"] == 0.4
+
+
+def test_recently_settled_events_include_post_registration_settled_event(tmp_path, monkeypatch):
+    from research.weather import prospective
+
+    monkeypatch.setattr(checkpoints_mod, "CHECKPOINT_ROOT", tmp_path / "cp")
+    markets = [
+        {
+            "ticker": f"KXHIGHNY-26SEP26-B{lo}.5",
+            "event_ticker": "KXHIGHNY-26SEP26",
+            "status": "finalized",
+            "result": "yes" if lo == 70 else "no",
+            "strike_type": "between",
+            "floor_strike": lo,
+            "cap_strike": lo + 1,
+        }
+        for lo in (68, 70, 72)
+    ]
+    monkeypatch.setattr(prospective, "is_range_bucket_event", lambda m: True)
+    settled = prospective._recently_settled_events(
+        markets, registered_at="2026-09-26T12:02:38+00:00"
+    )
+    assert [e["event_ticker"] for e in settled] == ["KXHIGHNY-26SEP26"]
+
+
 def test_prospective_cycle_runs_end_to_end_without_network(tmp_path, monkeypatch):
     from research.weather import prospective
 
@@ -456,10 +494,10 @@ def test_prospective_cycle_runs_end_to_end_without_network(tmp_path, monkeypatch
     )
     monkeypatch.setattr(
         "research.weather.service.score_settled_snapshots",
-        lambda client=None: {"scored": [], "skipped": []},
+        lambda client=None, markets=None: {"scored": [], "skipped": []},
     )
     monkeypatch.setattr(
-        prospective, "get_historical_markets_for_series", lambda *a, **k: []
+        prospective, "refresh_settled_markets", lambda client=None: ([], "ok")
     )
     monkeypatch.setattr(
         prospective,

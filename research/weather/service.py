@@ -1146,6 +1146,7 @@ def get_snapshot_scores() -> dict[str, Any]:
 def score_settled_snapshots(
     *,
     client: KalshiClient | None = None,
+    markets: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Post-settlement scoring. May use settlement info. Never mutates snapshots.
 
@@ -1174,13 +1175,15 @@ def score_settled_snapshots(
     )
     from research.weather.resolution import (
         get_outcome_label,
+        get_winning_market,
         group_markets_by_event,
         is_range_bucket_event,
     )
-    from kalshi.client import get_historical_markets_for_series
+    from research.weather.clinyc import fetch_settled_kxhighny_markets
 
     client = client or KalshiClient()
-    markets = get_historical_markets_for_series(SERIES_TICKER, client=client)
+    if markets is None:
+        markets = fetch_settled_kxhighny_markets(client=client, force_refresh=True)
     grouped = group_markets_by_event(markets)
     # NWS-regime actuals from calibration CSV only (never used for CLINYC).
     rows = load_calibration_csv()
@@ -1239,7 +1242,8 @@ def score_settled_snapshots(
             _skip(snap, SCORE_STATUS_EVENT_NOT_FINALIZED, "event not finalized")
             continue
 
-        winner = get_outcome_label(event_markets)
+        winning_market = get_winning_market(event_markets)
+        winner = get_outcome_label(winning_market) if winning_market else ""
         if not winner:
             _skip(
                 snap,

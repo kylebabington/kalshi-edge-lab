@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from kalshi import cache
-from kalshi.client import KalshiClient, get_historical_markets_for_series
+from kalshi.client import KalshiClient
 from research.weather.checkpoints import (
     CHECKPOINT_IDS,
     RECEIPT_STATUS_CAPTURED,
@@ -266,6 +266,27 @@ def _recently_settled_events(
     return out
 
 
+def refresh_settled_markets(
+    *,
+    client: KalshiClient | None = None,
+) -> tuple[list[dict[str, Any]], str]:
+    """Force-refresh the series-scoped settled cache (live settled tier + historical).
+
+    The historical tier lags by months, so recently settled events are only
+    visible via /markets?status=settled. Falls back to the cached copy on error.
+    """
+    from research.weather.clinyc import fetch_settled_kxhighny_markets
+
+    try:
+        return fetch_settled_kxhighny_markets(client=client, force_refresh=True), "ok"
+    except Exception as error:  # noqa: BLE001
+        try:
+            cached = fetch_settled_kxhighny_markets(client=client)
+        except Exception:  # noqa: BLE001
+            cached = []
+        return cached, f"failed: {error}"
+
+
 def refresh_clinyc_transfer_progress(
     *,
     client: KalshiClient | None = None,
@@ -420,9 +441,9 @@ def run_prospective_cycle(
             captured.append({**receipt, "path": str(path), "wrote_new": is_new})
 
     # --- RECONCILIATION universe ---
-    hist_markets = get_historical_markets_for_series(SERIES_TICKER, client=client)
+    settled_markets, settled_refresh_status = refresh_settled_markets(client=client)
     settled = _recently_settled_events(
-        hist_markets, registered_at=str(hyp.get("registered_at") or "")
+        settled_markets, registered_at=str(hyp.get("registered_at") or "")
     )
     reconcile_events: list[dict[str, Any]] = []
     for event in open_events:
@@ -467,7 +488,7 @@ def run_prospective_cycle(
 
     # Transfer refresh + scoring
     transfer = refresh_clinyc_transfer_progress(client=client)
-    score_result = score_settled_snapshots(client=client)
+    score_result = score_settled_snapshots(client=client, markets=settled_markets)
 
     receipts = list_receipts()
     captured_n = sum(1 for r in receipts if r.get("status") == RECEIPT_STATUS_CAPTURED)
@@ -510,6 +531,9 @@ def run_prospective_cycle(
         },
         "reconciliation_universe": {
             "events_processed": len(reconcile_events),
+            "open_events": len(open_events),
+            "recently_settled_events": [e["event_ticker"] for e in settled],
+            "settled_markets_refresh": settled_refresh_status,
             "missed_this_run": len(missed),
         },
         "checkpoint_coverage": coverage,

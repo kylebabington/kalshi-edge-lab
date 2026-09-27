@@ -22,5 +22,5 @@
   "source_regime": "nws_cli_knyc",
   "target_regime": "weather_company_clinyc",
   "transfer_rule": "identity",
-  "validation_start_date": null
+  "validation_start_date": "2026-09-26"
 }

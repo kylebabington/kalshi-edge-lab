@@ -478,7 +478,14 @@ def write_score_artifact(score: dict[str, Any]) -> Path:
     path = SCORE_ROOT / f"{snapshot_id}.json"
     if path.exists():
         existing = cache.read_json(path, default=None)
-        if isinstance(existing, dict) and existing.get("snapshot_id") == snapshot_id:
+        if (
+            isinstance(existing, dict)
+            and existing.get("snapshot_id") == snapshot_id
+            and (
+                existing.get("score_status") == SCORE_STATUS_OK
+                or score.get("score_status") != SCORE_STATUS_OK
+            )
+        ):
             return path
     cache.write_json(path, score)
     return path
