@@ -138,7 +138,8 @@ latency unchanged) and adds what was knowable at each checkpoint.
 - **Observation window:** the NWS CLI climate day that settles `nws_cli_knyc`
   events — midnight Local Standard Time (UTC−5) all year, so during EDT it runs
   01:00 EDT → 00:59 EDT and 00:xx EDT reports belong to the previous day.
-  (The model window below stays on America/New_York calendar days, as specified.)
+  The version-C model window uses the same climate-day bounds
+  (`climate_day_bounds_utc`).
 - **Trust rules:** newest usable report ≤ 120 min old; no gap > 180 min
   (including climate-day start → first report). Wrong-station,
   missing/invalid, out-of-range, conflicting-duplicate and not-yet-available
@@ -146,8 +147,13 @@ latency unchanged) and adds what was knowable at each checkpoint.
 - **Model window:** the hourly series of each already-selected GFS/HRRR run is
   fetched from Open-Meteo Single Runs (UTC) and cached in
   `data/cache/weather/single_runs_hourly/`. `model_remaining_day_high_f` is the
-  max forecast at valid times from the checkpoint through the end of the NY
-  target date; any missing hour makes the row `REPLAY_UNAVAILABLE`.
+  max forecast at hourly valid times in `[checkpoint, next midnight EST)` — the
+  rest of the same CLI climate day the observations use, so during EDT it
+  includes 00:00 EDT of the next calendar date (end exclusive). Every expected
+  hour must be present with a value, otherwise the row is `REPLAY_UNAVAILABLE`
+  (absent final timestamp → `run_horizon_ends_before_end_of_target_date`;
+  timestamp present with a null value → `missing_or_null_hours_in_remaining_window`).
+  There is no partial max and no fallback to the Phase 5 daily max.
 - `projected_final_high_f = max(observed_high_so_far_f, model_remaining_day_high_f)`.
 
 Three versions, each recalibrated walk-forward on its own residuals and
@@ -166,22 +172,35 @@ full remaining-day coverage; `OBS_BRIDGE_DIAGNOSTIC` for B; `MODEL_ONLY_REPLAY`
 when observations are missing/untrustworthy; `REPLAY_UNAVAILABLE` when the run
 lacks remaining-day coverage. Phase 5's `HISTORICAL_ASOF_OBS_AVAILABLE` stays `False`.
 
-Coverage of the v1 run (Phase 5 dates 2026-04-02 → 2026-07-25, 114 events):
-3,642 KNYC reports, 0 rejected; all 4 intraday checkpoints OK on all 114 dates
-(newest usable report 20–69 min old; ~1 delayed report excluded per
-date-checkpoint); all 725 selected runs (341 GFS, 384 HRRR) cover the
-remaining-day window, so no `REPLAY_UNAVAILABLE` rows. Walk-forward burn-in and
-residual-pool thresholds leave 44 scored dates per intraday checkpoint (42 at
-`dminus1_1800`) — the same cohort Phase 5 scored.
+Coverage (Phase 5 dates 2026-04-02 → 2026-07-25, 114 events): 3,642 KNYC
+reports, 0 rejected; all 4 intraday checkpoints OK on all 114 dates.
 
-Outputs (`_v1`): `data/weather/calibration/{gfs,hrrr}_operational_replay_obs_v1.csv`
-(C), `..._obs_bridge_v1.csv` (B), `knyc_asof_observations_v1.csv`,
-`knyc_iem_observations_v1.csv`; `data/results/phase6_obs_coverage_v1.json`,
-`phase6_operational_comparison_v1.json`, `phase6_shadow_evaluation_v1.json`,
-`phase6_methodology_v1.json`. Phase 5 artifacts and the frozen shadow
-hypothesis are not modified. RESEARCH_ONLY / NO_BET; the shadow stays
-shadow-only and CLINYC transfer status is unchanged. A confidence interval
-excluding zero is not validation.
+**v2 (current) vs v1.** v1 ended the version-C model window at the next
+America/New_York midnight, which during EDT dropped the final 00:00 EDT hour
+of the CLI climate day (and for `dminus1_1800` included the target date's
+00:00 EDT hour, which belongs to the previous climate day). v2 fixes this.
+Every version-C row (all dates are in EDT) gained the final hour; the 226
+`dminus1_1800` rows also lost the leading hour (same 24-hour count). The added
+hour never became the max; 8 `dminus1_1800` maxima fell (4 GFS, 4 HRRR) from
+dropping the leading hour. 53 HRRR `d0_0900` rows (all selected 09Z runs,
+18-hour horizon ending 23:00 EDT; the Open-Meteo payload pads later
+timestamps with nulls) are now `REPLAY_UNAVAILABLE`, so `d0_0900` eligibility
+fell 114 → 61 dates and its common cohort 44 → 4 (too small to interpret).
+Other checkpoints are unchanged. Version C pooled-intraday shadow − GFS Brier:
+v1 −0.047 [−0.101, +0.008] (n=176) → v2 −0.049 [−0.109, +0.008] (n=136); the
+interval still includes zero. Full diff:
+`python -m research.weather.phase6_window_diff` →
+`data/results/phase6_window_fix_diff_v2.json`.
+
+Outputs (`_v2`): `data/weather/calibration/{gfs,hrrr}_operational_replay_obs_v2.csv`
+(C), `..._obs_bridge_v2.csv` (B), `knyc_asof_observations_v2.csv`,
+`knyc_iem_observations_v2.csv`; `data/results/phase6_obs_coverage_v2.json`,
+`phase6_operational_comparison_v2.json`, `phase6_shadow_evaluation_v2.json`,
+`phase6_methodology_v2.json`. The `_v1` files are kept unchanged as the
+pre-fix reference (v1 result JSONs also copied to `data/results/phase6_v1_backup/`).
+Phase 5 artifacts and the frozen shadow hypothesis are not modified.
+RESEARCH_ONLY / NO_BET; the shadow stays shadow-only and CLINYC transfer
+status is unchanged. A confidence interval excluding zero is not validation.
 
 ---
 
