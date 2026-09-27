@@ -409,3 +409,71 @@ def test_no_score_before_settlement():
 
 def test_phase4_schema_constant_preserved():
     assert SNAPSHOT_SCHEMA_VERSION_V4 == "4.0.0"
+
+
+def test_refresh_clinyc_transfer_uses_frozen_assessment(monkeypatch):
+    from research.weather import prospective
+
+    written = {}
+    monkeypatch.setattr(
+        "research.weather.phase2.build_knyc_clinyc_pairs", lambda client=None: {}
+    )
+    monkeypatch.setattr("research.weather.phase2.load_pairs_csv", lambda: [])
+    monkeypatch.setattr(
+        "research.weather.transfer.write_transfer_assessment",
+        lambda a: written.setdefault("a", a),
+    )
+    result = prospective.refresh_clinyc_transfer_progress(client=object())
+    assert result["refresh_status"] == "ok"
+    assert result["prospective_n"] == 0
+    assert result["transfer_validated"] is False
+    assert "a" in written
+
+
+def test_refresh_clinyc_transfer_failure_does_not_crash(monkeypatch):
+    from research.weather import prospective
+
+    def _boom(client=None):
+        raise RuntimeError("429 Too Many Requests")
+
+    monkeypatch.setattr("research.weather.phase2.build_knyc_clinyc_pairs", _boom)
+    result = prospective.refresh_clinyc_transfer_progress(client=object())
+    assert result["refresh_status"].startswith("failed")
+
+
+def test_prospective_cycle_runs_end_to_end_without_network(tmp_path, monkeypatch):
+    from research.weather import prospective
+
+    monkeypatch.setattr(checkpoints_mod, "CHECKPOINT_ROOT", tmp_path / "cp")
+    monkeypatch.setattr(prospective, "PROSPECTIVE_SUMMARY_PATH", tmp_path / "summary.json")
+    monkeypatch.setattr(
+        "research.weather.shadow.SHADOW_HYPOTHESIS_PATH", tmp_path / "shadow.json"
+    )
+    monkeypatch.setattr("research.weather.shadow.HYPOTHESES_DIR", tmp_path)
+    monkeypatch.setattr(
+        "research.weather.service.get_live_weather_events",
+        lambda client=None: {"events": []},
+    )
+    monkeypatch.setattr(
+        "research.weather.service.score_settled_snapshots",
+        lambda client=None: {"scored": [], "skipped": []},
+    )
+    monkeypatch.setattr(
+        prospective, "get_historical_markets_for_series", lambda *a, **k: []
+    )
+    monkeypatch.setattr(
+        prospective,
+        "refresh_clinyc_transfer_progress",
+        lambda client=None: {
+            "prospective_n": 0,
+            "prospective_target_n": 20,
+            "transfer_validated": False,
+        },
+    )
+    summary = prospective.run_prospective_cycle(
+        client=object(), now=datetime(2026, 9, 26, 16, 5, tzinfo=timezone.utc)
+    )
+    assert summary["status"] == "SHADOW ONLY"
+    assert summary["clinyc_transfer_v1"]["prospective_n"] == 0
+    assert summary["clinyc_transfer_v1"]["transfer_validated"] is False
+    assert (tmp_path / "summary.json").exists()

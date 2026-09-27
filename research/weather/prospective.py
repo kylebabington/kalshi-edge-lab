@@ -266,6 +266,50 @@ def _recently_settled_events(
     return out
 
 
+def refresh_clinyc_transfer_progress(
+    *,
+    client: KalshiClient | None = None,
+) -> dict[str, Any]:
+    """Rebuild KNYC↔CLINYC pairs and recompute CLINYC_TRANSFER_V1 progress.
+
+    Same path as Phase 3 (frozen criteria; validation decided only by
+    evaluate_prospective_transfer_validation inside build_transfer_assessment).
+    """
+    from research.weather.models import REGIME_WEATHER_COMPANY_CLINYC
+    from research.weather.phase2 import build_knyc_clinyc_pairs, load_pairs_csv
+    from research.weather.transfer import (
+        build_transfer_assessment,
+        load_or_register_hypothesis,
+        load_transfer_assessment,
+        set_validation_start_date_if_needed,
+        write_transfer_assessment,
+    )
+
+    try:
+        hypothesis = load_or_register_hypothesis()
+        build_knyc_clinyc_pairs(client=client)
+        pairs = load_pairs_csv()
+        twc_dates = sorted(
+            {
+                str(p["target_date"])
+                for p in pairs
+                if (p.get("regime") or "") == REGIME_WEATHER_COMPANY_CLINYC
+                and p.get("target_date")
+            }
+        )
+        had_start = bool(hypothesis.get("validation_start_date"))
+        hypothesis = set_validation_start_date_if_needed(hypothesis, twc_dates=twc_dates)
+        if not had_start and hypothesis.get("validation_start_date"):
+            build_knyc_clinyc_pairs(client=client)
+            pairs = load_pairs_csv()
+        assessment = build_transfer_assessment(pairs, hypothesis=hypothesis)
+        write_transfer_assessment(assessment)
+        return {**assessment.to_dict(), "refresh_status": "ok"}
+    except Exception as error:  # noqa: BLE001
+        previous = load_transfer_assessment() or {}
+        return {**previous, "refresh_status": f"failed: {error}"}
+
+
 def run_prospective_cycle(
     *,
     client: KalshiClient | None = None,
@@ -281,10 +325,7 @@ def run_prospective_cycle(
         build_prediction_snapshot,
         write_snapshot,
     )
-    from research.weather.transfer import (
-        evaluate_prospective_transfer_validation,
-        load_or_register_hypothesis,
-    )
+    from research.weather.transfer import load_or_register_hypothesis
 
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -425,7 +466,7 @@ def run_prospective_cycle(
             missed.append(receipt)
 
     # Transfer refresh + scoring
-    transfer = evaluate_prospective_transfer_validation()
+    transfer = refresh_clinyc_transfer_progress(client=client)
     score_result = score_settled_snapshots(client=client)
 
     receipts = list_receipts()
