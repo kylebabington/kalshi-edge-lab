@@ -36,6 +36,7 @@ WINDOW_REASON_NO_VALUES = "no_series_values_in_remaining_window"
 WINDOW_REASON_HORIZON_SHORT = "run_horizon_ends_before_end_of_target_date"
 WINDOW_REASON_STARTS_LATE = "run_series_starts_after_window_start"
 WINDOW_REASON_MISSING_HOURS = "missing_or_null_hours_in_remaining_window"
+WINDOW_REASON_HORIZON_NULL_PADDED = "selected_run_horizon_short_null_padded"
 WINDOW_REASON_EMPTY = "remaining_window_empty"
 
 
@@ -131,6 +132,28 @@ def _ceil_hour(dt: datetime) -> datetime:
     return floored if floored == dt else floored + timedelta(hours=1)
 
 
+def _incomplete_reason(
+    values: dict[datetime, float | None],
+    expected: list[datetime],
+    *,
+    has_covered: bool,
+) -> str:
+    """Reason for an incomplete window (eligibility is decided by the caller)."""
+    if expected[-1] > max(values):
+        return WINDOW_REASON_HORIZON_SHORT
+    if expected[0] not in values and min(values) > expected[0]:
+        return WINDOW_REASON_STARTS_LATE
+    if not has_covered:
+        return WINDOW_REASON_NO_VALUES
+    real = [t for t, v in values.items() if v is not None]
+    last_real = max(real) if real else None
+    gaps = [t for t in expected if values.get(t) is None]
+    if last_real is not None and all(t > last_real for t in gaps):
+        if all(values.get(t, "absent") is None for t in gaps):
+            return WINDOW_REASON_HORIZON_NULL_PADDED
+    return WINDOW_REASON_MISSING_HOURS
+
+
 def expected_window_hours(
     *,
     target_date: str,
@@ -163,9 +186,10 @@ def remaining_day_high(
     """Max forecast temperature at valid times in [checkpoint, end of CLI climate day).
 
     Every hourly valid time in the window must be present with a value;
-    otherwise the window is UNAVAILABLE with a reason (never a partial max).
-    An absent final timestamp is a short horizon; a present timestamp with a
-    null temperature is a missing/null hour.
+    otherwise the window is UNAVAILABLE with a reason (never a partial max):
+    final timestamp beyond the end of the series → horizon short; only a
+    contiguous null-padded tail after the last real value → null-padded short
+    horizon; any missing/null hour followed by a later real value → missing/null.
     """
     window_start, day_end, expected = expected_window_hours(
         target_date=target_date, checkpoint_as_of=checkpoint_as_of
@@ -192,14 +216,7 @@ def remaining_day_high(
     covered = [values[t] for t in expected if values.get(t) is not None]
     base["covered_hours"] = len(covered)
     if len(covered) < len(expected):
-        if expected[-1] not in values:
-            base["reason"] = WINDOW_REASON_HORIZON_SHORT
-        elif expected[0] not in values and min(values) > expected[0]:
-            base["reason"] = WINDOW_REASON_STARTS_LATE
-        elif not covered:
-            base["reason"] = WINDOW_REASON_NO_VALUES
-        else:
-            base["reason"] = WINDOW_REASON_MISSING_HOURS
+        base["reason"] = _incomplete_reason(values, expected, has_covered=bool(covered))
         return base
 
     base["status"] = WINDOW_STATUS_OK

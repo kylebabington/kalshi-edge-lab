@@ -35,16 +35,16 @@ from research.weather.models import (
 )
 from research.weather.phase5 import RESULTS_DIR
 from research.weather.phase6 import (
-    PHASE6_PREVIOUS_VERSION,
-    PHASE6_VERSION,
     VERSION_C,
     VERSIONS,
+    WINDOW_FIX_FROM_VERSION,
+    WINDOW_FIX_TO_VERSION,
     calibration_paths,
     eligible_keys,
     result_paths,
 )
 
-DIFF_PATH = RESULTS_DIR / f"phase6_window_fix_diff_{PHASE6_VERSION}.json"
+DIFF_PATH = RESULTS_DIR / f"phase6_window_fix_diff_{WINDOW_FIX_TO_VERSION}.json"
 MODELS = (MODEL_GFS_OPERATIONAL_LATEST, MODEL_HRRR_OPERATIONAL_LATEST)
 SCOPES = tuple(CHECKPOINT_IDS) + ("pooled_intraday", "pooled_all")
 
@@ -324,7 +324,7 @@ def scores_diff(comp1: dict[str, Any], comp2: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_window_diff(write: bool = True) -> dict[str, Any]:
-    prev, cur = PHASE6_PREVIOUS_VERSION, PHASE6_VERSION
+    prev, cur = WINDOW_FIX_FROM_VERSION, WINDOW_FIX_TO_VERSION
     cal1, cal2 = calibration_paths(prev), calibration_paths(cur)
     res1, res2 = result_paths(prev), result_paths(cur)
     v1_rows = _load_csv(cal1["gfs_obs_replay_csv"]) + _load_csv(cal1["hrrr_obs_replay_csv"])

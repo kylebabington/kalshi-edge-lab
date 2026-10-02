@@ -151,9 +151,12 @@ latency unchanged) and adds what was knowable at each checkpoint.
   rest of the same CLI climate day the observations use, so during EDT it
   includes 00:00 EDT of the next calendar date (end exclusive). Every expected
   hour must be present with a value, otherwise the row is `REPLAY_UNAVAILABLE`
-  (absent final timestamp → `run_horizon_ends_before_end_of_target_date`;
-  timestamp present with a null value → `missing_or_null_hours_in_remaining_window`).
-  There is no partial max and no fallback to the Phase 5 daily max.
+  (final timestamp beyond the end of the series →
+  `run_horizon_ends_before_end_of_target_date`; only a contiguous null-padded
+  tail after the last real value → `selected_run_horizon_short_null_padded`;
+  a missing/null hour followed by later real values →
+  `missing_or_null_hours_in_remaining_window`). There is no partial max and no
+  fallback to the Phase 5 daily max.
 - `projected_final_high_f = max(observed_high_so_far_f, model_remaining_day_high_f)`.
 
 Three versions, each recalibrated walk-forward on its own residuals and
@@ -175,7 +178,7 @@ lacks remaining-day coverage. Phase 5's `HISTORICAL_ASOF_OBS_AVAILABLE` stays `F
 Coverage (Phase 5 dates 2026-04-02 → 2026-07-25, 114 events): 3,642 KNYC
 reports, 0 rejected; all 4 intraday checkpoints OK on all 114 dates.
 
-**v2 (current) vs v1.** v1 ended the version-C model window at the next
+**v2 vs v1.** v1 ended the version-C model window at the next
 America/New_York midnight, which during EDT dropped the final 00:00 EDT hour
 of the CLI climate day (and for `dminus1_1800` included the target date's
 00:00 EDT hour, which belongs to the previous climate day). v2 fixes this.
@@ -192,12 +195,27 @@ interval still includes zero. Full diff:
 `python -m research.weather.phase6_window_diff` →
 `data/results/phase6_window_fix_diff_v2.json`.
 
-Outputs (`_v2`): `data/weather/calibration/{gfs,hrrr}_operational_replay_obs_v2.csv`
-(C), `..._obs_bridge_v2.csv` (B), `knyc_asof_observations_v2.csv`,
-`knyc_iem_observations_v2.csv`; `data/results/phase6_obs_coverage_v2.json`,
-`phase6_operational_comparison_v2.json`, `phase6_shadow_evaluation_v2.json`,
-`phase6_methodology_v2.json`. The `_v1` files are kept unchanged as the
-pre-fix reference (v1 result JSONs also copied to `data/results/phase6_v1_backup/`).
+**v2_1 (current) vs v2 — diagnostic reason only.** The 53 HRRR `d0_0900`
+rows change from `missing_or_null_hours_in_remaining_window` to
+`selected_run_horizon_short_null_padded`; values, eligibility, cohorts, scores
+and CIs are identical. v2_1 was migrated from the v2 artifacts (no downloads,
+no rescoring) by `python -m research.weather.phase6_v2_1_migration`, which
+verifies the exact planned changes and that v1/v2 files are byte-for-byte
+unchanged. A read-only audit (`python -m research.weather.phase6_coverage_audit`)
+shows each of those rows selected an 18-hour 09Z run; the one newer
+latency-eligible init (10Z) is not represented in the local Phase 5 cache, and
+an older 06Z extended run covering the window was eligible but not newest.
+Summary: [`docs/research/phase6_v2_1_summary.md`](docs/research/phase6_v2_1_summary.md)
+(`python -m research.weather.phase6_summary`); per-row audit:
+[`docs/research/phase6_v2_1_hrrr_d0_0900_coverage_audit.csv`](docs/research/phase6_v2_1_hrrr_d0_0900_coverage_audit.csv).
+
+Outputs (`_v2_1`): `data/weather/calibration/{gfs,hrrr}_operational_replay_obs_v2_1.csv`
+(C), `..._obs_bridge_v2_1.csv` (B), `knyc_asof_observations_v2_1.csv`,
+`knyc_iem_observations_v2_1.csv` (tracked); `data/results/phase6_obs_coverage_v2_1.json`,
+`phase6_operational_comparison_v2_1.json`, `phase6_shadow_evaluation_v2_1.json`,
+`phase6_methodology_v2_1.json` (local only; SHA-256 in the summary). The `_v1`
+(pre-window-fix) and `_v2` files are kept byte-for-byte unchanged (v1 result
+JSONs also copied to `data/results/phase6_v1_backup/`).
 Phase 5 artifacts and the frozen shadow hypothesis are not modified.
 RESEARCH_ONLY / NO_BET; the shadow stays shadow-only and CLINYC transfer
 status is unchanged. A confidence interval excluding zero is not validation.

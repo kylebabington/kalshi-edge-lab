@@ -47,6 +47,7 @@ from research.weather.phase6 import (
 )
 from research.weather.sources.knyc_history import month_chunks, parse_iem_asos_csv
 from research.weather.sources.single_run_hourly import (
+    WINDOW_REASON_HORIZON_NULL_PADDED,
     WINDOW_REASON_HORIZON_SHORT,
     WINDOW_REASON_MISSING_HOURS,
     WINDOW_STATUS_OK,
@@ -430,14 +431,72 @@ def test_absent_final_hour_is_horizon_short_never_partial_max():
     assert res["covered_hours"] == res["expected_hours"] - 1
 
 
-def test_null_final_hour_is_missing_or_null_never_partial_max():
+def test_null_final_hour_followed_by_real_values_is_missing_or_null():
     d = "2026-07-15"
     final = _local(2026, 7, 16, 0).astimezone(UTC)
-    series = _series(datetime(2026, 7, 15, 6, tzinfo=UTC), 48, {final: None})
+    series = _series(datetime(2026, 7, 15, 6, tzinfo=UTC), 48, {final: None})  # real values after 04Z
     res = remaining_day_high(series, target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "d0_1200"))
     assert res["status"] == WINDOW_STATUS_UNAVAILABLE
     assert res["reason"] == WINDOW_REASON_MISSING_HOURS
     assert res["model_remaining_day_high_f"] is None
+
+
+def _null_padded(start: datetime, real_hours: int, total_hours: int, base: float = 80.0):
+    return [(start + timedelta(hours=h), base if h < real_hours else None) for h in range(total_hours)]
+
+
+def test_null_padded_tail_after_last_real_value_is_null_padded_short_horizon():
+    # 09Z side-cycle shape: 18h of real values (09Z..03Z), then null padding.
+    d = "2026-07-15"
+    init = datetime(2026, 7, 15, 9, tzinfo=UTC)
+    series = _null_padded(init, 19, 168)
+    res = remaining_day_high(series, target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "d0_0900"))
+    assert res["status"] == WINDOW_STATUS_UNAVAILABLE
+    assert res["reason"] == WINDOW_REASON_HORIZON_NULL_PADDED
+    assert res["model_remaining_day_high_f"] is None
+    assert res["covered_hours"] == res["expected_hours"] - 1
+
+
+def test_interior_null_with_null_padded_tail_is_missing_or_null():
+    d = "2026-07-15"
+    init = datetime(2026, 7, 15, 9, tzinfo=UTC)
+    series = _null_padded(init, 19, 168)
+    series[8] = (series[8][0], None)  # 17Z null, later real values follow
+    res = remaining_day_high(series, target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "d0_0900"))
+    assert res["reason"] == WINDOW_REASON_MISSING_HOURS
+
+
+def test_interior_absent_timestamp_followed_by_real_values_is_missing_or_null():
+    d = "2026-07-15"
+    hole = datetime(2026, 7, 15, 20, tzinfo=UTC)
+    series = [p for p in _series(datetime(2026, 7, 15, 6, tzinfo=UTC), 48) if p[0] != hole]
+    res = remaining_day_high(series, target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "d0_1200"))
+    assert res["status"] == WINDOW_STATUS_UNAVAILABLE
+    assert res["reason"] == WINDOW_REASON_MISSING_HOURS
+
+
+@pytest.mark.parametrize(
+    "series_fn,reason",
+    [
+        (lambda init: _null_padded(init, 19, 168), WINDOW_REASON_HORIZON_NULL_PADDED),
+        (lambda init: _series(init, 19), WINDOW_REASON_HORIZON_SHORT),
+        (lambda init: [(t, None if i == 8 else v) for i, (t, v) in enumerate(_series(init, 48))], WINDOW_REASON_MISSING_HOURS),
+    ],
+)
+def test_all_incomplete_reasons_remain_replay_unavailable(series_fn, reason):
+    d = "2026-07-15"
+    h = MODEL_HRRR_OPERATIONAL_LATEST
+    window = remaining_day_high(
+        series_fn(datetime(2026, 7, 15, 9, tzinfo=UTC)), target_date=d, checkpoint_as_of=checkpoint_as_of_utc(d, "d0_0900")
+    )
+    assert window["reason"] == reason
+    rows_b, rows_c = build_version_rows(
+        [_p5_row(h, d, "d0_0900", p5_value=85.0)], {(d, "d0_0900"): _obs_ok(82.0)}, {(h, d, "d0_0900"): window}
+    )
+    assert rows_c[0]["replay_mode"] == REPLAY_MODE_UNAVAILABLE
+    assert rows_c[0]["replay_reason"].startswith(f"model_window_unavailable:{reason}")
+    assert rows_c[0]["model_remaining_day_high_f"] == ""
+    assert rows_b[0]["replay_mode"] == REPLAY_MODE_OBS_BRIDGE_DIAGNOSTIC
 
 
 def test_missing_final_hour_makes_version_c_unavailable_and_leaves_b_unchanged():
@@ -484,9 +543,12 @@ def test_window_diff_detects_same_count_shift_for_dminus1():
     assert out["v1_reconstruction_check"]["n_mismatches"] == 0
 
 
-def test_phase6_v2_paths_do_not_collide_with_v1():
-    assert phase6_mod.PHASE6_VERSION == "v2"
-    v1_paths = set(phase6_mod.calibration_paths("v1").values()) | set(phase6_mod.result_paths("v1").values())
+def test_phase6_current_paths_do_not_collide_with_v1_or_v2():
+    assert phase6_mod.PHASE6_VERSION == "v2_1"
+    assert phase6_mod.PHASE6_PREVIOUS_VERSION == "v2"
+    old = set()
+    for v in ("v1", "v2"):
+        old |= set(phase6_mod.calibration_paths(v).values()) | set(phase6_mod.result_paths(v).values())
     current = {
         phase6_mod.GFS_OBS_REPLAY_CSV, phase6_mod.HRRR_OBS_REPLAY_CSV,
         phase6_mod.GFS_OBS_BRIDGE_CSV, phase6_mod.HRRR_OBS_BRIDGE_CSV,
@@ -494,8 +556,98 @@ def test_phase6_v2_paths_do_not_collide_with_v1():
         phase6_mod.PHASE6_COVERAGE_PATH, phase6_mod.PHASE6_COMPARISON_PATH,
         phase6_mod.PHASE6_SHADOW_EVAL_PATH, phase6_mod.PHASE6_METHODOLOGY_PATH,
     }
-    assert not (current & v1_paths)
-    assert all("_v2." in p.name for p in current)
+    assert not (current & old)
+    assert all("_v2_1." in p.name for p in current)
+
+
+def test_methodology_records_v2_1_relabel():
+    m = phase6_mod.methodology_payload({"registered_at": "x"})
+    assert m["supersedes"] == "v2"
+    assert m["change_type"] == "diagnostic_reason_only"
+    assert m["relabel"]["expected_rows"] == 53
+    assert m["relabel"]["to_reason"] == WINDOW_REASON_HORIZON_NULL_PADDED
+    assert m["model_window"]["window_fix_history"]["version"] == "v1"
+
+
+# ---------------------------------------------------------------------------
+# v2 → v2_1 migration verifier (strict planned-change checks)
+# ---------------------------------------------------------------------------
+
+
+def _mig_row(model, d, cid, reason, *, version="v2"):
+    return {
+        "model": model, "target_date": d, "checkpoint_id": cid, "phase6_version": version,
+        "provenance": f"p5;phase6={version};replay_version=C",
+        "remaining_window_reason": reason,
+        "replay_reason": f"model_window_unavailable:{reason}" if reason else "",
+        "forecast_high_f": "80.0",
+    }
+
+
+def _mig_pair():
+    from research.weather import phase6_v2_1_migration as mig
+
+    h = MODEL_HRRR_OPERATIONAL_LATEST
+    v2 = [_mig_row(h, "2026-04-02", "d0_0900", mig.OLD_REASON), _mig_row(h, "2026-04-03", "d0_0900", "")]
+    v21 = [_mig_row(h, "2026-04-02", "d0_0900", mig.NEW_REASON, version="v2_1"),
+           _mig_row(h, "2026-04-03", "d0_0900", "", version="v2_1")]
+    cells = {
+        "remaining_window_reason": (mig.OLD_REASON, mig.NEW_REASON),
+        "replay_reason": (f"model_window_unavailable:{mig.OLD_REASON}", f"model_window_unavailable:{mig.NEW_REASON}"),
+    }
+    return mig, v2, v21, cells, {(h, "2026-04-02", "d0_0900")}
+
+
+def test_migration_verifier_accepts_exact_planned_relabel():
+    mig, v2, v21, cells, keys = _mig_pair()
+    res = mig.verify_csv_pair("t", v2, v21, relabel_cells=cells, relabel_keys=keys)
+    assert res["n_unexpected"] == 0
+    assert res["relabeled_keys"] == keys
+
+
+def test_migration_verifier_rejects_unplanned_reason_and_value_changes():
+    mig, v2, v21, cells, keys = _mig_pair()
+    v21[1]["remaining_window_reason"] = mig.NEW_REASON  # row outside the planned set
+    v21[0]["forecast_high_f"] = "80.5"  # numeric drift
+    res = mig.verify_csv_pair("t", v2, v21, relabel_cells=cells, relabel_keys=keys)
+    assert res["n_unexpected"] == 2
+
+
+def test_migration_verifier_rejects_wrong_target_reason():
+    mig, v2, v21, cells, keys = _mig_pair()
+    v21[0]["remaining_window_reason"] = "run_horizon_ends_before_end_of_target_date"
+    res = mig.verify_csv_pair("t", v2, v21, relabel_cells=cells, relabel_keys=keys)
+    assert res["n_unexpected"] == 1
+
+
+def test_expected_coverage_renames_only_planned_keys_and_preserves_totals():
+    from research.weather import phase6_v2_1_migration as mig
+
+    h, g = MODEL_HRRR_OPERATIONAL_LATEST, MODEL_GFS_OPERATIONAL_LATEST
+    cov = {
+        "phase6_version": "v2", "generated_at": "t",
+        "model_window_coverage_version_C": {
+            h: {"d0_0900": {"status_counts": {"OK": 61, "UNAVAILABLE": 53}, "unavailable_reasons": {mig.OLD_REASON: 53}}},
+            g: {"d0_0900": {"status_counts": {"OK": 114}, "unavailable_reasons": {}}},
+        },
+        "replay_labels": {VERSION_C: {h: {"d0_0900": {"reasons": {f"model_window_unavailable:{mig.OLD_REASON}": 53, "none": 61}}}}},
+    }
+    exp = mig.expected_coverage(cov)
+    win = exp["model_window_coverage_version_C"][h]["d0_0900"]["unavailable_reasons"]
+    assert win == {mig.NEW_REASON: 53}
+    reasons = exp["replay_labels"][VERSION_C][h]["d0_0900"]["reasons"]
+    assert reasons == {f"model_window_unavailable:{mig.NEW_REASON}": 53, "none": 61}
+    assert exp["model_window_coverage_version_C"][g] == cov["model_window_coverage_version_C"][g]
+    assert "generated_at" not in exp and "phase6_version" not in exp
+
+
+def test_migration_refuses_to_write_protected_paths():
+    from research.weather import phase6_v2_1_migration as mig
+
+    for v in ("v1", "v2"):
+        with pytest.raises(mig.MigrationError):
+            mig._guard_output(phase6_mod.calibration_paths(v)["hrrr_obs_replay_csv"])
+    mig._guard_output(phase6_mod.calibration_paths("v2_1")["hrrr_obs_replay_csv"])
 
 
 def test_hourly_payload_must_be_utc():

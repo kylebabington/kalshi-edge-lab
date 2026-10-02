@@ -107,6 +107,9 @@ from research.weather.sources.knyc_history import (
 )
 from research.weather.sources.single_run_hourly import (
     MODEL_WINDOW_BASIS,
+    WINDOW_REASON_HORIZON_NULL_PADDED,
+    WINDOW_REASON_HORIZON_SHORT,
+    WINDOW_REASON_MISSING_HOURS,
     WINDOW_REASON_SERIES_UNAVAILABLE,
     WINDOW_STATUS_OK,
     WINDOW_STATUS_UNAVAILABLE,
@@ -116,9 +119,35 @@ from research.weather.sources.single_run_hourly import (
 )
 
 # v1 ended the version-C model window at America/New_York midnight; v2 ends it
-# at the CLI climate-day end (midnight EST). v1 artifacts are kept as-is.
-PHASE6_VERSION = "v2"
-PHASE6_PREVIOUS_VERSION = "v1"
+# at the CLI climate-day end (midnight EST). v2_1 only relabels the coverage
+# reason of null-padded short-horizon runs. Earlier artifacts are kept as-is.
+PHASE6_VERSION = "v2_1"
+PHASE6_PREVIOUS_VERSION = "v2"
+PHASE6_CHANGE_TYPE = "diagnostic_reason_only"
+WINDOW_FIX_FROM_VERSION = "v1"
+WINDOW_FIX_TO_VERSION = "v2"
+
+COMPLETENESS_REASONS = {
+    "final_expected_timestamp_beyond_end_of_series": WINDOW_REASON_HORIZON_SHORT,
+    "contiguous_null_padded_tail_after_last_real_value": WINDOW_REASON_HORIZON_NULL_PADDED,
+    "missing_or_null_hour_followed_by_later_real_value": WINDOW_REASON_MISSING_HOURS,
+    "all_remain": REPLAY_MODE_UNAVAILABLE,
+}
+RELABEL_V2_TO_V2_1 = {
+    "from_reason": WINDOW_REASON_MISSING_HOURS,
+    "to_reason": WINDOW_REASON_HORIZON_NULL_PADDED,
+    "model": MODEL_HRRR_OPERATIONAL_LATEST,
+    "checkpoint_id": "d0_0900",
+    "version": "C_remaining_day_max_plus_obs",
+    "expected_rows": 53,
+    "explanation": (
+        "53 HRRR d0_0900 version-C rows use 09Z side-cycle runs whose 18-hour horizon ends "
+        "at 03Z (23:00 EDT); the Single Runs payload pads later timestamps with nulls, so "
+        "the final climate-day hour (04Z) is present but null. v2 labeled these "
+        "missing_or_null_hours_in_remaining_window; v2_1 labels them "
+        "selected_run_horizon_short_null_padded. Eligibility, values and scores are unchanged."
+    ),
+}
 
 VERSION_A = "A_phase5_model_only"
 VERSION_B = "B_phase5_model_max_plus_obs"
@@ -846,6 +875,9 @@ def methodology_payload(hyp: dict[str, Any]) -> dict[str, Any]:
         "schema": "phase6_methodology",
         "phase6_version": PHASE6_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "supersedes": PHASE6_PREVIOUS_VERSION,
+        "change_type": PHASE6_CHANGE_TYPE,
+        "relabel": RELABEL_V2_TO_V2_1,
         "decision_status": [DECISION_RESEARCH_ONLY, DECISION_NO_BET],
         "incumbent": "calibrated_gfs",
         "model_combination_policy_live": MODEL_COMBINATION_POLICY,
@@ -914,12 +946,9 @@ def methodology_payload(hyp: dict[str, Any]) -> dict[str, Any]:
                 "(midnight EST to midnight EST all year); during EDT this includes 00:00 EDT "
                 "of the next calendar date and excludes 00:00 EDT of the target date"
             ),
-            "completeness_reasons": {
-                "final_expected_timestamp_absent": "run_horizon_ends_before_end_of_target_date",
-                "timestamp_present_with_null_temperature": "missing_or_null_hours_in_remaining_window",
-            },
-            "supersedes": {
-                "version": PHASE6_PREVIOUS_VERSION,
+            "completeness_reasons": COMPLETENESS_REASONS,
+            "window_fix_history": {
+                "version": WINDOW_FIX_FROM_VERSION,
                 "defect": (
                     "v1 ended the model window at the next America/New_York calendar midnight, "
                     "which during EDT omitted the final 00:00-00:59 EDT hour of the CLI climate "
