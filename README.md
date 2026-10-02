@@ -209,6 +209,11 @@ Summary: [`docs/research/phase6_v2_1_summary.md`](docs/research/phase6_v2_1_summ
 (`python -m research.weather.phase6_summary`); per-row audit:
 [`docs/research/phase6_v2_1_hrrr_d0_0900_coverage_audit.csv`](docs/research/phase6_v2_1_hrrr_d0_0900_coverage_audit.csv).
 
+**Version B (closed).** The v2.1 `remaining_window_reason` relabel is
+accepted for version B too. The 53 matching `OBS_BRIDGE_DIAGNOSTIC` rows
+change only that diagnostic column. Version B replay behavior and numerical
+results are unchanged. Historical artifacts are not regenerated.
+
 Outputs (`_v2_1`): `data/weather/calibration/{gfs,hrrr}_operational_replay_obs_v2_1.csv`
 (C), `..._obs_bridge_v2_1.csv` (B), `knyc_asof_observations_v2_1.csv`,
 `knyc_iem_observations_v2_1.csv` (tracked); `data/results/phase6_obs_coverage_v2_1.json`,
@@ -249,13 +254,32 @@ reported separately.
 - **Method pinning.** Source hashes are pinned for the window, observation,
   selection, probability, calibration, shadow and scoring functions, plus the
   constants. Drift refuses primary capture.
+- **Integrity vs working tree.** Capture is gated only by the pinned hashes.
+  `method_integrity_ok` means every method group and constant matches.
+  `calibration_integrity_ok` means the frozen pool and the pinned v2.1 source
+  CSVs match. A mismatch refuses capture and writes a `MISSED` receipt naming
+  the hash. Each record also stores Git state for diagnostics only:
+  `working_tree_dirty` and `working_tree_changed_paths` cover every tracked
+  change, while `code_dirty` and `code_dirty_paths` cover only `.py`, `.ps1` and
+  `requirements*.txt`. The hourly cycle appends to the tracked
+  `data/weather/calibration/knyc_clinyc_pairs.csv` (CLINYC transfer
+  experiment). That makes the working tree dirty, but it is not a code change
+  and does not affect capture.
 - **Scoring.** Missing settlement stays pending and is retried. A final score
   is write-once and is only written after a confirmed settlement. The outcomes
   ledger is idempotent.
-- **Known unavailability.** `d0_0900` is deterministically unavailable on every
-  date. It has 61 pool rows, below the global minimum of 80, so it is labeled
-  `CALIBRATION_INSUFFICIENT_DETERMINISTIC`. It is also short on HRRR horizon,
-  because the 09Z run reaches only 18 h. It stays in coverage reporting.
+- **`d0_0900` calibration (deterministic).** The frozen `d0_0900` pools have
+  61 rows per model, below the global minimum of 80. Every date is therefore
+  `CALIBRATION_INSUFFICIENT_DETERMINISTIC` for the whole collection period.
+  This follows from the frozen pools alone. The checkpoint stays in coverage
+  reporting.
+- **`d0_0900` HRRR horizon (diagnosed per run).** The protocol's
+  `hrrr_horizon_preflight` expects the selected 09Z run (18 h) to end before
+  the climate day does. That expectation comes from observed Open-Meteo
+  behavior; it does not prove what every future run will return. Each live
+  capture's horizon status comes from the run it actually selected:
+  `research_hrrr.window` in the record, the saved payload, and the fetch log.
+  An older run is never substituted.
 
 ```powershell
 .venv\Scripts\python weather_model.py --phase7-preflight   # read-only
@@ -274,6 +298,45 @@ Overlapping starts are ignored. Catch-up runs reconcile `MISSED` receipts with
 no backfill. The task runs only while the user is logged on (Interactive
 logon). Snapshots, evidence and logs under `data/weather/phase7/` and
 `data/logs/` stay local. SHADOW ONLY; RESEARCH_ONLY / NO_BET.
+
+#### Phase 7 operations
+
+The host must stay powered (on AC; on battery the laptop sleeps after 10
+minutes), awake, connected to the network, and logged in. The task uses an
+Interactive logon with no stored password and does not wake the machine. A
+checkpoint whose 30-minute window passes while the laptop is asleep, offline,
+logged off or shut down is `MISSED`.
+
+```powershell
+# Progress report (read-only): integrity flags, working-tree state, coverage, missed reasons
+.venv\Scripts\python weather_model.py --phase7-report
+.venv\Scripts\python weather_model.py --phase7-report --json
+
+# Scheduler status, lock, recent log
+Get-ScheduledTaskInfo -TaskName KalshiEdgeLab-WeatherProspective | Format-List LastRunTime,LastTaskResult,NextRunTime,NumberOfMissedRuns
+Test-Path data\logs\prospective\cycle.lock
+Get-Content data\logs\prospective\$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')).log -Tail 40
+
+# Reproduce a saved record offline (exit 0 = identical, 4 = mismatch)
+.venv\Scripts\python weather_model.py --phase7-reproduce data\weather\phase7\records\2026-10-03\dminus1_1800.json
+
+# Missed captures and their reasons; refused captures keep diagnostics
+Get-ChildItem data\weather\phase7\receipts -Recurse -Filter *.json | Select-String '"status": "MISSED"' -List
+Get-ChildItem data\weather\phase7\diagnostics -Recurse -Filter *.json
+```
+
+In a record, `prediction_as_of` is the actual finalization time.
+`evidence_cutoff_utc` is the scheduled checkpoint, which is not a prediction
+timestamp. Compare `protocol_sha256` and `frozen_pool.sha256` with the full
+SHA-256 values in the protocol file, not with abbreviations.
+
+**Resuming after downtime.** Wake or log in and reconnect. `StartWhenAvailable`
+fires one catch-up run, which writes `MISSED` receipts
+(`window_elapsed_without_capture`) for every elapsed checkpoint. Collection
+continues at the next open window. Never backfill: do not reconstruct missed
+checkpoints from historical downloads, do not edit or delete receipts, do not
+re-register the protocol, and do not use `--phase7-dry-run` as a substitute
+(it is never part of the cohort). Afterwards, check with `--phase7-report`.
 
 ---
 

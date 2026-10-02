@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
+import subprocess
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -277,6 +279,103 @@ def test_frozen_pool_tampering_refuses_capture(paths):
     out, _ = _capture(paths, "d0_1200")
     assert out["status"] == phase7.RECEIPT_MISSED
     assert "frozen_pool_hash_mismatch" in out["record"]["integrity_problems"]
+    assert out["record"]["calibration_integrity_ok"] is False
+    assert out["record"]["method_integrity_ok"] is True
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+
+@pytest.fixture
+def git_repo(tmp_path: Path) -> Path:
+    if shutil.which("git") is None:
+        pytest.skip("git not available")
+    repo = tmp_path / "repo"
+    (repo / "pkg").mkdir(parents=True)
+    (repo / "data").mkdir()
+    (repo / "pkg" / "m.py").write_text("X = 1\n", encoding="utf-8")
+    (repo / "data" / "knyc_clinyc_pairs.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init")
+    return repo
+
+
+def test_git_state_separates_data_changes_from_code_changes(git_repo):
+    clean = phase7.git_state(git_repo)
+    assert clean["working_tree_dirty"] is False and clean["code_dirty"] is False
+    assert len(clean["code_git_sha"]) == 40
+
+    with (git_repo / "data" / "knyc_clinyc_pairs.csv").open("a", encoding="utf-8") as fh:
+        fh.write("3,4\n")
+    data_only = phase7.git_state(git_repo)
+    assert data_only["working_tree_dirty"] is True
+    assert data_only["working_tree_changed_paths"] == ["data/knyc_clinyc_pairs.csv"]
+    assert data_only["code_dirty"] is False and data_only["code_dirty_paths"] == []
+
+    (git_repo / "pkg" / "m.py").write_text("X = 2\n", encoding="utf-8")
+    with_code = phase7.git_state(git_repo)
+    assert with_code["working_tree_changed_paths"] == ["data/knyc_clinyc_pairs.csv", "pkg/m.py"]
+    assert with_code["code_dirty"] is True and with_code["code_dirty_paths"] == ["pkg/m.py"]
+
+
+def test_data_only_working_tree_change_does_not_block_capture(paths, monkeypatch):
+    monkeypatch.setattr(phase7, "git_state", lambda repo_root=None: {
+        "code_git_sha": "f" * 40,
+        "working_tree_dirty": True,
+        "working_tree_changed_paths": ["data/weather/calibration/knyc_clinyc_pairs.csv"],
+        "code_dirty": False,
+        "code_dirty_paths": [],
+    })
+    out, _ = _capture(paths, "d0_1200")
+    rec = out["record"]
+    assert out["status"] == phase7.RECEIPT_CAPTURED
+    assert rec["integrity_problems"] == []
+    assert rec["method_integrity_ok"] is True and rec["calibration_integrity_ok"] is True
+    assert rec["working_tree_dirty"] is True and rec["code_dirty"] is False
+    assert rec["working_tree_changed_paths"] == ["data/weather/calibration/knyc_clinyc_pairs.csv"]
+
+
+def test_code_dirty_alone_does_not_gate_but_method_change_does(paths, monkeypatch):
+    monkeypatch.setattr(phase7, "git_state", lambda repo_root=None: {
+        "code_git_sha": "f" * 40, "working_tree_dirty": True,
+        "working_tree_changed_paths": ["README.md", "scripts/x.ps1"],
+        "code_dirty": True, "code_dirty_paths": ["scripts/x.ps1"],
+    })
+    out, _ = _capture(paths, "d0_1200")
+    assert out["status"] == phase7.RECEIPT_CAPTURED
+
+    real = method.method_fingerprint
+
+    def _modified():
+        fp = real()
+        fp["group_hashes"] = {**fp["group_hashes"], "probability": "1" * 64}
+        return fp
+
+    monkeypatch.setattr(method, "method_fingerprint", _modified)
+    out, _ = _capture(paths, "d0_1500")
+    assert out["status"] == phase7.RECEIPT_MISSED
+    assert out["record"]["method_integrity_ok"] is False
+    assert out["record"]["integrity_problems"] == ["method_drift:probability"]
+    assert not phase7.record_path(paths, TARGET, "d0_1500").exists()
+
+
+def test_source_csv_tampering_refuses_capture(paths, tmp_path, monkeypatch):
+    src = tmp_path / "gfs_src.csv"
+    src.write_text("model,residual_f\nx,1\n", encoding="utf-8")
+    protocol = json.loads(paths.protocol_path.read_text(encoding="utf-8"))
+    protocol["calibration"]["source_csv_sha256"] = {"gfs_v2_1_csv": phase7.sha256_file(src)}
+    paths.protocol_path.write_text(json.dumps(protocol), encoding="utf-8")
+    monkeypatch.setattr(phase7, "_source_csvs", lambda: {"gfs_v2_1_csv": src})
+    assert phase7.integrity_status(protocol, paths)["calibration_integrity_ok"] is True
+
+    with src.open("a", encoding="utf-8") as fh:
+        fh.write("y,2\n")
+    out, _ = _capture(paths, "d0_1200")
+    assert out["status"] == phase7.RECEIPT_MISSED
+    assert out["record"]["integrity_problems"] == ["source_csv_hash_mismatch:gfs_v2_1_csv"]
+    assert out["record"]["calibration_integrity_ok"] is False
 
 
 # ---------------------------------------------------------------------------

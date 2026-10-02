@@ -631,6 +631,15 @@ def cmd_phase7_report(*, as_json: bool = False) -> int:
         return 0
     console.print(f"[bold]Phase 7 progress[/bold] {report['collection_window']}  ({report['status']})")
     console.print(f"integrity problems: {report['integrity_problems'] or 'none'}")
+    console.print(
+        f"method_integrity_ok={report['method_integrity_ok']} "
+        f"calibration_integrity_ok={report['calibration_integrity_ok']}"
+    )
+    wt = report["working_tree"]
+    console.print(
+        f"git {wt['code_git_sha']} working_tree_dirty={wt['working_tree_dirty']} "
+        f"{wt['working_tree_changed_paths'] or ''} code_dirty={wt['code_dirty']} {wt['code_dirty_paths'] or ''}"
+    )
     console.print(f"calibration unable to meet thresholds: {report['calibration_unable_to_meet_thresholds']}")
     for cp, c in report["coverage_by_checkpoint"].items():
         console.print(

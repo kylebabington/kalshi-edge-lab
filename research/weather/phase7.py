@@ -222,19 +222,54 @@ def write_once_json(path: Path, payload: dict[str, Any], *, conflict_check: bool
     return True
 
 
-def git_state() -> dict[str, Any]:
+CODE_SUFFIXES = (".py", ".ps1")
+CODE_NAME_PREFIXES = ("requirements",)
+
+
+def is_code_path(path: str) -> bool:
+    name = path.replace("\\", "/").rsplit("/", 1)[-1]
+    return name.endswith(CODE_SUFFIXES) or (name.startswith(CODE_NAME_PREFIXES) and name.endswith(".txt"))
+
+
+def git_state(repo_root: Path | None = None) -> dict[str, Any]:
+    """Working-tree provenance. Diagnostic only: capture is gated by integrity_problems()."""
+    root = repo_root or cache.REPO_ROOT
+
     def _run(args: list[str]) -> str | None:
         try:
-            out = subprocess.run(
-                ["git", *args], cwd=cache.REPO_ROOT, capture_output=True, text=True, timeout=20
-            )
+            out = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, timeout=20)
         except (OSError, subprocess.SubprocessError):
             return None
-        return out.stdout.strip() if out.returncode == 0 else None
+        return out.stdout if out.returncode == 0 else None
 
     sha = _run(["rev-parse", "HEAD"])
-    status = _run(["status", "--porcelain", "--untracked-files=no"])
-    return {"code_git_sha": sha, "code_dirty": bool(status) if status is not None else None}
+    status = _run(["status", "--porcelain=v1", "-z", "--untracked-files=no"])
+    if status is None:
+        return {
+            "code_git_sha": sha.strip() if sha else None,
+            "working_tree_dirty": None,
+            "working_tree_changed_paths": None,
+            "code_dirty": None,
+            "code_dirty_paths": None,
+        }
+    changed: list[str] = []
+    entries = iter(status.split("\0"))
+    for entry in entries:
+        if not entry:
+            continue
+        code, path = entry[:2], entry[3:]
+        if "R" in code or "C" in code:
+            next(entries, None)  # -z puts the rename source in the next field
+        changed.append(path)
+    changed.sort()
+    code_paths = [p for p in changed if is_code_path(p)]
+    return {
+        "code_git_sha": sha.strip() if sha else None,
+        "working_tree_dirty": bool(changed),
+        "working_tree_changed_paths": changed,
+        "code_dirty": bool(code_paths),
+        "code_dirty_paths": code_paths,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -580,11 +615,26 @@ def protocol_sha256(paths: Phase7Paths) -> str | None:
     return sha256_file(paths.protocol_path)
 
 
-def integrity_problems(protocol: dict[str, Any], paths: Phase7Paths) -> list[str]:
-    problems = [f"method_drift:{g}" for g in method.method_drift(protocol["method"])]
+def integrity_status(protocol: dict[str, Any], paths: Phase7Paths) -> dict[str, Any]:
+    """Pinned method and calibration hashes only; Git working-tree state is not consulted."""
+    method_problems = [f"method_drift:{g}" for g in method.method_drift(protocol["method"])]
+    calibration_problems: list[str] = []
     if sha256_file(paths.frozen_pool) != protocol["calibration"]["frozen_pool_sha256"]:
-        problems.append("frozen_pool_hash_mismatch")
-    return problems
+        calibration_problems.append("frozen_pool_hash_mismatch")
+    pinned_sources = protocol["calibration"].get("source_csv_sha256") or {}
+    csvs = _source_csvs() if pinned_sources else {}
+    for name, digest in sorted(pinned_sources.items()):
+        if name not in csvs or sha256_file(csvs[name]) != digest:
+            calibration_problems.append(f"source_csv_hash_mismatch:{name}")
+    return {
+        "method_integrity_ok": not method_problems,
+        "calibration_integrity_ok": not calibration_problems,
+        "problems": method_problems + calibration_problems,
+    }
+
+
+def integrity_problems(protocol: dict[str, Any], paths: Phase7Paths) -> list[str]:
+    return integrity_status(protocol, paths)["problems"]
 
 
 # ---------------------------------------------------------------------------
@@ -867,7 +917,8 @@ def capture_checkpoint(
         "dry_run": dry_run,
     }
 
-    problems = integrity_problems(protocol, paths)
+    integrity = integrity_status(protocol, paths)
+    problems = integrity["problems"]
     regime = str(event.get("regime") or "unknown")
     bucket_dicts = bucket_dicts_from_markets(event.get("markets") or [])
     collected = collect_evidence(
@@ -910,6 +961,8 @@ def capture_checkpoint(
         "method_fingerprint_sha256": method.method_fingerprint()["method_fingerprint_sha256"],
         "pinned_method_fingerprint_sha256": protocol["method"]["method_fingerprint_sha256"],
         "integrity_problems": problems,
+        "method_integrity_ok": integrity["method_integrity_ok"],
+        "calibration_integrity_ok": integrity["calibration_integrity_ok"],
         **git,
         "attempt_id": attempt_id,
         "dry_run": dry_run,
@@ -1468,6 +1521,7 @@ def build_progress_report(
     if protocol is None:
         return {"status": "not_registered"}
     now = (now or utcnow()).astimezone(timezone.utc)
+    integrity = integrity_status(protocol, paths)
     dates = protocol_target_dates(date.fromisoformat(protocol["start_target_date"]))
     receipts = {(r["target_date"], r["checkpoint_id"]): r for r in _read_dir_json(paths.receipts, "*/*.json")}
     records = {(r["target_date"], r["checkpoint_id"]): r for r in _read_dir_json(paths.records, "*/*.json")}
@@ -1563,7 +1617,10 @@ def build_progress_report(
         "registered_at": protocol["registered_at"],
         "collection_window": [protocol["start_target_date"], protocol["end_target_date"]],
         "status": "SHADOW ONLY | RESEARCH_ONLY / NO_BET | no automatic promotion or trading",
-        "integrity_problems": integrity_problems(protocol, paths),
+        "integrity_problems": integrity["problems"],
+        "method_integrity_ok": integrity["method_integrity_ok"],
+        "calibration_integrity_ok": integrity["calibration_integrity_ok"],
+        "working_tree": git_state(),
         "calibration_unable_to_meet_thresholds": protocol["calibration_feasibility_preflight"][
             "checkpoints_unable_to_meet_thresholds"
         ],
