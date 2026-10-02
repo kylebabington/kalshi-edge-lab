@@ -1,0 +1,533 @@
+{
+  "calibration": {
+    "frozen_pool_file": "data\\weather\\phase7\\frozen_pools_v1.csv",
+    "frozen_pool_rows": 1032,
+    "frozen_pool_rows_by_model_checkpoint": {
+      "gfs|d0_0600": 114,
+      "gfs|d0_0900": 61,
+      "gfs|d0_1200": 114,
+      "gfs|d0_1500": 114,
+      "gfs|dminus1_1800": 113,
+      "hrrr|d0_0600": 114,
+      "hrrr|d0_0900": 61,
+      "hrrr|d0_1200": 114,
+      "hrrr|d0_1500": 114,
+      "hrrr|dminus1_1800": 113
+    },
+    "frozen_pool_sha256": "eb4b6e716c8b5d24ece9a2597d22a2876175648f2e5584adefe86b71b633c4bb",
+    "pool_definition": "Phase 6 v2.1 version-C rows: same model, same checkpoint, nws_cli_knyc, event/checkpoint pairs where BOTH models are FULL_OPERATIONAL_REPLAY, target_date before the prediction target date",
+    "selection_hierarchy": "month_same_run -> season_same_run -> same_run_global (prediction date month/season)",
+    "source_csv_sha256": {
+      "gfs_v2_1_csv": "a5ed82b4487aabb053cbb7bf02bb7f528a552cebd3fbd4b11ebd02200b17028a",
+      "hrrr_v2_1_csv": "43e73fba55922a3e3cbef2cdcf8ed45d3a72bc00ff4494bf1d7d9473a55f45f5"
+    },
+    "update_policy": "frozen at registration; no prospective KNYC or CLINYC outcome is appended during the 60-date experiment; new outcomes go to a separate ledger for a future version"
+  },
+  "calibration_feasibility_preflight": {
+    "by_checkpoint": {
+      "d0_0600": {
+        "gfs": {
+          "insufficient_dates_n": 0,
+          "pool_months": [
+            "2026-04",
+            "2026-05",
+            "2026-06",
+            "2026-07"
+          ],
+          "pool_rows_n": [
+            114
+          ],
+          "selected_level_counts": {
+            "same_run_global": 60
+          },
+          "status_counts": {
+            "FEASIBLE": 60
+          }
+        },
+        "hrrr": {
+          "insufficient_dates_n": 0,
+          "pool_months": [
+            "2026-04",
+            "2026-05",
+            "2026-06",
+            "2026-07"
+          ],
+          "pool_rows_n": [
+            114
+          ],
+          "selected_level_counts": {
+            "same_run_global": 60
+          },
+          "status_counts": {
+            "FEASIBLE": 60
+          }
+        }
+      },
+      "d0_0900": {
+        "gfs": {
+          "insufficient_dates_n": 60,
+          "pool_months": [
+            "2026-05",
+            "2026-06",
+            "2026-07"
+          ],
+          "pool_rows_n": [
+            61
+          ],
+          "selected_level_counts": {
+            "insufficient_history": 60
+          },
+          "status_counts": {
+            "CALIBRATION_INSUFFICIENT_DETERMINISTIC": 60
+          }
+        },
+        "hrrr": {
+          "insufficient_dates_n": 60,
+          "pool_months": [
+            "2026-05",
+            "2026-06",
+            "2026-07"
+          ],
+          "pool_rows_n": [
+            61
+          ],
+          "selected_level_counts": {
+            "insufficient_history": 60
+          },
+          "status_counts": {
+            "CALIBRATION_INSUFFICIENT_DETERMINISTIC": 60
+          }
+        }
+      },
+      "d0_1200": {
+        "gfs": {
+          "insufficient_dates_n": 0,
+          "pool_months": [
+            "2026-04",
+            "2026-05",
+            "2026-06",
+            "2026-07"
+          ],
+          "pool_rows_n": [
+            114
+          ],
+          "selected_level_counts": {
+            "same_run_global": 60
+          },
+          "status_counts": {
+            "FEASIBLE": 60
+          }
+        },
+        "hrrr": {
+          "insufficient_dates_n": 0,
+          "pool_months": [
+            "2026-04",
+            "2026-05",
+            "2026-06",
+            "2026-07"
+          ],
+          "pool_rows_n": [
+            114
+          ],
+          "selected_level_counts": {
+            "same_run_global": 60
+          },
+          "status_counts": {
+            "FEASIBLE": 60
+          }
+        }
+      },
+      "d0_1500": {
+        "gfs": {
+          "insufficient_dates_n": 0,
+          "pool_months": [
+            "2026-04",
+            "2026-05",
+            "2026-06",
+            "2026-07"
+          ],
+          "pool_rows_n": [
+            114
+          ],
+          "selected_level_counts": {
+            "same_run_global": 60
+          },
+          "status_counts": {
+            "FEASIBLE": 60
+          }
+        },
+        "hrrr": {
+          "insufficient_dates_n": 0,
+          "pool_months": [
+            "2026-04",
+            "2026-05",
+            "2026-06",
+            "2026-07"
+          ],
+          "pool_rows_n": [
+            114
+          ],
+          "selected_level_counts": {
+            "same_run_global": 60
+          },
+          "status_counts": {
+            "FEASIBLE": 60
+          }
+        }
+      },
+      "dminus1_1800": {
+        "gfs": {
+          "insufficient_dates_n": 0,
+          "pool_months": [
+            "2026-04",
+            "2026-05",
+            "2026-06",
+            "2026-07"
+          ],
+          "pool_rows_n": [
+            113
+          ],
+          "selected_level_counts": {
+            "same_run_global": 60
+          },
+          "status_counts": {
+            "FEASIBLE": 60
+          }
+        },
+        "hrrr": {
+          "insufficient_dates_n": 0,
+          "pool_months": [
+            "2026-04",
+            "2026-05",
+            "2026-06",
+            "2026-07"
+          ],
+          "pool_rows_n": [
+            113
+          ],
+          "selected_level_counts": {
+            "same_run_global": 60
+          },
+          "status_counts": {
+            "FEASIBLE": 60
+          }
+        }
+      }
+    },
+    "checkpoints_unable_to_meet_thresholds": [
+      "d0_0900"
+    ],
+    "insufficient": [
+      {
+        "checkpoint_id": "d0_0900",
+        "dates_n": 60,
+        "first": "2026-10-03",
+        "label": "CALIBRATION_INSUFFICIENT_DETERMINISTIC",
+        "last": "2026-12-01",
+        "model": "gfs"
+      },
+      {
+        "checkpoint_id": "d0_0900",
+        "dates_n": 60,
+        "first": "2026-10-03",
+        "label": "CALIBRATION_INSUFFICIENT_DETERMINISTIC",
+        "last": "2026-12-01",
+        "model": "hrrr"
+      }
+    ],
+    "policy": "Thresholds are not lowered and no checkpoint is removed. Insufficient components stay in coverage reporting labeled CALIBRATION_INSUFFICIENT_DETERMINISTIC; the pools are frozen, so the outcome is deterministic for the whole collection period.",
+    "target_dates_n": 60
+  },
+  "collection": {
+    "capture_window_minutes": 30,
+    "checkpoints": [
+      "dminus1_1800",
+      "d0_0600",
+      "d0_0900",
+      "d0_1200",
+      "d0_1500"
+    ],
+    "end_target_date": "2026-12-01",
+    "first_checkpoint": {
+      "checkpoint_id": "dminus1_1800",
+      "scheduled_at": "2026-10-02T18:00:00-04:00",
+      "target_date": "2026-10-03"
+    },
+    "n_target_dates": 60,
+    "no_early_stopping": true,
+    "start_rule": "first climate date whose climate-day start (00:00 EST) and earliest checkpoint (dminus1_1800 America/New_York) are both after registered_at",
+    "start_target_date": "2026-10-03",
+    "timing": {
+      "evidence_cutoff": "the scheduled checkpoint instant: runs admitted only if init + publication latency <= cutoff; observations only if obs_time + 20 min <= cutoff",
+      "late_finalization": "finalized at/after scheduled + 30 min -> MISSED; diagnostics kept, never in cohort",
+      "no_backfill": "a missed checkpoint is never reconstructed from historical downloads",
+      "prediction_as_of": "actual UTC time the prediction is finalized, after all evidence was received",
+      "scheduled_checkpoint_at": "nominal checkpoint (America/New_York)"
+    }
+  },
+  "end_target_date": "2026-12-01",
+  "hrrr_horizon_preflight": {
+    "basis": "Phase 5 predicate (newest init with init+3h <= cutoff and a target-date value) on Open-Meteo Single Runs, which serves HRRR every 3 h; synoptic 48 h, intermediate 18 h",
+    "by_checkpoint": {
+      "d0_0600": {
+        "expected_complete": 60,
+        "expected_horizon_short": 0,
+        "expected_selected_inits": {
+          "06Z_synoptic_48h": 60
+        }
+      },
+      "d0_0900": {
+        "expected_complete": 0,
+        "expected_horizon_short": 60,
+        "expected_selected_inits": {
+          "09Z_intermediate_18h": 60
+        }
+      },
+      "d0_1200": {
+        "expected_complete": 60,
+        "expected_horizon_short": 0,
+        "expected_selected_inits": {
+          "12Z_synoptic_48h": 60
+        }
+      },
+      "d0_1500": {
+        "expected_complete": 60,
+        "expected_horizon_short": 0,
+        "expected_selected_inits": {
+          "15Z_intermediate_18h": 60
+        }
+      },
+      "dminus1_1800": {
+        "expected_complete": 60,
+        "expected_horizon_short": 0,
+        "expected_selected_inits": {
+          "18Z_synoptic_48h": 60
+        }
+      }
+    },
+    "checkpoints_expected_hrrr_horizon_short": [
+      "d0_0900"
+    ],
+    "policy": "expectation only; an incomplete selected run is UNAVAILABLE, never replaced by an older run"
+  },
+  "method": {
+    "constants": {
+      "calibration_regime": "nws_cli_knyc",
+      "capture_window_minutes": 30,
+      "checkpoint_specs": [
+        {
+          "checkpoint_id": "dminus1_1800",
+          "day_offset": -1,
+          "hour": 18,
+          "intraday": false,
+          "minute": 0
+        },
+        {
+          "checkpoint_id": "d0_0600",
+          "day_offset": 0,
+          "hour": 6,
+          "intraday": true,
+          "minute": 0
+        },
+        {
+          "checkpoint_id": "d0_0900",
+          "day_offset": 0,
+          "hour": 9,
+          "intraday": true,
+          "minute": 0
+        },
+        {
+          "checkpoint_id": "d0_1200",
+          "day_offset": 0,
+          "hour": 12,
+          "intraday": true,
+          "minute": 0
+        },
+        {
+          "checkpoint_id": "d0_1500",
+          "day_offset": 0,
+          "hour": 15,
+          "intraday": true,
+          "minute": 0
+        }
+      ],
+      "climate_day_utc_offset_h": -5.0,
+      "gfs_publication_latency_h": 6.0,
+      "hrrr_lookback_hours": 48,
+      "hrrr_publication_latency_h": 3.0,
+      "method_version": "phase7_method_v1",
+      "min_n_month": 30,
+      "min_n_run": 80,
+      "min_n_season": 50,
+      "min_run_history": 20,
+      "model_window_basis": "checkpoint_to_nws_cli_climate_day_end_local_standard_time_utc-5",
+      "obs_availability_lag_min": 20.0,
+      "obs_expected_station": "KNYC",
+      "obs_max_gap_min": 180.0,
+      "obs_max_newest_age_min": 120.0,
+      "obs_temp_range_f": [
+        -40.0,
+        130.0
+      ],
+      "selection_hierarchy": [
+        "month_same_run",
+        "season_same_run",
+        "same_run_global",
+        "insufficient_history"
+      ],
+      "standardized_gfs_runs": [
+        {
+          "label": "previous-day 12Z",
+          "run_date_offset": -1,
+          "run_hour": 12,
+          "run_id": "prev_12z"
+        },
+        {
+          "label": "previous-day 18Z",
+          "run_date_offset": -1,
+          "run_hour": 18,
+          "run_id": "prev_18z"
+        },
+        {
+          "label": "event-day 00Z",
+          "run_date_offset": 0,
+          "run_hour": 0,
+          "run_id": "day_00z"
+        },
+        {
+          "label": "event-day 06Z",
+          "run_date_offset": 0,
+          "run_hour": 6,
+          "run_id": "day_06z"
+        }
+      ]
+    },
+    "constants_hash": "c6114dc290addb6393ac7fce004f3c6e8eaeae7ab7d60aeef8e583d621b846ed",
+    "function_hashes": {
+      "calibration": {
+        "research.weather.phase5:filter_operational_checkpoint": "e68938b3cc80b946834426cf7a46022cd0233b490b21dd5643a0baaee2174644",
+        "research.weather.phase5:predict_operational_calibrated": "ffbb1cd8008320e26c757f9bdf192167c71c26d26beb27a1f7bcd8a56461a448",
+        "research.weather.phase7_method:calibration_feasibility": "6cc420d29e86c3a45dd382b4a31ec12973bde3daa64ebcbf69e54c92df8bd425",
+        "research.weather.probability:select_residual_pool": "8f9217920f9d3071e9ce3b8cc4e63e194977a85b17ec6dba63ca351050031865",
+        "research.weather.resolution:season_for_month": "ee7886ec9b91647b89b0432fb454a0d846a71ee1c127369414da2007b5eae8a1"
+      },
+      "forecast_window": {
+        "research.weather.asof_observations:climate_day_bounds_utc": "7da924c869d3f2950eefa1f361c4557686448730c309904ddf32d16636740897",
+        "research.weather.sources.single_run_hourly:_ceil_hour": "62a86f301530f1cd711606b438a9063721a857571de829821f9bfb0f9afd3f89",
+        "research.weather.sources.single_run_hourly:_incomplete_reason": "0d0e0a2b81a1204ba3ddc9a7fa15d4e623836da7ec4c1a4104349a7e4101e119",
+        "research.weather.sources.single_run_hourly:expected_window_hours": "cbe19e8cf32036e6183ae262bfa9192bf133dc6143d35585c9a28503bb630fcc",
+        "research.weather.sources.single_run_hourly:parse_hourly_series": "ad7de8bf4f10d1d5aacc2b7eb76f3d08fe34707f6b6bc77943da7f39d8fb7986",
+        "research.weather.sources.single_run_hourly:remaining_day_high": "0e515f45a35866c320c3fdbd6690548d761ca253318335b12ebff16d53ae1be3"
+      },
+      "observation": {
+        "research.weather.asof_observations:_parse_utc": "3f3276275ca290ae71ee00b4bfda6e6c890a3e19635f3188a640041752c72468",
+        "research.weather.asof_observations:_station_ok": "f839b91db337a6d23aec5d44d432b9b7363cf5139a016559e07f42584ad2336a",
+        "research.weather.asof_observations:group_by_climate_date": "6903e738a39bed157eb9610f76671c7d2b3d5b6676536df5ffd4957ed5001881",
+        "research.weather.asof_observations:observed_high_asof": "882480c4a0bdb984ba2de7a6a07b9b16116ee6298cb6fd3f32a79fbe0d0614c4",
+        "research.weather.asof_observations:record_available_at": "e43ee1a09222abffa973fc48b0f2b7839cf8f54399d62a231121beaa6adb61f8",
+        "research.weather.asof_observations:validate_observations": "c6821e38a540df0c3087509411ff036722cda2764a82a9e1ab9f81194a1714de",
+        "research.weather.phase7_method:observation_summary": "854dedbbe1d9a8b1169e68b3446c5b1db532a67367f66bfcb3a982c27cd1aed5",
+        "research.weather.sources.knyc_history:_normalize_station": "73a680330c3cf0dcd6684358776a90122aa58afc1b86dce0499e28b7d4dd21b9",
+        "research.weather.sources.knyc_history:parse_iem_asos_csv": "c3cadfc3d8408e781e4e49a1869d1c474b4a6190cdf56635345a85ec144cb5b7"
+      },
+      "probability": {
+        "research.weather.phase5:projected_final_high": "c707fdb4c3e205bc0d049327877b009f4a7c0c1a00df009543309d6b695b8b11",
+        "research.weather.phase7_method:buckets_from_dicts": "1ea6cc47f66eb0124c0ecf409946769c61bdd338355ce054076e425270b4d6fc",
+        "research.weather.phase7_method:build_prediction": "7ffe5e351c2ed5a8214dc4208986b8cc8b4fd1b5381387fa8c77692db769c725",
+        "research.weather.phase7_method:component_prediction": "5eee7d9a7afeb9b96d31cdf20c0cb84f4b1b2f26e4e53dabd3e4de578e4dc838",
+        "research.weather.probability:assert_probs_sum_to_one": "9ff0fa7f186bc26bcf2eab36728d0b42d45f525744e28de69981f8105f570de0",
+        "research.weather.probability:bucket_probabilities_from_residuals": "9ec940b17a824754cb218b64ec67b420b8aa148f8092aeb3a480113d36457cfe",
+        "research.weather.probability:empirical_predictive_highs": "f7051d0fe65f5cc9225f22629c25321be209b3444175e484dd8a7dd27d2c0c7e",
+        "research.weather.resolution:TemperatureBucket": "197ebb1752c696ddf2cd28b1c89610fa20ddeb41b3afb25326ce558c34f51400",
+        "research.weather.resolution:parse_temperature_bucket": "df61d82528255da039b2690332abee8dd6b9fcec9e08dded3b8c1bb74f98c2da"
+      },
+      "run_selection": {
+        "research.weather.calibration:model_available_as_of": "5138224150ee650e66d8baa8d1f1012724f757ec4ed80340a4dd8b84d2fd5260",
+        "research.weather.calibration:model_run_init_utc": "ee5ce0d237e5549b02dfb90686515cf2f65be9fea3b4f8d87960255ce4c3960e",
+        "research.weather.phase5:choose_operational_hrrr_run": "aca0ff729478aa5d4af254266918d8163c2f631701ab1746f0df64ff3eecb30c",
+        "research.weather.phase7_method:attempt_series": "11523f59b64622cb5c1bae3a377f03052c089d3ec5fcf35bdb382931c4a967a5",
+        "research.weather.phase7_method:candidates_for": "35caec2efb250535ee70035191f29760f793555ef3cbec07b8232a7b02c44f77",
+        "research.weather.phase7_method:gfs_candidates": "65c7a6c415acab351fd713d80c6911490253102277d45b0dc1ef2c8fb187fd17",
+        "research.weather.phase7_method:hrrr_candidates": "2dac4666b6b96049e970fb9656b10dbee4aeb859c57492d477bfa5d62259ef25",
+        "research.weather.phase7_method:ny_date_high": "509629bdb0bc148f279f7ecaca7a24473de791e95421d520c344e595a1fb99c0",
+        "research.weather.phase7_method:select_run": "6ce8abd898bc9a3ae977bb9b03f023f5e01bc01fde327dfc384772d625c5d13a",
+        "research.weather.probability:choose_operational_run": "aa5c99e4a9524296afe9fb9cd6bf847d3a405b5f670a8bba3571dd67157f9052",
+        "research.weather.sources.hrrr:hrrr_available_as_of": "c27fe44b98d2d0a70231d7f589d1268c647993d72e4e5cce0ae22b113c8564f7",
+        "research.weather.sources.hrrr:is_hrrr_run_available": "a92f45c0263f3e519d6d67079b2221053161dc9b4401002013cbd6b28a3cd0cf"
+      },
+      "scoring": {
+        "research.weather.phase7_method:score_distribution": "4a005e62f78f0bf831a4ba239323a565c7828da87b0c99fdb030cf183e240dac",
+        "research.weather.replay:log_loss": "8cb5c8223656608df7cc9a3e62e2a084111716c210bf1ddfb22f223fcd9de031",
+        "research.weather.replay:multiclass_brier": "c17c640ac86fbb47dea0ded2b180b89758fa215cabb5922b500bac3365020b95"
+      },
+      "shadow": {
+        "research.weather.phase7_method:shadow_prediction": "3d5d99faf7514ded02f8a958860e63ab84166b14f0b069a2a670b8a789b22db4",
+        "research.weather.shadow:_boundary_key": "3f0f873b298c8fb816d7afda436c3d09590ebbb87597e8beb4eb0fdedf60fce5",
+        "research.weather.shadow:_label_by_canonical": "90d3b0a5cb885257c782e5b42c58a4ba003a265e902266981512f14eca4565cb",
+        "research.weather.shadow:_probs_by_canonical": "adaef5ad0a671b082293bfa17977915050b86fb94939bc3db37c2365288a555e",
+        "research.weather.shadow:bucket_universes_align": "49b40bf8adf1c8fab40fad86997172f8e0be09234d4b58486cf16927ccc9278c",
+        "research.weather.shadow:canonical_bucket_identity": "a647f9dc824de5eb3c2ebbb9309e6c74b67172a49bd2df8c760efd4fb98cb838",
+        "research.weather.shadow:combine_equal_weight": "ed21fb4997d83062b96362a62c2eab1f817d8daaaa93b07642a3d9dc41346839"
+      }
+    },
+    "group_hashes": {
+      "calibration": "326616c11bb484786981afaff1e678c8caefc17747b19f6cc97407e05e5939b8",
+      "forecast_window": "58950c7c346728fda2828c71a6176ddce66665f4063efb27f3c298b525cf2c9d",
+      "observation": "7481ef380f5896289197193994f5eb348476ad2ab2174bc0ab13cbf3588811ae",
+      "probability": "6e64ae028a42b4e25892e9081c7b9b8c7311e98c596365e3982e50b7152b2b5b",
+      "run_selection": "1a8b13c2cf5fa1b50f50e51785a37646007925d5e559a2f1c167ef4158830936",
+      "scoring": "35979ab5003ef2c9e788bad73131e0142a2ba5098f62106256eea7cefee5179f",
+      "shadow": "ea7159190ebe8feb1f12dc2b7e28f3e62c0f3661bb83144cf734b27917798562"
+    },
+    "method_fingerprint_sha256": "95b0d991f47f97068b291b93a953a8f6a4eb84099d9288fd2ae6770228e78e6d",
+    "method_version": "phase7_method_v1"
+  },
+  "method_change_policy": "Prediction-affecting functions and constants are pinned by source hash; any drift refuses primary-cohort capture. Operational code (fetching, logging, receipts, scheduler) is not pinned and is identified by code_git_sha on each record.",
+  "primary_cohort": {
+    "calibration_target_regime": "nws_cli_knyc",
+    "coverage": "every scheduled checkpoint is reported, including MISSED and unavailable predictions",
+    "evaluation_target_regime": "weather_company_clinyc",
+    "events": "live KXHIGHNY events whose settlement rules identify weather_company_clinyc, with target_date inside the registered 60 dates",
+    "interpretation": "The primary result measures prospective performance of the transferred forecasting pipeline (NWS CLI KNYC calibration + experimental identity transfer) against CLINYC settlement. It does not establish KNYC/CLINYC identity; the CLINYC_TRANSFER_V1 experiment continues independently with unchanged criteria.",
+    "other_regimes": "reported as separate strata; never pooled into the primary cohort",
+    "paired_checkpoint": "valid research GFS, research HRRR and research shadow probabilities",
+    "settlement_truth": "confirmed CLINYC settlement (agreeing Kalshi expiration_value + winning bucket)",
+    "transfer": "experimental KNYC->CLINYC identity transfer, both research components",
+    "transfer_status": "experimental"
+  },
+  "primary_comparison": {
+    "below_minimum_label": "INSUFFICIENT",
+    "contrast": "research_shadow minus research_gfs",
+    "final_label": "FINAL_PROTOCOL_ASSESSMENT",
+    "interim_label": "DESCRIPTIVE_INTERIM",
+    "interval": "95% bootstrap clustered by target date (n=1000, seed=42)",
+    "legacy_incumbent": "scored separately for reference; inputs and calibration differ",
+    "metric": "multiclass Brier",
+    "minimum_paired_target_dates": 30,
+    "scope": "pooled intraday checkpoints d0_0600,d0_0900,d0_1200,d0_1500",
+    "secondary": "each checkpoint separately; missingness; unique scored dates; log loss"
+  },
+  "protocol_id": "PHASE7_PROSPECTIVE_V1",
+  "registered_at": "2026-10-02T17:09:09.117953+00:00",
+  "registration_git": {
+    "code_dirty": false,
+    "code_git_sha": "133d89bc37650672aa5ecc953c833ff21835108a"
+  },
+  "research_distributions": {
+    "dminus1_1800": "observations NOT_APPLICABLE_PRE_TARGET_DAY; complete climate-day forecast",
+    "hrrr_policy": "Phase 5 latest_available_by_latency predicate; an incomplete selected run makes HRRR and shadow UNAVAILABLE; no older run is substituted",
+    "research_gfs": "Phase 6 v2.1 version-C calibrated GFS",
+    "research_hrrr": "Phase 6 v2.1 version-C calibrated HRRR",
+    "research_shadow": "exact 0.5/0.5 combination of those bucket probabilities (SHADOW_GFS_HRRR_EQUAL_V1)"
+  },
+  "schema": "phase7_prospective_protocol_v1",
+  "start_target_date": "2026-10-03",
+  "status": {
+    "automatic_promotion": false,
+    "decision": "NO_BET",
+    "incumbent": "calibrated GFS legacy WeatherPrediction (unchanged, stored separately)",
+    "mode": "RESEARCH_ONLY",
+    "no_prices_trades_weights_or_new_models": true,
+    "shadow": "SHADOW ONLY"
+  }
+}
