@@ -488,6 +488,14 @@ def test_prospective_cycle_runs_end_to_end_without_network(tmp_path, monkeypatch
         "research.weather.shadow.SHADOW_HYPOTHESIS_PATH", tmp_path / "shadow.json"
     )
     monkeypatch.setattr("research.weather.shadow.HYPOTHESES_DIR", tmp_path)
+    from research.weather import phase7
+
+    real_paths = phase7.Phase7Paths
+    monkeypatch.setattr(
+        phase7,
+        "Phase7Paths",
+        lambda: real_paths(root=tmp_path / "p7", protocol_path=tmp_path / "p7_protocol.json"),
+    )
     monkeypatch.setattr(
         "research.weather.service.get_live_weather_events",
         lambda client=None: {"events": []},
@@ -515,3 +523,5 @@ def test_prospective_cycle_runs_end_to_end_without_network(tmp_path, monkeypatch
     assert summary["clinyc_transfer_v1"]["prospective_n"] == 0
     assert summary["clinyc_transfer_v1"]["transfer_validated"] is False
     assert (tmp_path / "summary.json").exists()
+    assert summary["phase7"]["capture"]["status"] == "not_registered"
+    assert summary["phase7"]["reconcile_and_score"]["status"] == "not_registered"

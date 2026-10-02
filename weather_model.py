@@ -15,6 +15,8 @@ Commands:
   python weather_model.py --snapshot-live
   python weather_model.py --score-snapshots
   python weather_model.py --prospective-cycle
+  python weather_model.py --phase7-preflight | --phase7-register | --phase7-report [--json]
+  python weather_model.py --phase7-reproduce RECORD_JSON | --phase7-dry-run
 
 Phase 1–5 do NOT place orders and do NOT optimize against trading ROI.
 Prospective cycle: schedule externally at HH:05 America/New_York hourly
@@ -137,6 +139,36 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "refresh CLINYC_TRANSFER_V1. Schedule at HH:05 ET hourly. "
             "Never call from GET endpoints."
         ),
+    )
+    group.add_argument(
+        "--phase7-preflight",
+        action="store_true",
+        help="Phase 7: read-only calibration feasibility for the 60 dates a registration now would freeze",
+    )
+    group.add_argument(
+        "--phase7-register",
+        action="store_true",
+        help="Phase 7: write the frozen prospective protocol once (refuses to overwrite)",
+    )
+    group.add_argument(
+        "--phase7-report",
+        action="store_true",
+        help="Phase 7: read-only progress report (descriptive until the collection period ends)",
+    )
+    group.add_argument(
+        "--phase7-reproduce",
+        metavar="RECORD_JSON",
+        help="Phase 7: recompute a saved record's probabilities and score from evidence only",
+    )
+    group.add_argument(
+        "--phase7-dry-run",
+        action="store_true",
+        help="Phase 7: live capture of the latest elapsed checkpoint into dry_run/ (never cohort)",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="With --phase7-report / --phase7-preflight, print JSON",
     )
     parser.add_argument(
         "--refresh-phase6-cache",
@@ -532,6 +564,116 @@ def cmd_prospective_cycle() -> int:
         f"missed={totals.get('missed_checkpoints')}  "
         f"scored={totals.get('scored_snapshots')}"
     )
+    p7 = result.get("phase7") or {}
+    console.print(f"phase7 capture={json.dumps(p7.get('capture'), default=str)}")
+    console.print(f"phase7 reconcile/score={json.dumps(p7.get('reconcile_and_score'), default=str)[:2000]}")
+    failed = any(
+        (p7.get(k) or {}).get("status") == "error" for k in ("capture", "reconcile_and_score")
+    ) or any(r.get("status") == "error" for r in (p7.get("capture") or {}).get("results") or [])
+    return 3 if failed else 0
+
+
+def cmd_phase7_preflight(*, as_json: bool = False) -> int:
+    from datetime import datetime, timezone
+
+    from research.weather.phase7 import preflight
+
+    pre = preflight(registered_at=datetime.now(timezone.utc))
+    out = {k: v for k, v in pre.items() if k != "pool_rows"}
+    out["frozen_pool_rows"] = len(pre["pool_rows"])
+    if as_json:
+        print(json.dumps(out, indent=2, default=str))
+        return 0
+    console.print(f"[bold]Phase 7 calibration preflight[/bold] (read-only, nothing written)")
+    console.print(f"window if registered now: {out['start_target_date']} .. {out['end_target_date']}")
+    console.print(f"frozen pool rows: {out['frozen_pool_rows']}")
+    for cp, models in out["preflight"]["by_checkpoint"].items():
+        for model, s in models.items():
+            console.print(
+                f"  {cp} {model}: pool_n={s['pool_rows_n']} months={s['pool_months']} "
+                f"levels={s['selected_level_counts']} status={s['status_counts']}"
+            )
+    console.print(f"unable to meet thresholds: {out['preflight']['checkpoints_unable_to_meet_thresholds']}")
+    hz = out["hrrr_horizon_preflight"]
+    for cp, s in hz["by_checkpoint"].items():
+        console.print(
+            f"  HRRR {cp}: complete={s['expected_complete']} short={s['expected_horizon_short']} "
+            f"inits={s['expected_selected_inits']}"
+        )
+    console.print(f"expected HRRR horizon short: {hz['checkpoints_expected_hrrr_horizon_short']}")
+    return 0
+
+
+def cmd_phase7_register() -> int:
+    from research.weather.phase7 import register_protocol
+
+    protocol = register_protocol()
+    col = protocol["collection"]
+    console.print("[bold]Phase 7 protocol registered (write-once)[/bold]")
+    console.print(f"registered_at={protocol['registered_at']}")
+    console.print(f"collection {col['start_target_date']} .. {col['end_target_date']} ({col['n_target_dates']} dates)")
+    console.print(f"first checkpoint: {col['first_checkpoint']}")
+    console.print(f"frozen_pool_sha256={protocol['calibration']['frozen_pool_sha256']}")
+    console.print(f"method_fingerprint_sha256={protocol['method']['method_fingerprint_sha256']}")
+    console.print(
+        "unable to meet thresholds: "
+        f"{protocol['calibration_feasibility_preflight']['checkpoints_unable_to_meet_thresholds']}"
+    )
+    return 0
+
+
+def cmd_phase7_report(*, as_json: bool = False) -> int:
+    from research.weather.phase7 import build_progress_report
+
+    report = build_progress_report()
+    if as_json or report.get("status") == "not_registered":
+        print(json.dumps(report, indent=2, default=str))
+        return 0
+    console.print(f"[bold]Phase 7 progress[/bold] {report['collection_window']}  ({report['status']})")
+    console.print(f"integrity problems: {report['integrity_problems'] or 'none'}")
+    console.print(f"calibration unable to meet thresholds: {report['calibration_unable_to_meet_thresholds']}")
+    for cp, c in report["coverage_by_checkpoint"].items():
+        console.print(
+            f"  {cp}: scheduled={c['scheduled_so_far']} captured={c['captured']} missed={c['missed']} "
+            f"{c['missed_reasons'] or ''} awaiting={c['awaiting_receipt']} paired_valid={c['paired_valid']}"
+        )
+    pc = report["primary_cohort"]
+    console.print(
+        f"primary pairs={pc['paired_checkpoints']} intraday={pc['paired_intraday_checkpoints']} "
+        f"unique dates={pc['unique_paired_intraday_target_dates']}/{pc['minimum_required']} label={pc['label']}"
+    )
+    console.print(f"pooled intraday shadow-gfs Brier ({pc['interval_interpretation']}): "
+                  f"{pc['pooled_intraday_shadow_minus_gfs_brier']}")
+    console.print(f"scores final={report['scores']['final']} pending={report['scores']['pending']}")
+    return 0
+
+
+def cmd_phase7_reproduce(path: str) -> int:
+    from pathlib import Path
+
+    from research.weather.phase7 import reproduce_record
+
+    result = reproduce_record(Path(path))
+    print(json.dumps(result, indent=2))
+    return 0 if result["prediction_identical"] and result["score_identical"] in (True, None) else 4
+
+
+def cmd_phase7_dry_run() -> int:
+    from research.weather.phase7 import dry_run_capture
+
+    client = KalshiClient(progress=lambda message: console.print(message, style="dim"))
+    out = dry_run_capture(client=client)
+    rec = out["record"]
+    pred = rec["prediction"]
+    console.print(f"[bold]Phase 7 dry run[/bold] {rec['event_ticker']} {rec['checkpoint_id']} -> {out['path']}")
+    console.print(
+        f"cutoff={rec['evidence_cutoff_utc']} prediction_as_of={rec['prediction_as_of']} "
+        f"regime={rec['evaluation_target_regime']} obs={pred['observations']['summary'].get('status')}"
+    )
+    for name in ("research_gfs", "research_hrrr", "research_shadow"):
+        block = pred[name]
+        sel = (block.get("selected_run") or {}).get("run_init")
+        console.print(f"  {name}: {block['status']} reason={block.get('reason')} run={sel}")
     return 0
 
 
@@ -559,6 +701,16 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_score_snapshots()
     if args.prospective_cycle:
         return cmd_prospective_cycle()
+    if args.phase7_preflight:
+        return cmd_phase7_preflight(as_json=args.json)
+    if args.phase7_register:
+        return cmd_phase7_register()
+    if args.phase7_report:
+        return cmd_phase7_report(as_json=args.json)
+    if args.phase7_reproduce:
+        return cmd_phase7_reproduce(args.phase7_reproduce)
+    if args.phase7_dry_run:
+        return cmd_phase7_dry_run()
     return 1
 
 

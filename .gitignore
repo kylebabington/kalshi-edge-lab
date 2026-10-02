@@ -8,4 +8,7 @@ __pycache__/
 gfs_run_cache.json
 data/cache/
 data/results/
+data/logs/
+data/weather/phase7/*
+!data/weather/phase7/frozen_pools_v1.csv
 .pytest_cache/

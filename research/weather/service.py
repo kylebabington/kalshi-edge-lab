@@ -1143,6 +1143,108 @@ def get_snapshot_scores() -> dict[str, Any]:
     }
 
 
+def load_nws_actuals_by_date() -> dict[str, float]:
+    """NWS-regime actuals from the calibration CSV only (never used for CLINYC)."""
+    from research.weather.calibration import parse_float
+    from research.weather.models import REGIME_NWS_CLI_KNYC
+
+    out: dict[str, float] = {}
+    for row in load_calibration_csv():
+        if (row.get("settlement_source_regime") or "") != REGIME_NWS_CLI_KNYC:
+            continue
+        date = str(row.get("target_date") or "")
+        actual = parse_float(row.get("actual_high_f"))
+        if date and actual is not None:
+            out[date] = actual
+    return out
+
+
+def resolve_settlement_outcome(
+    event_markets: list[dict[str, Any]],
+    *,
+    regime: str,
+    target_date: str,
+    nws_actual_by_date: dict[str, float],
+) -> dict[str, Any]:
+    """Regime-specific confirmed settlement, or a non-OK status with a reason.
+
+    weather_company_clinyc → finalized Kalshi expiration_value only
+    nws_cli_knyc → verified NWS/CLI actuals; never falls back across regimes.
+    """
+    from research.weather.clinyc import audit_expiration_values
+    from research.weather.models import (
+        ACTUAL_SOURCE_KALSHI_EXPIRATION,
+        REGIME_NWS_CLI_KNYC,
+        REGIME_WEATHER_COMPANY_CLINYC,
+    )
+    from research.weather.resolution import (
+        get_outcome_label,
+        get_winning_market,
+        is_range_bucket_event,
+    )
+    from research.weather.snapshots import (
+        SCORE_STATUS_BUCKET_UNIDENTIFIABLE,
+        SCORE_STATUS_EVENT_NOT_FINALIZED,
+        SCORE_STATUS_MISSING_OUTCOME,
+        SCORE_STATUS_OK,
+        SCORE_STATUS_REGIME_UNKNOWN,
+        SCORE_STATUS_SETTLEMENT_UNAVAILABLE,
+    )
+
+    def _fail(status: str, reason: str) -> dict[str, Any]:
+        return {
+            "status": status,
+            "reason": reason,
+            "actual_high_f": None,
+            "winning_bucket": None,
+            "settlement_source": None,
+        }
+
+    if regime in ("unknown", "", "conflicting"):
+        return _fail(SCORE_STATUS_REGIME_UNKNOWN, f"resolution_regime={regime}")
+    if not event_markets or not is_range_bucket_event(event_markets):
+        return _fail(SCORE_STATUS_EVENT_NOT_FINALIZED, "event markets unavailable")
+
+    statuses = {str(m.get("status") or "").lower() for m in event_markets}
+    finalized = any(s in {"finalized", "determined", "settled"} for s in statuses) or all(
+        m.get("result") not in (None, "") for m in event_markets
+    )
+    if not finalized and not any(m.get("expiration_value") not in (None, "") for m in event_markets):
+        return _fail(SCORE_STATUS_EVENT_NOT_FINALIZED, "event not finalized")
+
+    winning_market = get_winning_market(event_markets)
+    winner = get_outcome_label(winning_market) if winning_market else ""
+    if not winner:
+        return _fail(SCORE_STATUS_BUCKET_UNIDENTIFIABLE, "winning canonical bucket not identifiable")
+
+    if regime == REGIME_WEATHER_COMPANY_CLINYC:
+        audit = audit_expiration_values(event_markets)
+        if not audit.agreement or audit.normalized_expiration_value is None:
+            return _fail(
+                SCORE_STATUS_SETTLEMENT_UNAVAILABLE,
+                "CLINYC expiration_value unavailable — refusing KNYC fallback",
+            )
+        actual: float | None = float(audit.normalized_expiration_value)
+        source = ACTUAL_SOURCE_KALSHI_EXPIRATION
+    elif regime == REGIME_NWS_CLI_KNYC:
+        actual = nws_actual_by_date.get(target_date)
+        if actual is None:
+            return _fail(SCORE_STATUS_SETTLEMENT_UNAVAILABLE, "NWS/CLI settlement actual unavailable")
+        source = "nws_cli_knyc"
+    else:
+        return _fail(SCORE_STATUS_REGIME_UNKNOWN, f"unsupported resolution_regime={regime}")
+
+    if actual is None:
+        return _fail(SCORE_STATUS_MISSING_OUTCOME, "exact outcome unavailable")
+    return {
+        "status": SCORE_STATUS_OK,
+        "reason": None,
+        "actual_high_f": float(actual),
+        "winning_bucket": winner,
+        "settlement_source": source,
+    }
+
+
 def score_settled_snapshots(
     *,
     client: KalshiClient | None = None,
@@ -1156,45 +1258,19 @@ def score_settled_snapshots(
     Never silently fall back across regimes.
     """
     from research.weather.snapshots import (
-        SCORE_STATUS_BUCKET_UNIDENTIFIABLE,
-        SCORE_STATUS_EVENT_NOT_FINALIZED,
-        SCORE_STATUS_MISSING_OUTCOME,
         SCORE_STATUS_OK,
-        SCORE_STATUS_REGIME_UNKNOWN,
-        SCORE_STATUS_SETTLEMENT_UNAVAILABLE,
         iter_all_snapshots,
         score_snapshot,
         write_score_artifact,
     )
-    from research.weather.calibration import parse_float
-    from research.weather.clinyc import audit_expiration_values
-    from research.weather.models import (
-        ACTUAL_SOURCE_KALSHI_EXPIRATION,
-        REGIME_NWS_CLI_KNYC,
-        REGIME_WEATHER_COMPANY_CLINYC,
-    )
-    from research.weather.resolution import (
-        get_outcome_label,
-        get_winning_market,
-        group_markets_by_event,
-        is_range_bucket_event,
-    )
+    from research.weather.resolution import group_markets_by_event
     from research.weather.clinyc import fetch_settled_kxhighny_markets
 
     client = client or KalshiClient()
     if markets is None:
         markets = fetch_settled_kxhighny_markets(client=client, force_refresh=True)
     grouped = group_markets_by_event(markets)
-    # NWS-regime actuals from calibration CSV only (never used for CLINYC).
-    rows = load_calibration_csv()
-    nws_actual_by_date: dict[str, float] = {}
-    for row in rows:
-        if (row.get("settlement_source_regime") or "") != REGIME_NWS_CLI_KNYC:
-            continue
-        date = str(row.get("target_date") or "")
-        actual = parse_float(row.get("actual_high_f"))
-        if date and actual is not None:
-            nws_actual_by_date[date] = actual
+    nws_actual_by_date = load_nws_actuals_by_date()
 
     scored: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
@@ -1222,77 +1298,21 @@ def score_settled_snapshots(
         event_ticker = str(snap.get("event_ticker") or "")
         target_date = str(snap.get("target_date") or "")
         regime = str(snap.get("resolution_regime") or "unknown")
-        event_markets = grouped.get(event_ticker) or []
-
-        if regime in ("unknown", "", "conflicting"):
-            _skip(snap, SCORE_STATUS_REGIME_UNKNOWN, f"resolution_regime={regime}")
-            continue
-
-        if not event_markets or not is_range_bucket_event(event_markets):
-            _skip(snap, SCORE_STATUS_EVENT_NOT_FINALIZED, "event markets unavailable")
-            continue
-
-        statuses = {str(m.get("status") or "").lower() for m in event_markets}
-        finalized = any(s in {"finalized", "determined", "settled"} for s in statuses) or all(
-            m.get("result") not in (None, "") for m in event_markets
+        outcome = resolve_settlement_outcome(
+            grouped.get(event_ticker) or [],
+            regime=regime,
+            target_date=target_date,
+            nws_actual_by_date=nws_actual_by_date,
         )
-        if not finalized and not any(
-            m.get("expiration_value") not in (None, "") for m in event_markets
-        ):
-            _skip(snap, SCORE_STATUS_EVENT_NOT_FINALIZED, "event not finalized")
-            continue
-
-        winning_market = get_winning_market(event_markets)
-        winner = get_outcome_label(winning_market) if winning_market else ""
-        if not winner:
-            _skip(
-                snap,
-                SCORE_STATUS_BUCKET_UNIDENTIFIABLE,
-                "winning canonical bucket not identifiable",
-            )
-            continue
-
-        actual: float | None = None
-        settlement_source: str | None = None
-
-        if regime == REGIME_WEATHER_COMPANY_CLINYC:
-            audit = audit_expiration_values(event_markets)
-            if not audit.agreement or audit.normalized_expiration_value is None:
-                _skip(
-                    snap,
-                    SCORE_STATUS_SETTLEMENT_UNAVAILABLE,
-                    "CLINYC expiration_value unavailable — refusing KNYC fallback",
-                )
-                continue
-            actual = float(audit.normalized_expiration_value)
-            settlement_source = ACTUAL_SOURCE_KALSHI_EXPIRATION
-        elif regime == REGIME_NWS_CLI_KNYC:
-            actual = nws_actual_by_date.get(target_date)
-            if actual is None:
-                _skip(
-                    snap,
-                    SCORE_STATUS_SETTLEMENT_UNAVAILABLE,
-                    "NWS/CLI settlement actual unavailable",
-                )
-                continue
-            settlement_source = "nws_cli_knyc"
-        else:
-            _skip(
-                snap,
-                SCORE_STATUS_REGIME_UNKNOWN,
-                f"unsupported resolution_regime={regime}",
-            )
-            continue
-
-        if actual is None:
-            _skip(snap, SCORE_STATUS_MISSING_OUTCOME, "exact outcome unavailable")
+        if outcome["status"] != SCORE_STATUS_OK:
+            _skip(snap, outcome["status"], str(outcome["reason"]))
             continue
 
         score = score_snapshot(
             snap,
-            actual_high_f=float(actual),
-            winning_bucket=winner,
-            settlement_source=settlement_source,
+            actual_high_f=float(outcome["actual_high_f"]),
+            winning_bucket=outcome["winning_bucket"],
+            settlement_source=outcome["settlement_source"],
             score_status=SCORE_STATUS_OK,
         )
         path = write_score_artifact(score)

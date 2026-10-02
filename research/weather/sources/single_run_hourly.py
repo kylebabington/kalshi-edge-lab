@@ -10,6 +10,8 @@ here — callers pass the run Phase 5 already selected.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -102,6 +104,90 @@ def fetch_run_hourly(
     path.parent.mkdir(parents=True, exist_ok=True)
     cache.write_json(path, {"meta": meta, "response": payload}, compact=True)
     return {"status": "ok", "payload": payload, "meta": meta}
+
+
+FETCH_OUTCOME_OK = "ok"
+FETCH_OUTCOME_HTTP_ERROR = "http_error"
+FETCH_OUTCOME_NETWORK_ERROR = "network_error"
+FETCH_OUTCOME_UNUSABLE = "unusable_response"
+
+
+def classify_hourly_payload(payload: Any) -> str | None:
+    """Return an unusable-response reason, or None when the payload is usable."""
+    if not isinstance(payload, dict):
+        return "payload_not_object"
+    if payload.get("error"):
+        return f"api_error:{str(payload.get('reason') or '')[:200]}"
+    if int(payload.get("utc_offset_seconds") or 0) != 0:
+        return "timezone_not_utc"
+    hourly = payload.get("hourly") or {}
+    times = hourly.get("time") or []
+    temps = hourly.get("temperature_2m") or []
+    if not times or not temps:
+        return "missing_hourly_arrays"
+    if len(times) != len(temps):
+        return "hourly_array_length_mismatch"
+    if all(t is None for t in temps):
+        return "all_null_values"
+    return None
+
+
+def fetch_run_hourly_logged(
+    model: str,
+    run_init: datetime,
+    *,
+    session_get: Any = None,
+    clock: Any = None,
+) -> dict[str, Any]:
+    """Always-live fetch of one run (never read from or written to the Phase 6 cache).
+
+    Returns {"outcome", "payload", "raw_text", "meta"} where outcome is one of
+    ok / http_error / network_error / unusable_response and meta carries
+    fetch_started_at / fetch_completed_at (UTC ISO) for evidence timing.
+    """
+    getter = session_get or requests.get
+    clock = clock or (lambda: datetime.now(timezone.utc))
+    run_init = _as_utc(run_init)
+    params = {
+        "latitude": NYC_LATITUDE,
+        "longitude": NYC_LONGITUDE,
+        "hourly": "temperature_2m",
+        "temperature_unit": "fahrenheit",
+        "timezone": "GMT",
+        "models": model,
+        "run": run_init.strftime("%Y-%m-%dT%H:%M"),
+    }
+    meta: dict[str, Any] = {
+        "source": f"open-meteo:single-runs:{model}",
+        "url": SINGLE_RUNS_URL,
+        "params": params,
+        "model": model,
+        "run_init_utc": run_init.isoformat(),
+        "fetch_started_at": clock().isoformat(),
+    }
+    try:
+        response = getter(SINGLE_RUNS_URL, params=params, timeout=REQUEST_TIMEOUT_S)
+    except requests.RequestException as error:
+        meta["fetch_completed_at"] = clock().isoformat()
+        meta["error"] = f"{type(error).__name__}: {error}"
+        return {"outcome": FETCH_OUTCOME_NETWORK_ERROR, "payload": None, "raw_text": None, "meta": meta}
+    meta["fetch_completed_at"] = clock().isoformat()
+    meta["http_status"] = response.status_code
+    raw_text = response.text
+    meta["response_sha256"] = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+    if not response.ok:
+        meta["error"] = raw_text[:300]
+        return {"outcome": FETCH_OUTCOME_HTTP_ERROR, "payload": None, "raw_text": raw_text, "meta": meta}
+    try:
+        payload = json.loads(raw_text)
+    except ValueError as error:
+        meta["unusable_reason"] = f"invalid_json: {error}"
+        return {"outcome": FETCH_OUTCOME_UNUSABLE, "payload": None, "raw_text": raw_text, "meta": meta}
+    reason = classify_hourly_payload(payload)
+    if reason is not None:
+        meta["unusable_reason"] = reason
+        return {"outcome": FETCH_OUTCOME_UNUSABLE, "payload": payload, "raw_text": raw_text, "meta": meta}
+    return {"outcome": FETCH_OUTCOME_OK, "payload": payload, "raw_text": raw_text, "meta": meta}
 
 
 def parse_hourly_series(payload: dict[str, Any] | None) -> list[tuple[datetime, float | None]]:

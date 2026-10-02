@@ -220,6 +220,61 @@ Phase 5 artifacts and the frozen shadow hypothesis are not modified.
 RESEARCH_ONLY / NO_BET; the shadow stays shadow-only and CLINYC transfer
 status is unchanged. A confidence interval excluding zero is not validation.
 
+### Phase 7 — prospective validation (frozen protocol)
+
+The protocol is in `research/weather/hypotheses/phase7_prospective_protocol_v1.json`.
+It is write-once and covers 60 consecutive target climate dates, starting with
+the first full date after registration. There is no early stopping. Each date
+has 5 checkpoints, each with a 30-minute capture window. The primary comparison
+is the pooled intraday (`d0_0600/0900/1200/1500`) shadow − research-GFS
+multiclass Brier, with a 95% bootstrap clustered by date. Fewer than 30 paired
+dates is labeled `INSUFFICIENT`. The cohort is CLINYC-regime events scored on a
+confirmed CLINYC settlement. The calibration regime is `nws_cli_knyc`; the
+transfer is experimental and does not establish identity. Other regimes are
+reported separately.
+
+- **Timing.** `scheduled_checkpoint_at` is nominal, and the evidence cutoff
+  equals that instant. `prediction_as_of` is the actual time of finalization.
+  Every fetch records its start, completion and receipt times. Anything
+  finalized outside the window is kept as a diagnostic and receives a `MISSED`
+  receipt.
+- **Selection.** Run selection uses the Phase 5 predicate: the newest
+  latency-eligible run with a non-null target-date high. An incomplete
+  selected run makes that component unavailable; the code never falls back to
+  an older complete run. Every attempted candidate keeps its raw evidence and a
+  fetch-log line, including failures.
+- **Calibration.** The version-C pools are frozen in
+  `data/weather/phase7/frozen_pools_v1.csv` (SHA-256 pinned). No prospective
+  appends.
+- **Method pinning.** Source hashes are pinned for the window, observation,
+  selection, probability, calibration, shadow and scoring functions, plus the
+  constants. Drift refuses primary capture.
+- **Scoring.** Missing settlement stays pending and is retried. A final score
+  is write-once and is only written after a confirmed settlement. The outcomes
+  ledger is idempotent.
+- **Known unavailability.** `d0_0900` is deterministically unavailable on every
+  date. It has 61 pool rows, below the global minimum of 80, so it is labeled
+  `CALIBRATION_INSUFFICIENT_DETERMINISTIC`. It is also short on HRRR horizon,
+  because the 09Z run reaches only 18 h. It stays in coverage reporting.
+
+```powershell
+.venv\Scripts\python weather_model.py --phase7-preflight   # read-only
+.venv\Scripts\python weather_model.py --phase7-register    # write-once
+.venv\Scripts\python weather_model.py --phase7-report      # read-only
+.venv\Scripts\python weather_model.py --phase7-dry-run     # live fetch, never cohort
+.venv\Scripts\python weather_model.py --phase7-reproduce data\weather\phase7\records\...json
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\register_weather_task.ps1
+```
+
+Scheduler: the task `KalshiEdgeLab-WeatherProspective` runs hourly at :05 local
+time. The machine must be on ET, which the script verifies and never changes.
+It runs `scripts\weather_prospective_task.ps1`, which takes an atomic lock
+recording the owner PID and start time. Logs go to `data\logs\prospective\`.
+Overlapping starts are ignored. Catch-up runs reconcile `MISSED` receipts with
+no backfill. The task runs only while the user is logged on (Interactive
+logon). Snapshots, evidence and logs under `data/weather/phase7/` and
+`data/logs/` stay local. SHADOW ONLY; RESEARCH_ONLY / NO_BET.
+
 ---
 
 ## Research UI (FastAPI + React)

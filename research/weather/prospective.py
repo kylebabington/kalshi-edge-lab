@@ -356,8 +356,21 @@ def run_prospective_cycle(
     load_or_register_hypothesis()  # CLINYC — untouched criteria
     client = client or KalshiClient()
 
+    # Phase 7 research capture runs first so it finalizes early in the window;
+    # its failures never block the incumbent path (and vice versa).
+    from research.weather import phase7
+
+    try:
+        phase7_capture = phase7.run_capture_stage(now=now, client=client)
+    except Exception as error:  # noqa: BLE001
+        phase7_capture = {"status": "error", "error": f"{type(error).__name__}: {error}"}
+
     # --- CAPTURE universe: open events ---
-    live = get_live_weather_events(client=client)
+    live_error: str | None = None
+    try:
+        live = get_live_weather_events(client=client)
+    except Exception as error:  # noqa: BLE001
+        live, live_error = {}, f"{type(error).__name__}: {error}"
     open_events = list(live.get("events") or [])
     captured: list[dict[str, Any]] = []
     skipped_existing: list[dict[str, Any]] = []
@@ -489,6 +502,12 @@ def run_prospective_cycle(
     # Transfer refresh + scoring
     transfer = refresh_clinyc_transfer_progress(client=client)
     score_result = score_settled_snapshots(client=client, markets=settled_markets)
+    try:
+        phase7_reconcile = phase7.run_reconcile_and_score_stage(
+            settled_markets=settled_markets, now=now
+        )
+    except Exception as error:  # noqa: BLE001
+        phase7_reconcile = {"status": "error", "error": f"{type(error).__name__}: {error}"}
 
     receipts = list_receipts()
     captured_n = sum(1 for r in receipts if r.get("status") == RECEIPT_STATUS_CAPTURED)
@@ -524,6 +543,7 @@ def run_prospective_cycle(
         },
         "scheduler": SCHEDULER_WINDOWS_TASK_EXAMPLE,
         "capture_universe": {
+            "live_events_error": live_error,
             "open_events": len(open_events),
             "captured_this_run": len(captured),
             "skipped_existing": len(skipped_existing),
@@ -560,6 +580,7 @@ def run_prospective_cycle(
             "scored": len(score_result.get("scored") or []),
             "skipped": len(score_result.get("skipped") or []),
         },
+        "phase7": {"capture": phase7_capture, "reconcile_and_score": phase7_reconcile},
     }
     cache.write_json(PROSPECTIVE_SUMMARY_PATH, summary)
     return summary
