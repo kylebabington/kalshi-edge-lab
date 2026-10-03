@@ -265,6 +265,15 @@ reported separately.
   `data/weather/calibration/knyc_clinyc_pairs.csv` (CLINYC transfer
   experiment). That makes the working tree dirty, but it is not a code change
   and does not affect capture.
+- **Evidence bytes.** Each saved response is the UTF-8 encoding of the decoded
+  response text. These are exactly the bytes hashed into `response_sha256`, not
+  the original HTTP body bytes. `--phase7-reproduce` reports `evidence_integrity`
+  for every referenced file: a raw-byte match, a CRLF-normalized match, and an
+  explicit status for a missing file or missing hash. Mismatches are printed to
+  stderr. The exit code still reflects prediction reproduction only. IEM files
+  saved before 2026-10-03 18:30 ET have Windows CRLF line endings and match only
+  after CRLF normalization; see
+  `docs/research/phase7_evidence_line_endings_note.md`.
 - **Scoring.** Missing settlement stays pending and is retried. A final score
   is write-once and is only written after a confirmed settlement. The outcomes
   ledger is idempotent.
@@ -317,7 +326,7 @@ Get-ScheduledTaskInfo -TaskName KalshiEdgeLab-WeatherProspective | Format-List L
 Test-Path data\logs\prospective\cycle.lock
 Get-Content data\logs\prospective\$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')).log -Tail 40
 
-# Reproduce a saved record offline (exit 0 = identical, 4 = mismatch)
+# Reproduce a saved record offline (exit 0 = identical, 4 = mismatch; evidence hash failures go to stderr)
 .venv\Scripts\python weather_model.py --phase7-reproduce data\weather\phase7\records\2026-10-03\dminus1_1800.json
 
 # Missed captures and their reasons; refused captures keep diagnostics

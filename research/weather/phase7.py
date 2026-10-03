@@ -642,6 +642,15 @@ def integrity_problems(protocol: dict[str, Any], paths: Phase7Paths) -> list[str
 # ---------------------------------------------------------------------------
 
 
+def write_evidence_text(path: Path, raw_text: str) -> None:
+    """Save decoded response text as UTF-8 bytes: the exact bytes hashed into response_sha256.
+
+    This is the saved UTF-8 response text, not the original HTTP body bytes.
+    write_text would translate "\\n" to os.linesep on Windows and break the hash.
+    """
+    path.write_bytes(raw_text.encode("utf-8"))
+
+
 def log_fetch(paths: Phase7Paths, entry: dict[str, Any]) -> None:
     cache.append_jsonl(paths.fetch_log, {"logged_at": _iso(utcnow()), **entry})
 
@@ -739,7 +748,7 @@ def _fetch_candidate(
         if result.get("raw_text") is not None:
             evidence_file = evidence_dir / f"{SHORT_MODEL[model]}_{run_init:%Y%m%dT%HZ}_try{attempt}.json"
             evidence_file.parent.mkdir(parents=True, exist_ok=True)
-            evidence_file.write_text(result["raw_text"], encoding="utf-8")
+            write_evidence_text(evidence_file, result["raw_text"])
         high = None
         if result.get("outcome") == FETCH_OUTCOME_OK:
             high = method.ny_date_high(parse_hourly_series(result.get("payload")), ctx["target_date"])
@@ -805,7 +814,7 @@ def collect_evidence(
         if res.get("raw_text") is not None:
             file_name = "iem_knyc.csv"
             (evidence_dir / file_name).parent.mkdir(parents=True, exist_ok=True)
-            (evidence_dir / file_name).write_text(res["raw_text"], encoding="utf-8")
+            write_evidence_text(evidence_dir / file_name, res["raw_text"])
         for att in res.get("attempts") or []:
             log_fetch(paths, {**ctx, "kind": "iem_asos", "url": knyc_history.IEM_ASOS_URL, **att})
         raw_iem = res.get("text")
@@ -1431,6 +1440,80 @@ def run_reconcile_and_score_stage(
 # ---------------------------------------------------------------------------
 
 
+EVIDENCE_RAW_MATCH = "RAW_MATCH"
+EVIDENCE_CRLF_NORMALIZED_MATCH_ONLY = "CRLF_NORMALIZED_MATCH_ONLY"
+EVIDENCE_MISMATCH = "MISMATCH"
+EVIDENCE_MISSING_FILE = "MISSING_FILE"
+EVIDENCE_MISSING_EXPECTED_HASH = "MISSING_EXPECTED_HASH"
+
+
+def _record_evidence_dir(record: dict[str, Any], paths: Phase7Paths) -> Path:
+    evidence_dir = Path(record["evidence_dir"])
+    return evidence_dir if evidence_dir.is_absolute() else paths.root / evidence_dir
+
+
+def _referenced_evidence(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every saved response a record references, with the hash recorded at fetch time."""
+    refs: list[dict[str, Any]] = []
+    obs = record["evidence"].get("observations_fetch") or {}
+    obs_file = obs.get("raw_response_file") or obs.get("evidence_file")
+    if obs_file:
+        attempts = obs.get("attempts") or []
+        refs.append({
+            "kind": "observations",
+            "evidence_file": obs_file,
+            "expected_sha256": attempts[-1].get("response_sha256") if attempts else None,
+        })
+    for model, runs in sorted((record["evidence"].get("runs") or {}).items()):
+        for run in runs:
+            for t in run.get("tries") or []:
+                if t.get("evidence_file"):
+                    refs.append({
+                        "kind": "model_run",
+                        "model": model,
+                        "run_init": run.get("run_init"),
+                        "try": t.get("try"),
+                        "evidence_file": t["evidence_file"],
+                        "expected_sha256": t.get("response_sha256"),
+                    })
+    return refs
+
+
+def verify_record_evidence(record: dict[str, Any], *, paths: Phase7Paths | None = None) -> dict[str, Any]:
+    """Read-only raw-byte check of each referenced saved response against its recorded hash."""
+    paths = paths or Phase7Paths()
+    evidence_dir = _record_evidence_dir(record, paths)
+    files: list[dict[str, Any]] = []
+    for ref in _referenced_evidence(record):
+        path = evidence_dir / ref["evidence_file"]
+        entry = {**ref, "actual_sha256": None, "raw_bytes_match": None, "crlf_normalized_match": None}
+        if not path.is_file():
+            entry["status"] = EVIDENCE_MISSING_FILE
+        else:
+            data = path.read_bytes()
+            entry["actual_sha256"] = hashlib.sha256(data).hexdigest()
+            if not ref["expected_sha256"]:
+                entry["status"] = EVIDENCE_MISSING_EXPECTED_HASH
+            else:
+                normalized = hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
+                entry["raw_bytes_match"] = entry["actual_sha256"] == ref["expected_sha256"]
+                entry["crlf_normalized_match"] = normalized == ref["expected_sha256"]
+                entry["status"] = (
+                    EVIDENCE_RAW_MATCH if entry["raw_bytes_match"]
+                    else EVIDENCE_CRLF_NORMALIZED_MATCH_ONLY if entry["crlf_normalized_match"]
+                    else EVIDENCE_MISMATCH
+                )
+        files.append(entry)
+    counts: dict[str, int] = {}
+    for f in files:
+        counts[f["status"]] = counts.get(f["status"], 0) + 1
+    return {
+        "all_raw_bytes_match": all(f["status"] == EVIDENCE_RAW_MATCH for f in files),
+        "status_counts": counts,
+        "files": files,
+    }
+
+
 def reproduce_record(record_file: Path, *, paths: Phase7Paths | None = None) -> dict[str, Any]:
     """Recompute probabilities (and any final score) from saved evidence only."""
     paths = paths or Phase7Paths()
@@ -1438,9 +1521,7 @@ def reproduce_record(record_file: Path, *, paths: Phase7Paths | None = None) -> 
     protocol = load_protocol(paths)
     if protocol is None:
         raise Phase7Error("protocol not registered")
-    evidence_dir = Path(record["evidence_dir"])
-    if not evidence_dir.is_absolute():
-        evidence_dir = paths.root / evidence_dir
+    evidence_dir = _record_evidence_dir(record, paths)
     raw_iem = None
     obs = record["evidence"].get("observations_fetch") or {}
     if obs.get("evidence_file"):
@@ -1482,6 +1563,7 @@ def reproduce_record(record_file: Path, *, paths: Phase7Paths | None = None) -> 
             for k in ("research_gfs", "research_hrrr", "research_shadow")
         ),
         "score_identical": None,
+        "evidence_integrity": verify_record_evidence(record, paths=paths),
     }
     score = load_json(score_path(paths, record["target_date"], record["checkpoint_id"]))
     if score is not None:

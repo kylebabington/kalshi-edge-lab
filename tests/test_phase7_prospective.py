@@ -27,6 +27,7 @@ from research.weather.sources.single_run_hourly import (
     WINDOW_REASON_HORIZON_NULL_PADDED,
     WINDOW_REASON_HORIZON_SHORT,
     classify_hourly_payload,
+    fetch_run_hourly_logged,
 )
 
 REGISTERED_AT = datetime(2026, 10, 2, 12, 0, tzinfo=NYC_TZ)
@@ -647,6 +648,153 @@ def test_reproduction_detects_altered_evidence(paths):
     hrrr_file.write_text(json.dumps(payload), encoding="utf-8")
     result = phase7.reproduce_record(phase7.record_path(paths, TARGET, "d0_1200"), paths=paths)
     assert result["prediction_identical"] is False
+
+
+# ---------------------------------------------------------------------------
+# Saved evidence bytes and raw-byte integrity
+# ---------------------------------------------------------------------------
+
+
+class FakeHttpResponse:
+    def __init__(self, text: str, status: int = 200):
+        self.text = text
+        self.status_code = status
+        self.ok = 200 <= status < 400
+
+
+def _live_fetchers(start: datetime) -> tuple[phase7.Fetchers, list[str]]:
+    """Real fetch functions behind fake HTTP getters returning multiline UTF-8 text."""
+    clock = Clock(start)
+    served: list[str] = []
+
+    def iem_get(url, params=None, timeout=None):
+        served.append(_iem_csv(_default_obs()))
+        return FakeHttpResponse(served[-1])
+
+    def runs_get(url, params=None, timeout=None):
+        init = datetime.strptime(params["run"], "%Y-%m-%dT%H:%M").replace(tzinfo=timezone.utc)
+        payload = {**_payload(init), "hourly_units": {"time": "iso8601", "temperature_2m": "°F"}}
+        served.append(json.dumps(payload, indent=2, ensure_ascii=False))
+        return FakeHttpResponse(served[-1])
+
+    fetchers = phase7.Fetchers(
+        run_hourly=lambda api_model, run_init: fetch_run_hourly_logged(
+            api_model, run_init, session_get=runs_get, clock=clock),
+        iem=lambda target_date, deadline=None: phase7.fetch_iem_live(
+            target_date, deadline=deadline, getter=iem_get, clock=clock),
+        clock=clock,
+        sleep=lambda s: None,
+    )
+    return fetchers, served
+
+
+def _capture_live(paths, cp: str = "d0_1200") -> tuple[dict, list[str]]:
+    scheduled = checkpoint_scheduled_at(TARGET, cp)
+    fetchers, served = _live_fetchers(scheduled + timedelta(minutes=5))
+    out = phase7.capture_checkpoint(
+        protocol=phase7.load_protocol(paths), event=_event(), target_date=TARGET,
+        checkpoint_id=cp, paths=paths, fetchers=fetchers,
+    )
+    assert out["status"] == phase7.RECEIPT_CAPTURED
+    return out["record"], served
+
+
+def _verify(paths, record: dict) -> dict:
+    return phase7.verify_record_evidence(record, paths=paths)
+
+
+def test_saved_multiline_iem_evidence_bytes_equal_hashed_utf8(paths):
+    record, served = _capture_live(paths)
+    obs_file = paths.root / record["evidence_dir"] / record["evidence"]["observations_fetch"]["raw_response_file"]
+    data = obs_file.read_bytes()
+    assert b"\n" in data and b"\r\n" not in data
+    assert data == served[0].encode("utf-8")
+    expected = record["evidence"]["observations_fetch"]["attempts"][-1]["response_sha256"]
+    assert hashlib.sha256(data).hexdigest() == expected
+    [entry] = [f for f in _verify(paths, record)["files"] if f["kind"] == "observations"]
+    assert entry["status"] == phase7.EVIDENCE_RAW_MATCH and entry["raw_bytes_match"] is True
+
+
+def test_saved_multiline_open_meteo_evidence_bytes_equal_hashed_utf8(paths):
+    record, served = _capture_live(paths)
+    model_entries = [f for f in _verify(paths, record)["files"] if f["kind"] == "model_run"]
+    assert model_entries
+    for entry in model_entries:
+        data = (paths.root / record["evidence_dir"] / entry["evidence_file"]).read_bytes()
+        assert b"\n" in data and b"\r\n" not in data and "°F".encode("utf-8") in data
+        assert data in {s.encode("utf-8") for s in served}
+        assert hashlib.sha256(data).hexdigest() == entry["expected_sha256"]
+        assert entry["status"] == phase7.EVIDENCE_RAW_MATCH
+    result = phase7.reproduce_record(phase7.record_path(paths, TARGET, "d0_1200"), paths=paths)
+    assert result["evidence_integrity"]["all_raw_bytes_match"] is True
+    assert result["prediction_identical"] is True
+
+
+def test_historical_crlf_evidence_fails_raw_but_matches_normalized(paths):
+    record, _ = _capture_live(paths)
+    obs_file = paths.root / record["evidence_dir"] / "iem_knyc.csv"
+    obs_file.write_bytes(obs_file.read_bytes().replace(b"\n", b"\r\n"))  # what write_text did on Windows
+    result = phase7.reproduce_record(phase7.record_path(paths, TARGET, "d0_1200"), paths=paths)
+    [entry] = [f for f in result["evidence_integrity"]["files"] if f["kind"] == "observations"]
+    assert entry["raw_bytes_match"] is False and entry["crlf_normalized_match"] is True
+    assert entry["status"] == phase7.EVIDENCE_CRLF_NORMALIZED_MATCH_ONLY
+    assert result["evidence_integrity"]["all_raw_bytes_match"] is False
+    assert result["prediction_identical"] is True and result["probabilities_identical"] is True
+
+
+def test_changed_evidence_content_fails_both_matches(paths):
+    record, _ = _capture_live(paths)
+    gfs_name = next(f["evidence_file"] for f in _verify(paths, record)["files"] if f["evidence_file"].startswith("gfs_"))
+    gfs_file = paths.root / record["evidence_dir"] / gfs_name
+    gfs_file.write_bytes(gfs_file.read_bytes() + b" ")  # JSON-equivalent, so the prediction still reproduces
+    result = phase7.reproduce_record(phase7.record_path(paths, TARGET, "d0_1200"), paths=paths)
+    [entry] = [f for f in result["evidence_integrity"]["files"] if f["evidence_file"] == gfs_name]
+    assert entry["raw_bytes_match"] is False and entry["crlf_normalized_match"] is False
+    assert entry["status"] == phase7.EVIDENCE_MISMATCH
+    assert result["prediction_identical"] is True
+
+
+def test_missing_evidence_file_and_missing_expected_hash_are_explicit(paths):
+    record, _ = _capture_live(paths)
+    (paths.root / record["evidence_dir"] / "iem_knyc.csv").unlink()
+    [entry] = [f for f in _verify(paths, record)["files"] if f["kind"] == "observations"]
+    assert entry["status"] == phase7.EVIDENCE_MISSING_FILE
+    assert entry["actual_sha256"] is None and entry["raw_bytes_match"] is None
+
+    out, _ = _capture(paths, "d0_1500")  # FakeRuns/FakeIem record no response_sha256
+    statuses = {f["status"] for f in _verify(paths, out["record"])["files"]}
+    assert statuses == {phase7.EVIDENCE_MISSING_EXPECTED_HASH}
+
+
+def test_evidence_check_leaves_prediction_reproduction_and_exit_codes_unchanged(paths, monkeypatch, capsys):
+    import weather_model
+
+    monkeypatch.setattr(phase7, "Phase7Paths", lambda: paths)
+    record, _ = _capture_live(paths)
+    rec_file = phase7.record_path(paths, TARGET, "d0_1200")
+    evidence_dir = paths.root / record["evidence_dir"]
+
+    assert weather_model.cmd_phase7_reproduce(str(rec_file)) == 0
+    assert "EVIDENCE INTEGRITY" not in capsys.readouterr().err
+
+    obs_file = evidence_dir / "iem_knyc.csv"
+    obs_file.write_bytes(obs_file.read_bytes().replace(b"\n", b"\r\n"))
+    assert weather_model.cmd_phase7_reproduce(str(rec_file)) == 0
+    captured = capsys.readouterr()
+    assert "EVIDENCE INTEGRITY" in captured.err and "CRLF_NORMALIZED_MATCH_ONLY" in captured.err
+    assert json.loads(captured.out)["prediction_identical"] is True
+
+    hrrr_file = sorted(evidence_dir.glob("hrrr_*"))[0]
+    payload = json.loads(hrrr_file.read_text(encoding="utf-8"))
+    payload["hourly"]["temperature_2m"] = [t + 5 if t is not None else None for t in payload["hourly"]["temperature_2m"]]
+    hrrr_file.write_bytes(json.dumps(payload).encode("utf-8"))
+    assert weather_model.cmd_phase7_reproduce(str(rec_file)) == 4
+    capsys.readouterr()
+
+    obs_file.unlink()
+    with pytest.raises(FileNotFoundError):
+        weather_model.cmd_phase7_reproduce(str(rec_file))
+    assert phase7.EVIDENCE_MISSING_FILE in capsys.readouterr().out
 
 
 def test_progress_report_is_read_only_and_labels_insufficient(paths):

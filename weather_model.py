@@ -660,10 +660,27 @@ def cmd_phase7_report(*, as_json: bool = False) -> int:
 def cmd_phase7_reproduce(path: str) -> int:
     from pathlib import Path
 
-    from research.weather.phase7 import reproduce_record
+    import sys
 
-    result = reproduce_record(Path(path))
+    from research.weather.phase7 import EVIDENCE_RAW_MATCH, reproduce_record, verify_record_evidence
+
+    try:
+        result = reproduce_record(Path(path))
+    except FileNotFoundError:
+        record = json.loads(Path(path).read_text(encoding="utf-8"))
+        print(json.dumps({"record": path, "evidence_integrity": verify_record_evidence(record)}, indent=2))
+        raise
     print(json.dumps(result, indent=2))
+    evidence = result["evidence_integrity"]
+    if not evidence["all_raw_bytes_match"]:
+        print(f"EVIDENCE INTEGRITY: raw-byte hash verification FAILED {evidence['status_counts']} "
+              f"(prediction_identical={result['prediction_identical']}; exit code reflects prediction only)",
+              file=sys.stderr)
+        for f in evidence["files"]:
+            if f["status"] != EVIDENCE_RAW_MATCH:
+                print(f"  {f['status']}: {f['evidence_file']} expected={f['expected_sha256']} "
+                      f"actual={f['actual_sha256']} crlf_normalized_match={f['crlf_normalized_match']}",
+                      file=sys.stderr)
     return 0 if result["prediction_identical"] and result["score_identical"] in (True, None) else 4
 
 
