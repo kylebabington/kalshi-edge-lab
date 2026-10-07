@@ -13,6 +13,12 @@
     receipts/records are write-once, so a retry never overwrites a capture.
   - The cycle itself decides due vs MISSED from UTC against each scheduled
     America/New_York checkpoint, so a late (catch-up) run only reconciles.
+  - Ownership: if a collector config exists ($env:KEL_COLLECTOR_CONFIG or
+    collector.local.json in the repo root), the ownership marker is fetched
+    fresh before the cycle; if it cannot be verified or names another
+    collector, the cycle is skipped (alert sent). After the cycle, a health
+    ping and the state backup run; they never change the cycle exit code.
+    Without a config the runner behaves exactly as before the migration.
 #>
 param(
     [int]$RetryOnFailure = 1,
@@ -102,13 +108,17 @@ function Acquire-Lock {
 }
 
 function Invoke-Cycle {
+    return (Invoke-RepoPython @('weather_model.py', '--prospective-cycle'))
+}
+
+function Invoke-RepoPython([string[]]$Arguments) {
     $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssfffZ')
     $out = Join-Path $LogDir ".cycle_$stamp.out"
     $err = Join-Path $LogDir ".cycle_$stamp.err"
     $env:PYTHONIOENCODING = 'utf-8'
     $env:PYTHONUTF8 = '1'
     $env:COLUMNS = '200'
-    $proc = Start-Process -FilePath $Python -ArgumentList @('weather_model.py', '--prospective-cycle') `
+    $proc = Start-Process -FilePath $Python -ArgumentList $Arguments `
         -WorkingDirectory $RepoRoot -NoNewWindow -Wait -PassThru `
         -RedirectStandardOutput $out -RedirectStandardError $err
     foreach ($f in @($out, $err)) {
@@ -141,6 +151,21 @@ try {
         Write-Log 'WARNING: host offset is not a whole number of hours from ET; :05 local is not :05 ET'
     }
 
+    $collectorConfig = if ($env:KEL_COLLECTOR_CONFIG) { $env:KEL_COLLECTOR_CONFIG } else { Join-Path $RepoRoot 'collector.local.json' }
+    $ownershipEnforced = Test-Path -LiteralPath $collectorConfig
+    if ($ownershipEnforced) {
+        $env:KEL_COLLECTOR_CONFIG = $collectorConfig
+        $env:KEL_CYCLE_LOCK_HELD = '1'
+        $guardExit = Invoke-RepoPython @('-m', 'research.weather.collector_ops', 'guard', '--require-config')
+        if ($guardExit -ne 0) {
+            Write-Log "ownership check exit $guardExit; cycle skipped (no capture, no backfill)"
+            $exitCode = $guardExit
+            exit $exitCode
+        }
+    } else {
+        Write-Log "no collector config at $collectorConfig; pre-migration standalone mode (no ownership check)"
+    }
+
     $exitCode = Invoke-Cycle
     Write-Log "cycle exit code $exitCode"
     $tries = 0
@@ -150,6 +175,10 @@ try {
         Start-Sleep -Seconds $RetryDelaySeconds
         $exitCode = Invoke-Cycle
         Write-Log "retry $tries exit code $exitCode"
+    }
+
+    if ($ownershipEnforced) {
+        [void](Invoke-RepoPython @('-m', 'research.weather.collector_ops', 'post', '--cycle-exit', "$exitCode"))
     }
 } catch {
     Write-Log ("ERROR: " + $_.Exception.Message)

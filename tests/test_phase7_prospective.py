@@ -7,7 +7,7 @@ import json
 import shutil
 import subprocess
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -648,6 +648,26 @@ def test_reproduction_detects_altered_evidence(paths):
     hrrr_file.write_text(json.dumps(payload), encoding="utf-8")
     result = phase7.reproduce_record(phase7.record_path(paths, TARGET, "d0_1200"), paths=paths)
     assert result["prediction_identical"] is False
+
+
+@pytest.mark.parametrize("stored, parts", [
+    ("evidence\\2026-10-05\\d0_1200", ("evidence", "2026-10-05", "d0_1200")),
+    ("evidence/2026-10-05/d0_1200", ("evidence", "2026-10-05", "d0_1200")),
+    ("iem_knyc.csv", ("iem_knyc.csv",)),
+])
+def test_persisted_windows_paths_read_on_any_os(stored, parts):
+    assert phase7.persisted_path(stored).parts == parts
+
+
+def test_reproduction_reads_records_written_with_windows_separators(paths):
+    out, _ = _capture(paths, "d0_1200")
+    rec_file = phase7.record_path(paths, TARGET, "d0_1200")
+    record = json.loads(rec_file.read_text(encoding="utf-8"))
+    record["evidence_dir"] = str(PurePosixPath(*Path(out["record"]["evidence_dir"]).parts)).replace("/", "\\")
+    rec_file.write_text(json.dumps(record), encoding="utf-8")  # as written by the Windows collector
+    result = phase7.reproduce_record(rec_file, paths=paths)
+    assert result["prediction_identical"] is True and result["probabilities_identical"] is True
+    assert phase7.EVIDENCE_MISSING_FILE not in result["evidence_integrity"]["status_counts"]
 
 
 # ---------------------------------------------------------------------------

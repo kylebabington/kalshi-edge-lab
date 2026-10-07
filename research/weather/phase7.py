@@ -28,7 +28,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Callable, Sequence
 
 import requests
@@ -1447,8 +1447,22 @@ EVIDENCE_MISSING_FILE = "MISSING_FILE"
 EVIDENCE_MISSING_EXPECTED_HASH = "MISSING_EXPECTED_HASH"
 
 
+def persisted_path(value: str) -> Path:
+    """A path string stored in a record, on any OS.
+
+    Records written on Windows store relative paths with backslashes; on POSIX
+    Path() would read those as a single file name.
+    """
+    if "\\" in value:
+        win = PureWindowsPath(value)
+        if win.is_absolute() or win.drive:
+            return Path(value)
+        return Path(*win.parts)
+    return Path(value)
+
+
 def _record_evidence_dir(record: dict[str, Any], paths: Phase7Paths) -> Path:
-    evidence_dir = Path(record["evidence_dir"])
+    evidence_dir = persisted_path(record["evidence_dir"])
     return evidence_dir if evidence_dir.is_absolute() else paths.root / evidence_dir
 
 
@@ -1485,7 +1499,7 @@ def verify_record_evidence(record: dict[str, Any], *, paths: Phase7Paths | None 
     evidence_dir = _record_evidence_dir(record, paths)
     files: list[dict[str, Any]] = []
     for ref in _referenced_evidence(record):
-        path = evidence_dir / ref["evidence_file"]
+        path = evidence_dir / persisted_path(ref["evidence_file"])
         entry = {**ref, "actual_sha256": None, "raw_bytes_match": None, "crlf_normalized_match": None}
         if not path.is_file():
             entry["status"] = EVIDENCE_MISSING_FILE
@@ -1525,14 +1539,14 @@ def reproduce_record(record_file: Path, *, paths: Phase7Paths | None = None) -> 
     raw_iem = None
     obs = record["evidence"].get("observations_fetch") or {}
     if obs.get("evidence_file"):
-        raw_iem = (evidence_dir / obs["evidence_file"]).read_text(encoding="utf-8")
+        raw_iem = (evidence_dir / persisted_path(obs["evidence_file"])).read_text(encoding="utf-8")
     attempts_by_model: dict[str, dict[str, dict[str, Any]]] = {}
     for model, runs in (record["evidence"].get("runs") or {}).items():
         attempts: dict[str, dict[str, Any]] = {}
         for run in runs:
             payload = None
             if run.get("evidence_file"):
-                raw = (evidence_dir / run["evidence_file"]).read_text(encoding="utf-8")
+                raw = (evidence_dir / persisted_path(run["evidence_file"])).read_text(encoding="utf-8")
                 try:
                     payload = json.loads(raw)
                 except ValueError:

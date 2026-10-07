@@ -1,0 +1,13 @@
+[Unit]
+Description=Hourly :05 trigger for the prospective weather cycle
+
+[Timer]
+# America/New_York is always a whole number of hours from UTC, so :05 UTC is
+# :05 ET before and after DST changes and never lands in a repeated hour.
+OnCalendar=*-*-* *:05:00 UTC
+AccuracySec=1s
+Persistent=true
+Unit=kalshi-weather-prospective.service
+
+[Install]
+WantedBy=timers.target

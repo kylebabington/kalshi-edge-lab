@@ -1,0 +1,12 @@
+{
+  "collector_id": "oracle-micro-1",
+  "control_remote": "git@github.com:kylebabington/kalshi-edge-lab-control.git",
+  "ownership_ref": "refs/heads/ownership",
+  "backup_remote": "git@github.com:kylebabington/kalshi-edge-lab-state.git",
+  "backup_ref": "refs/heads/state",
+  "backup_dir": "/var/lib/kalshi-edge-lab/state-backup",
+  "collector_ping_url": null,
+  "backup_ping_url": null,
+  "ssh_command": "ssh -i /home/kalshi/.ssh/kel_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes",
+  "git_timeout_s": 60
+}

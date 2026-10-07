@@ -15,3 +15,4 @@ data/weather/snapshot_scores/
 data/weather/phase7/*
 !data/weather/phase7/frozen_pools_v1.csv
 .pytest_cache/
+collector.local.json

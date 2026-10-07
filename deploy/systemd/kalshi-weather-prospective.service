@@ -1,0 +1,15 @@
+[Unit]
+Description=kalshi-edge-lab hourly prospective weather cycle (RESEARCH_ONLY / NO_BET)
+Wants=network-online.target
+After=network-online.target time-sync.target
+
+[Service]
+Type=oneshot
+User=kalshi
+Group=kalshi
+WorkingDirectory=/srv/kalshi-edge-lab
+Environment=KEL_COLLECTOR_CONFIG=/etc/kalshi-edge-lab/collector.json
+ExecStart=/srv/kalshi-edge-lab/scripts/weather_prospective_task.sh
+TimeoutStartSec=50min
+KillMode=mixed
+Nice=5

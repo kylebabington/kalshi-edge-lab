@@ -1,2 +1,13 @@
 research/weather/hypotheses/phase7_prospective_protocol_v1.json -text
 data/weather/phase7/frozen_pools_v1.csv -text
+# Phase 7 pins the SHA-256 of these files as CRLF bytes (source_csv_sha256);
+# force CRLF on checkout so Linux clones reproduce the registered hashes.
+data/weather/calibration/gfs_operational_replay_obs_v2_1.csv text eol=crlf
+data/weather/calibration/hrrr_operational_replay_obs_v2_1.csv text eol=crlf
+# Tracked write-once collector state; the collector's copies are CRLF, so every
+# checkout must produce those bytes or a state restore sees a conflict.
+data/weather/checkpoints/KXHIGHNY-26SEP2[67]/*.json text eol=crlf
+data/weather/snapshots/KXHIGHNY-26SEP2[56]/*.json text eol=crlf
+data/weather/snapshot_scores/KXHIGHNY-26SEP2[56]__*.json text eol=crlf
+*.sh text eol=lf
+deploy/** text eol=lf
