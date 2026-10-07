@@ -251,6 +251,59 @@ def test_stop_status_requires_every_check_positive(tmp_path):
         assert ops.stop_status(repo_root=tmp_path, cfg=None, checks=checks(ok, ok, bad))["confirmed_stopped"] is False
 
 
+SECRET_UUID = "5f0c3a1e-6b2d-4c8e-9a7f-0d1e2f3a4b5c"
+SECRET_URL = f"https://hc-ping.com/{SECRET_UUID}"
+
+
+class FakeResponse:
+    def __init__(self, status_code: int):
+        self.status_code = status_code
+
+
+def _connection_error(url, **kw):
+    import requests
+
+    raise requests.ConnectionError(
+        f"HTTPSConnectionPool(host='hc-ping.com', port=443): Max retries exceeded with url: {url} "
+        "(Caused by NameResolutionError: secret-detail)")
+
+
+def _http_error(status):
+    def post(url, **kw):
+        return FakeResponse(status)
+    return post
+
+
+@pytest.mark.parametrize("post, expected", [
+    (_connection_error, "ConnectionError"),
+    (_http_error(404), "HTTP 404"),
+    (_http_error(500), "HTTP 500"),
+])
+def test_ping_failures_never_reveal_the_url_or_exception_text(tmp_path, monkeypatch, capsys, post, expected):
+    import requests
+
+    monkeypatch.setattr(requests, "post", post)
+    for fail in (False, True):
+        ops.http_ping(SECRET_URL, fail, "{}")
+    cfg = tmp_path / "collector.json"
+    cfg.write_text(json.dumps({"collector_id": "windows-laptop", "control_remote": "unused",
+                               "collector_ping_url": SECRET_URL}), encoding="utf-8")
+    monkeypatch.setenv(ops.CONFIG_ENV, str(cfg))
+    assert ops.main(["post", "--cycle-exit", "0"]) == ops.EXIT_OK
+    out, err = capsys.readouterr()
+    assert expected in err
+    for leaked in (SECRET_UUID, "hc-ping.com", "Max retries", "secret-detail", "NameResolution"):
+        assert leaked not in out and leaked not in err
+
+
+def test_successful_ping_is_silent(monkeypatch, capsys):
+    import requests
+
+    monkeypatch.setattr(requests, "post", _http_error(200))
+    ops.http_ping(SECRET_URL, False, "{}")
+    assert capsys.readouterr() == ("", "")
+
+
 def test_windows_active_cycle_check_sees_lock(tmp_path):
     assert ops._windows_no_active_cycle(tmp_path)[0] is True
     write(tmp_path, "data/logs/prospective/cycle.lock", b"{}")

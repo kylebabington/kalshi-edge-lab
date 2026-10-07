@@ -250,15 +250,24 @@ Pinger = Callable[[str | None, bool, str], None]
 
 
 def http_ping(url: str | None, fail: bool, body: str) -> None:
-    """Healthchecks.io-style ping: URL for success, URL + '/fail' for failure."""
+    """Healthchecks.io-style ping: URL for success, URL + '/fail' for failure.
+
+    Ping URLs are credentials and exception text embeds them, so failures are
+    reported by exception type or HTTP status only.
+    """
     if not url:
         return
     import requests
 
+    kind = "fail" if fail else "success"
     try:
-        requests.post(url.rstrip("/") + ("/fail" if fail else ""), data=body.encode("utf-8")[:10000], timeout=10)
-    except requests.RequestException as error:
-        print(f"alert ping failed: {type(error).__name__}: {error}", file=sys.stderr)
+        response = requests.post(url.rstrip("/") + ("/fail" if fail else ""),
+                                 data=body.encode("utf-8")[:10000], timeout=10)
+    except Exception as error:  # noqa: BLE001 - never let a ping error escape with the URL in it
+        print(f"alert ping ({kind}) failed: {type(error).__name__}", file=sys.stderr)
+        return
+    if not 200 <= response.status_code < 300:
+        print(f"alert ping ({kind}) failed: HTTP {response.status_code}", file=sys.stderr)
 
 
 def guard(
