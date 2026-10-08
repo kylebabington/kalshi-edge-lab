@@ -99,7 +99,14 @@ the collector's disk and in its local backup clone.
 Use only resources labelled "Always Free-eligible". During the 30-day trial
 the console also offers paid resources; avoid them. Specifically:
 
-- Shape `VM.Standard.E2.1.Micro` only (x86_64). Do not use flexible E3/E4/E5 shapes.
+- Shape `VM.Standard.A1.Flex` (ARM64), **1 OCPU, 6 GB**, home region (Chicago) only.
+  Always Free covers 1,500 OCPU-hours and 9,000 GB-hours per month across all A1
+  instances (2 OCPU / 12 GB continuous); 1 OCPU / 6 GB uses at most 744 / 4,464.
+  No other A1 instance may exist. Do not use E3/E4/E5 or any other Flex shape.
+- `VM.Standard.E2.1.Micro` (x86_64) is **unresolved**: the tenancy's E2 Micro
+  allowance exists in Chicago AD 3, but the shape is absent from the console and
+  from successful `compute shape list` responses in every AD. Not a launch-capacity
+  error and not image-dependent; not pursued further.
 - One boot volume, default size (<= 200 GB total across volumes). No extra block volumes.
 - Boot-volume backup policy: **none** (only 5 manual backups are free).
 - No load balancer, NAT gateway, database, Object Storage tiers beyond free, or second region.
@@ -110,9 +117,14 @@ the console also offers paid resources; avoid them. Specifically:
 
 1. Oracle signup (you), US home region, $1 card authorization, no upgrade.
 2. VCN wizard with a public subnet; ingress only SSH from your IP.
-3. Instance: E2.1.Micro, Ubuntu 24.04 x86 (Always Free-eligible), your SSH key.
-   On "out of host capacity", retry other ADs daily; if it never succeeds,
-   use section 10.
+3. Instance: A1.Flex 1 OCPU / 6 GB, Canonical Ubuntu 24.04 **aarch64**, default
+   boot volume, your SSH key. On "out of host capacity", retry other ADs later;
+   if it never succeeds, use section 11. Every locked dependency ships a cp314
+   manylinux aarch64 or pure-Python wheel. `reproduce-all` keeps exact canonical
+   JSON equality on ARM64 (no float tolerance); predictions use only correctly
+   rounded operations, and `math.log` in log loss is the one libm-dependent
+   step. Unverified on ARM64 until staging passes; any mismatch is reported,
+   not tolerated.
 4. Server: 2 GB swapfile; `timedatectl set-ntp true`; `apt install git`;
    install `uv`; `uv python install 3.14.0`; user `kalshi`.
 5. Staging clone at `/srv/kalshi-edge-lab-staging`:
@@ -248,7 +260,8 @@ terminated. If it may come back, the marker already makes it skip.
 
 ## 10. If the VM is reclaimed or lost
 
-- Idle reclamation (CPU p95 < 20% and network < 20% over 7 days) stops the VM;
+- Idle reclamation (CPU p95 < 20%, network < 20% and, for A1, memory < 20% over
+  7 days) stops the VM; an hourly collector meets all three, so expect it;
   Oracle normally emails first. Healthchecks alerts within about 80 minutes.
 - Checkpoints during the outage are not captured. The next cycle anywhere
   writes `MISSED` receipts (`window_elapsed_without_capture`). No backfill.
