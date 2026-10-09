@@ -1,0 +1,29 @@
+{
+  "events": [
+    {
+      "id": "401703500",
+      "name": "Fixture Open",
+      "date": "2026-03-05T05:00Z",
+      "endDate": "2026-03-08T05:00Z",
+      "status": {"type": {"name": "STATUS_FINAL", "completed": true}},
+      "competitions": [
+        {
+          "competitors": [
+            {"id": "100", "order": 1, "score": "-12", "athlete": {"displayName": "Alpha Winner"},
+             "linescores": [{"value": 67}, {"value": 68}, {"value": 69}, {"value": 72}, {"value": 4}]},
+            {"id": "200", "order": 2, "score": "-12", "athlete": {"displayName": "Bravo Playoff"},
+             "linescores": [{"value": 68}, {"value": 68}, {"value": 68}, {"value": 72}, {"value": 5}]},
+            {"id": "300", "order": 3, "score": "-8", "athlete": {"displayName": "Charlie Tied"},
+             "linescores": [{"value": 70}, {"value": 70}, {"value": 70}, {"value": 70}]},
+            {"id": "400", "order": 4, "score": "-8", "athlete": {"displayName": "Delta Tied"},
+             "linescores": [{"value": 69}, {"value": 71}, {"value": 70}, {"value": 70}]},
+            {"id": "500", "order": 5, "score": "E", "athlete": {"displayName": "Echo Last"},
+             "linescores": [{"value": 72}, {"value": 72}, {"value": 72}, {"value": 72}]},
+            {"id": "600", "order": 6, "score": "+6", "athlete": {"displayName": "Foxtrot Cut"},
+             "linescores": [{"value": 75}, {"value": 75}]}
+          ]
+        }
+      ]
+    }
+  ]
+}

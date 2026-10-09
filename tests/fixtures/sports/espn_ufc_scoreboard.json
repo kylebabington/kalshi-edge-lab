@@ -1,0 +1,33 @@
+{
+  "events": [
+    {
+      "id": "600050001",
+      "name": "UFC Fixture Night",
+      "date": "2026-02-01T00:00Z",
+      "competitions": [
+        {
+          "id": "401800001",
+          "date": "2026-02-01T03:00Z",
+          "type": {"abbreviation": "LW"},
+          "format": {"regulation": {"periods": 3}},
+          "status": {"period": 3, "clock": 300.0, "type": {"name": "STATUS_FINAL", "completed": true}},
+          "competitors": [
+            {"id": "11", "order": 1, "winner": true, "athlete": {"displayName": "Ann Decision"}},
+            {"id": "12", "order": 2, "winner": false, "athlete": {"displayName": "Bea Judges"}}
+          ]
+        },
+        {
+          "id": "401800002",
+          "date": "2026-02-01T04:00Z",
+          "type": {"abbreviation": "HW"},
+          "format": {"regulation": {"periods": 5}},
+          "status": {"period": 2, "clock": 95.0, "type": {"name": "STATUS_FINAL", "completed": true}},
+          "competitors": [
+            {"id": "21", "order": 1, "winner": false, "athlete": {"displayName": "Cal Finished"}},
+            {"id": "22", "order": 2, "winner": true, "athlete": {"displayName": "Dee Knockout"}}
+          ]
+        }
+      ]
+    }
+  ]
+}

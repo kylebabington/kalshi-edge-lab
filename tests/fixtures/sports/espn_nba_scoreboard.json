@@ -1,0 +1,44 @@
+{
+  "events": [
+    {
+      "id": "401700001",
+      "date": "2026-01-10T00:30Z",
+      "season": {"year": 2026, "type": 2},
+      "status": {"type": {"name": "STATUS_FINAL", "completed": true}},
+      "competitions": [
+        {
+          "id": "401700001",
+          "date": "2026-01-10T00:30Z",
+          "neutralSite": false,
+          "status": {"type": {"name": "STATUS_FINAL", "completed": true}},
+          "competitors": [
+            {"homeAway": "home", "score": "112", "winner": true,
+             "team": {"id": "4", "abbreviation": "CHI", "displayName": "Chicago Bulls", "location": "Chicago", "shortDisplayName": "Bulls"},
+             "linescores": [{"value": 30}, {"value": 25}, {"value": 27}, {"value": 30}]},
+            {"homeAway": "away", "score": "104", "winner": false,
+             "team": {"id": "21", "abbreviation": "PHX", "displayName": "Phoenix Suns", "location": "Phoenix", "shortDisplayName": "Suns"},
+             "linescores": [{"value": 28}, {"value": 28}, {"value": 20}, {"value": 28}]}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401700002",
+      "date": "2026-01-11T01:00Z",
+      "season": {"year": 2026, "type": 2},
+      "status": {"type": {"name": "STATUS_SCHEDULED", "completed": false}},
+      "competitions": [
+        {
+          "id": "401700002",
+          "date": "2026-01-11T01:00Z",
+          "neutralSite": false,
+          "status": {"type": {"name": "STATUS_SCHEDULED", "completed": false}},
+          "competitors": [
+            {"homeAway": "home", "score": "0", "team": {"id": "21", "abbreviation": "PHX", "displayName": "Phoenix Suns", "location": "Phoenix"}},
+            {"homeAway": "away", "score": "0", "team": {"id": "4", "abbreviation": "CHI", "displayName": "Chicago Bulls", "location": "Chicago"}}
+          ]
+        }
+      ]
+    }
+  ]
+}
