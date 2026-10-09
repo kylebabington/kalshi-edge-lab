@@ -1,11 +1,14 @@
 """Sports Phase 1 CLI (RESEARCH_ONLY / NO_BET).
 
-    python -m research.sports.run all                      # fetch, build, select, evaluate, report
-    python -m research.sports.run all --cache-only         # reproduce from the raw cache, no network
+    python -m research.sports.run all --cache-only         # reproduce v2 from the raw cache, no network
     python -m research.sports.run evaluate --sport Soccer --family total
     python -m research.sports.run build --competition nba,nhl
+    python -m research.sports.run verify --protocol sports_phase1_v1
+    python -m research.sports.run manifest --protocol sports_phase1_v2
 
-Stages: fetch -> build -> select (freeze protocol) -> evaluate (write-once journals) -> report.
+Stages: fetch -> build -> select (freeze protocol) -> evaluate (write-once journals) -> benchmark -> report.
+``manifest`` records a protocol's artifact hashes; ``verify`` checks them. sports_phase1_v1 is
+preserved: only ``verify`` (and ``manifest`` to check its hashes) may target it.
 """
 
 from __future__ import annotations
@@ -75,15 +78,32 @@ def stage_build(args, comps, specs, fetcher):
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="research.sports.run")
-    p.add_argument("stage", choices=["fetch", "build", "select", "evaluate", "benchmark", "report", "all"])
+    p.add_argument("stage", choices=["fetch", "build", "select", "evaluate", "benchmark", "report", "all",
+                                     "manifest", "verify"])
     p.add_argument("--competition", help="comma-separated competition keys (e.g. nba,epl,k_kxatpmatch)")
     p.add_argument("--sport", help="comma-separated sports (e.g. Basketball,Soccer)")
     p.add_argument("--family", help="comma-separated contract families (game_winner,spread,total,...)")
     p.add_argument("--source", help="comma-separated source types (espn_team,espn_fight,espn_golf,jolpica,kalshi_only)")
     p.add_argument("--cache-only", action="store_true", help="never touch the network; fail on cache miss")
     p.add_argument("--min-interval", type=float, default=0.5, help="seconds between requests to one host")
-    p.add_argument("--protocol", default="sports_phase1_v1")
+    p.add_argument("--protocol", default="sports_phase1_v2")
+    p.add_argument("--checked-against", help="manifest stage: run-level hash file the artifacts must match")
+    p.add_argument("--note", default="", help="manifest stage: provenance note")
     args = p.parse_args(argv)
+    if args.stage in ("manifest", "verify"):
+        from . import manifest as man
+        if args.stage == "manifest":
+            man.write_manifest(args.protocol, args.checked_against, args.note, log)
+            return 0
+        problems = man.verify(args.protocol)
+        for x in problems:
+            log(f"VERIFY FAILED {args.protocol}: {x}")
+        log(f"verify {args.protocol}: {'OK' if not problems else f'{len(problems)} problem(s)'}")
+        return 1 if problems else 0
+    from .evaluate import PRESERVED
+    if args.protocol in PRESERVED:
+        raise SystemExit(f"{args.protocol} is preserved; only verify/manifest may target it "
+                         f"(reproduce at commit {PRESERVED[args.protocol]})")
     comps, specs, excl = select_competitions(args)
     fetcher = Fetcher(cache_only=args.cache_only, min_interval=args.min_interval)
     stages = ["fetch", "build", "select", "evaluate", "benchmark", "report"] if args.stage == "all" else [args.stage]

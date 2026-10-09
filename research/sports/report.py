@@ -1,8 +1,9 @@
-"""Consolidated Phase 1 reporting: coverage of the whole inventory, results, exclusions, hashes.
+"""Consolidated Phase 1 reporting for a correction protocol (v2): coverage, cohorts, results.
 
-Writes tracked summaries under docs/research/ (small, deterministic given the cached inputs):
-  sports_phase1_results_v1.md, sports_phase1_coverage_v1.csv, sports_phase1_results_v1.csv,
-  sports_audit_supplement_v1_1.md
+Writes versioned tracked summaries under docs/research/ (deterministic given the cached inputs):
+  sports_phase1_results_v2.md, sports_phase1_coverage_v2.csv, sports_phase1_results_v2.csv,
+  sports_phase1_v1_to_v2_comparison.md
+The preserved v1 documents are never written by this module.
 """
 
 from __future__ import annotations
@@ -15,11 +16,13 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from .competitions import all_competitions, load_inventory
-from .core import NORMALIZED, PREDICTIONS, PROTOCOLS, RAW_ROOT, REPO_ROOT, RESULTS, Fetcher, CacheMiss, read_jsonl, \
-    sha256_file, sha256_json
-from .evaluate import code_hash, protocol_path
+from .core import NORMALIZED, RESULTS, read_jsonl
+from .evaluate import COHORT_RULES, GATE_AGREEMENT_PCT, GATE_MIN_N, INTERPRETATION, MIN_MATCHED_CLUSTERS, PRESERVED, \
+    TEST_PERIOD_NOTE, classify, code_hash, load_protocol
+from .benchmark import DESCRIPTIVE_KO, INSUFFICIENT, SUFFICIENT
+from . import manifest as man
 
-DOCS = REPO_ROOT / "docs" / "research"
+DOCS = man.DOCS
 FEAS = DOCS / "sports_feasibility_v1.md"
 NOT_PHASE1_FAMILY = {
     "player_prop": "player/appearance-conditioned; pregame participation not reconstructable as-of (not modelled)",
@@ -35,6 +38,10 @@ NOT_PHASE1_FAMILY = {
     "combo_parlay": "out of scope (derived combination)",
     "test_placeholder": "out of scope (test)",
 }
+COHORT_ORDER = ["strict", "exploratory", "kalshi_settlement_only"]
+COHORT_LABEL = {"strict": "strict (settlement-concordant, pre-test reconciled)",
+                "exploratory": "exploratory (insufficient pre-test reconciliation evidence)",
+                "kalshi_settlement_only": "Kalshi-settlement-only (no independent source)"}
 
 
 def v1_classes() -> dict[tuple[str, str], str]:
@@ -55,8 +62,14 @@ def _f(x, nd=4):
 def _ci(d, key):
     if not d or d.get("n", 0) == 0 or key not in d:
         return ""
+    if f"{key}_ci" not in d:
+        return f"{d[key]:+.4f} (no CI)"
     lo, hi = d[f"{key}_ci"]
     return f"{d[key]:+.4f} [{lo:+.4f}, {hi:+.4f}]"
+
+
+def _cls(d, key="d_brier"):
+    return classify(d[f"{key}_ci"]) if d and d.get("n") and f"{key}_ci" in d else ""
 
 
 def _load(protocol):
@@ -66,12 +79,38 @@ def _load(protocol):
         j("closing_lines.json")
 
 
-def build_coverage(protocol: str):
+def _csv(path: Path, rows: list[dict]):
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()), lineterminator="\n")
+    w.writeheader()
+    w.writerows(rows)
+    path.write_text(buf.getvalue(), encoding="utf-8")
+
+
+def _read_csv(path: Path) -> list[dict]:
+    with open(path, encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def _table(header, rows):
+    out = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    out += ["| " + " | ".join(str(x) for x in r) + " |" for r in rows]
+    return "\n".join(out)
+
+
+# --------------------------------------------------------------------------------------------
+# Coverage of the whole inventory
+# --------------------------------------------------------------------------------------------
+
+def build_coverage(protocol: str, parent: str):
     inv = load_inventory()
     comps, specs, excl = all_competitions(inv)
     cls = v1_classes()
-    proto = json.loads(protocol_path(protocol).read_text(encoding="utf-8"))
+    proto = load_protocol(protocol)
     _, metrics, status, _, _ = _load(protocol)
+    pdocs = dict(zip(["results_md", "coverage", "results_csv", "extra"], man.DOC_FILES[parent]))
+    v1_status = {r["series_ticker"]: r["phase1_status"] for r in _read_csv(DOCS / pdocs["coverage"])}
+    attempted_sports = {c.sport for c in comps}
     series_role = {}
     for c in comps:
         for s, kind, seg in specs[c.key]:
@@ -79,7 +118,6 @@ def build_coverage(protocol: str):
         for e in excl[c.key]:
             series_role[e["series"]] = (c, "excluded_spec", e["reason"])
     per_series = defaultdict(Counter)
-    test_scored = defaultdict(set)
     for c in comps:
         p = NORMALIZED / c.key / "contracts.jsonl"
         if not p.exists():
@@ -87,6 +125,7 @@ def build_coverage(protocol: str):
         for r in read_jsonl(p):
             per_series[r["series"]]["contracts"] += 1
             per_series[r["series"]]["ok"] += int(r["status"] == "ok")
+    test_scored = {}
     for m in metrics:
         if m["level"] == "series":
             prim = m["models"].get(m["primary"], {})
@@ -94,33 +133,47 @@ def build_coverage(protocol: str):
     rows = []
     for r in inv:
         s = r["series_ticker"]
-        v1 = cls.get((r["sport"], r["contract_family"]), "")
         role = series_role.get(s)
         out = {"series_ticker": s, "series_title": r["series_title"], "sport": r["sport"],
                "competition_top": r["competition_top"], "contract_family": r["contract_family"],
-               "v1_cell_class": v1, "traded_markets": r["traded_markets"], "volume_fp_contracts": r["volume_fp_total"]}
+               "v1_cell_class": cls.get((r["sport"], r["contract_family"]), ""),
+               "traded_markets": r["traded_markets"], "volume_fp_contracts": r["volume_fp_total"],
+               "sport_supported": r["sport"] in attempted_sports}
+        cohort, gate_pre, gate_all, dis = "", "", "", ""
         if role:
             comp, kind, why = role
             entry = proto["competitions"].get(comp.key, {})
             gate = (entry.get("gate") or {}).get(s)
             n, k = test_scored.get(s, (0, 0))
-            st = status.get(comp.key, {})
+            d = (status.get(comp.key, {}).get("test_disagreements_by_series") or {}).get(s, 0)
+            if gate:
+                gate_pre = f"{gate['pre_agree']}/{gate['pre_n']}"
+                gate_all = f"{gate['all_agree']}/{gate['all_n']}"
             if kind == "excluded_spec":
-                phase = "excluded"
-                reason = why
+                st, reason = "excluded_spec", why
             elif entry.get("blocked") or (entry.get("params") or {}).get("blocked"):
-                phase, reason = "blocked", entry.get("blocked") or entry["params"]["blocked"]
-            elif kind == "independent_outcomes" and gate is not None and not gate["verified"]:
-                phase, reason = "excluded", f"reconciliation gate failed ({gate['agree']}/{gate['n']})"
-            elif kind == "independent_outcomes" and gate is None:
-                phase, reason = "excluded", "no reconciled settled contracts (identity/outcome exclusions)"
-            elif n > 0:
-                phase, reason = "evaluated", ""
+                st, reason = "blocked", entry.get("blocked") or entry["params"]["blocked"]
+            elif kind == "kalshi_settlement_only":
+                cohort = "kalshi_settlement_only"
+                st, reason = ("kalshi_settlement_only_evaluated", "") if n else \
+                    ("no_test_contracts", "no scored contracts in the test window")
+            elif gate is None:
+                st, reason = "excluded_no_reconciled_contracts", "no settled contracts with a resolved independent outcome"
+            elif gate["cohort"] == "failed":
+                cohort = "failed"
+                st, reason = "excluded_gate_failed", f"pre-test agreement {gate_pre} < {GATE_AGREEMENT_PCT}%"
             else:
-                phase, reason = "no test-period contracts", "no scored contracts in the test window"
-            out.update(phase1_competition=comp.key, phase1_path=kind, phase1_status=phase, reason=reason,
+                cohort = gate["cohort"]
+                if n:
+                    st = f"{cohort}_evaluated"
+                    reason = "" if cohort == "strict" else f"only {gate['pre_n']} pre-test settled contracts (< {GATE_MIN_N})"
+                else:
+                    st = "no_test_contracts"
+                    reason = "all test contracts disagree with Kalshi settlement" if d else "no scored contracts in the test window"
+            dis = d
+            out.update(attempted_competition=comp.key, phase1_path=kind, cohort=cohort, coverage_status=st, reason=reason,
                        contracts_built=per_series[s]["contracts"], contracts_ok=per_series[s]["ok"],
-                       gate_agreement=f"{gate['agree']}/{gate['n']} ({gate['basis']})" if gate else "",
+                       pre_test_agreement=gate_pre, all_settled_agreement=gate_all, test_disagreements_excluded=dis,
                        test_contracts=n, test_clusters=k)
         else:
             fam = r["contract_family"]
@@ -134,18 +187,13 @@ def build_coverage(protocol: str):
                 why = "game-winner series not two-way structured or not in a Phase 1 adapter"
             else:
                 why = "no independent results adapter for this competition in Phase 1 (game_winner only via Kalshi-only path)"
-            out.update(phase1_competition="", phase1_path="not_attempted", phase1_status="not attempted", reason=why,
-                       contracts_built="", contracts_ok="", gate_agreement="", test_contracts="", test_clusters="")
+            st = "not_attempted_supported_sport" if out["sport_supported"] else "not_attempted_unsupported_sport"
+            out.update(attempted_competition="", phase1_path="not_attempted", cohort="", coverage_status=st, reason=why,
+                       contracts_built="", contracts_ok="", pre_test_agreement="", all_settled_agreement="",
+                       test_disagreements_excluded="", test_contracts="", test_clusters="")
+        out["v1_status"] = v1_status.get(s, "")
         rows.append(out)
     return rows
-
-
-def _csv(path: Path, rows: list[dict]):
-    buf = io.StringIO()
-    w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()), lineterminator="\n")
-    w.writeheader()
-    w.writerows(rows)
-    path.write_text(buf.getvalue(), encoding="utf-8")
 
 
 def results_rows(metrics) -> list[dict]:
@@ -156,44 +204,26 @@ def results_rows(metrics) -> list[dict]:
         prim = m["models"].get(m["primary"], {})
         nv = m["models"].get("naive", {})
         sk = m.get("skill_vs_naive") or {}
-        out.append({"level": m["level"], "key": m["key"], "family": m["family"], "primary_model": m["primary"],
-                    "test_contracts": prim.get("n"), "clusters": prim.get("clusters"), "sufficient": m["sufficient"],
+        ci = lambda k, i: _f((sk.get(f"{k}_ci") or [None, None])[i])
+        cw, ee = _cls(sk, "d_brier"), _cls(sk, "d_brier_event")
+        out.append({"level": m["level"], "key": m["key"], "cohort": m["cohort"], "family": m["family"],
+                    "primary_model": m["primary"], "test_contracts": prim.get("n"), "clusters": prim.get("clusters"),
+                    "sufficient": m["sufficient"],
                     "brier_model": _f(prim.get("brier")), "brier_naive": _f(nv.get("brier")),
+                    "brier_event_model": _f(prim.get("brier_event")), "brier_event_naive": _f(nv.get("brier_event")),
                     "logloss_model": _f(prim.get("log_loss")), "logloss_naive": _f(nv.get("log_loss")),
                     "ece_model": _f(prim.get("ece")), "base_rate": _f(prim.get("base_rate")),
-                    "d_brier_vs_naive": _f(sk.get("d_brier")),
-                    "d_brier_ci_lo": _f((sk.get("d_brier_ci") or [None, None])[0]),
-                    "d_brier_ci_hi": _f((sk.get("d_brier_ci") or [None, None])[1]),
-                    "d_logloss_vs_naive": _f(sk.get("d_log_loss")),
-                    "d_logloss_ci_lo": _f((sk.get("d_log_loss_ci") or [None, None])[0]),
-                    "d_logloss_ci_hi": _f((sk.get("d_log_loss_ci") or [None, None])[1])})
+                    "d_brier_vs_naive": _f(sk.get("d_brier")), "d_brier_ci_lo": ci("d_brier", 0),
+                    "d_brier_ci_hi": ci("d_brier", 1), "class_contract_weighted": cw if m["sufficient"] else "",
+                    "d_brier_event_vs_naive": _f(sk.get("d_brier_event")), "d_brier_event_ci_lo": ci("d_brier_event", 0),
+                    "d_brier_event_ci_hi": ci("d_brier_event", 1), "class_event_equal": ee if m["sufficient"] else "",
+                    "d_logloss_vs_naive": _f(sk.get("d_log_loss")), "d_logloss_ci_lo": ci("d_log_loss", 0),
+                    "d_logloss_ci_hi": ci("d_log_loss", 1),
+                    "d_logloss_event_vs_naive": _f(sk.get("d_log_loss_event")),
+                    "d_logloss_event_ci_lo": ci("d_log_loss_event", 0), "d_logloss_event_ci_hi": ci("d_log_loss_event", 1),
+                    "weighting_class_flip": bool(m["sufficient"] and cw and ee and cw != ee),
+                    "classification_note": "exploratory, unadjusted for multiple comparisons"})
     return out
-
-
-def volume_units_check(fetcher: Fetcher) -> dict:
-    """Sum of trade counts equals volume_fp for a sample market (cached request)."""
-    p = NORMALIZED / "ufc" / "contracts.jsonl"
-    if not p.exists():
-        return {"status": "ufc not built"}
-    rows = [r for r in read_jsonl(p) if r["ticker"] == "KXUFCDISTANCE-26OCT10FRARIB-DIST"]
-    if not rows:
-        return {"status": "sample market not present"}
-    tot, n, cur = 0.0, 0, None
-    try:
-        while True:
-            prm = {"ticker": rows[0]["ticker"], "limit": 1000}
-            if cur:
-                prm["cursor"] = cur
-            x = fetcher.get("kalshi", "https://external-api.kalshi.com/trade-api/v2/markets/trades", prm).json()
-            for t in x.get("trades", []):
-                tot += float(t.get("count_fp") or t.get("count") or 0)
-                n += 1
-            cur = x.get("cursor")
-            if not cur:
-                break
-    except CacheMiss:
-        return {"status": "not cached"}
-    return {"ticker": rows[0]["ticker"], "volume_fp": rows[0]["volume_fp"], "trades": n, "sum_trade_count_fp": round(tot, 2)}
 
 
 def identity_stats(comps) -> list[dict]:
@@ -206,207 +236,213 @@ def identity_stats(comps) -> list[dict]:
         if summ.get("blocked"):
             out.append({"competition": c.key, "blocked": summ["blocked"]})
             continue
-        ev, ms, src = set(), set(), set()
-        both = sum(v.get("tickers_in_both_tiers", 0) for v in summ["dedupe"].values())
-        raw = sum(v.get("raw_rows", 0) for v in summ["dedupe"].values())
-        for r in read_jsonl(NORMALIZED / c.key / "contracts.jsonl"):
-            if r["status"] != "ok":
-                continue
-            ev.add(r["event_ticker"])
-            if r.get("milestone_id"):
-                ms.add(r["milestone_id"])
-            src.add(r["cluster"])
-        out.append({"competition": c.key, "sport": c.sport, "source": c.source, "raw_market_rows": raw,
-                    "unique_tickers": summ["markets"], "tickers_in_both_tiers": both, "ok_contracts": summ["contracts_ok"],
-                    "kalshi_events": len(ev), "kalshi_milestones": len(ms), "unique_outcome_units": len(src),
-                    "excluded": dict(summ["contracts_excluded"])})
+        out.append({"competition": c.key, "excluded": dict(summ["contracts_excluded"])})
     return out
 
+
+# --------------------------------------------------------------------------------------------
+# Headline computations
+# --------------------------------------------------------------------------------------------
+
+def naive_headline(metrics, cohort) -> dict:
+    """Per family: groups, sufficient groups and exploratory classes under both weightings."""
+    out = defaultdict(lambda: {"groups": 0, "sufficient": 0, "cw": Counter(), "ee": Counter()})
+    for m in metrics:
+        if m["level"] != "competition" or m["cohort"] != cohort:
+            continue
+        f = out[m["family"]]
+        f["groups"] += 1
+        sk = m.get("skill_vs_naive") or {}
+        if m["sufficient"] and sk.get("n"):
+            f["sufficient"] += 1
+            f["cw"][_cls(sk, "d_brier")] += 1
+            f["ee"][_cls(sk, "d_brier_event")] += 1
+    return dict(sorted(out.items()))
+
+
+def v1_naive_headline(v1_metrics, cmap) -> dict:
+    out = {"independent": defaultdict(Counter), "kalshi_only": defaultdict(Counter)}
+    for m in v1_metrics:
+        if m["level"] != "competition":
+            continue
+        c = cmap.get(m["key"])
+        pool = "kalshi_only" if c and c.source == "kalshi_only" else "independent"
+        sk = m.get("skill_vs_naive") or {}
+        if m["sufficient"] and sk.get("n"):
+            out[pool][m["family"]][classify(sk["d_brier_ci"])] += 1
+    return out
+
+
+def market_headline(bench) -> dict:
+    rows = [b for b in bench if not b.get("skipped")]
+    head = [b for b in rows if b.get("headline_eligible")]
+    out = {"benchmarked": len(rows), "skipped": len(bench) - len(rows),
+           "independent": sum(b["source"] != "kalshi_only" for b in rows),
+           "kalshi_only": sum(b["source"] == "kalshi_only" for b in rows),
+           "headline": len(head),
+           "model_vs_kalshi": Counter(_cls(b["views"]["strict_matched"].get("model_minus_kalshi")) for b in head),
+           "naive_vs_kalshi": Counter(_cls(b["views"]["strict_matched"].get("naive_minus_kalshi")) for b in head),
+           "independent_insufficient_strict": sorted(b["competition"] for b in rows if b["source"] != "kalshi_only"
+                                                     and not b.get("headline_eligible")),
+           "all_view_sufficient": sum(b["views"]["all_matched"]["sufficiency"] == SUFFICIENT for b in rows)}
+    return out
+
+
+# --------------------------------------------------------------------------------------------
+# Stage
+# --------------------------------------------------------------------------------------------
 
 def stage_report(args, log):
     protocol = args.protocol
+    if protocol in PRESERVED:
+        raise SystemExit(f"{protocol} is preserved; its documents are not regenerated")
+    proto = load_protocol(protocol)
+    parent = proto["supersedes"]
+    names = dict(zip(["results_md", "coverage", "results_csv", "comparison"], man.DOC_FILES[protocol]))
     out_dir, metrics, status, bench, closing = _load(protocol)
     comps, specs, excl = all_competitions()
-    cov = build_coverage(protocol)
-    _csv(DOCS / "sports_phase1_coverage_v1.csv", cov)
-    res = results_rows(metrics)
-    if res:
-        _csv(DOCS / "sports_phase1_results_v1.csv", res)
+    cov = build_coverage(protocol, parent)
+    _csv(DOCS / names["coverage"], cov)
+    _csv(DOCS / names["results_csv"], results_rows(metrics))
     ids = identity_stats(comps)
-    fetcher = Fetcher(cache_only=args.cache_only, min_interval=args.min_interval)
-    vol = volume_units_check(fetcher)
-    proto_p = protocol_path(protocol)
-    journals = sorted((PREDICTIONS / protocol).glob("*.jsonl")) if (PREDICTIONS / protocol).exists() else []
-    hashes = {
-        "protocol_file_sha256": sha256_file(proto_p),
-        "code_hash": code_hash(),
-        "normalized_data_manifest_sha256": sha256_json({k: v.get("data") for k, v in
-                                                       json.loads(proto_p.read_text(encoding="utf-8"))["competitions"].items()}),
-        "prediction_journals": len(journals),
-        "prediction_journals_manifest_sha256": sha256_json({p.name: sha256_file(p) for p in journals}),
-        "scored_rows_sha256": sha256_file(out_dir / "scored.jsonl") if (out_dir / "scored.jsonl").exists() else None,
-        "metrics_sha256": sha256_file(out_dir / "metrics.json") if (out_dir / "metrics.json").exists() else None,
-    }
-    write_results_md(protocol, cov, metrics, status, bench, closing, ids, hashes, excl, comps)
-    write_supplement(ids, vol, cov, comps)
+    hashes = {**man.summary_hashes(protocol), "code_hash": code_hash(),
+              "benchmark_metrics_sha256": man.sha256_file(out_dir / "benchmark_metrics.json"),
+              "benchmark_quotes_sha256": man.sha256_file(out_dir / "benchmark_quotes.jsonl"),
+              "closing_lines_sha256": man.sha256_file(out_dir / "closing_lines.json")}
+    v1_problems = man.verify(parent)
+    v1_man = json.loads(man.manifest_path(parent).read_text(encoding="utf-8"))
+    ctx = {"protocol": protocol, "parent": parent, "proto": proto, "cov": cov, "metrics": metrics, "status": status,
+           "bench": bench, "closing": closing, "ids": ids, "hashes": hashes, "excl": excl, "comps": comps,
+           "cmap": {c.key: c for c in comps}, "names": names, "v1_problems": v1_problems, "v1_manifest": v1_man}
+    (DOCS / names["results_md"]).write_text(write_results_md(ctx), encoding="utf-8")
+    (DOCS / names["comparison"]).write_text(write_comparison_md(ctx), encoding="utf-8")
     (out_dir / "report_hashes.json").write_text(json.dumps(hashes, indent=1, sort_keys=True), encoding="utf-8")
-    log(f"report written; hashes {json.dumps(hashes)}")
+    log(f"report written; parent verify {'OK' if not v1_problems else v1_problems[:3]}; hashes {json.dumps(hashes)}")
 
 
 # --------------------------------------------------------------------------------------------
-# Markdown writers
+# Markdown
 # --------------------------------------------------------------------------------------------
 
-def _table(header, rows):
-    out = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
-    out += ["| " + " | ".join(str(x) for x in r) + " |" for r in rows]
-    return "\n".join(out)
+def _headline_table(h) -> str:
+    rows = [[fam, v["groups"], v["sufficient"],
+             f"{v['cw']['better']} / {v['cw']['unclear']} / {v['cw']['worse']}",
+             f"{v['ee']['better']} / {v['ee']['unclear']} / {v['ee']['worse']}"] for fam, v in h.items()]
+    return _table(["Family", "Competition groups", "Meeting min. clusters",
+                   "Contract-weighted better / unclear / worse", "Event-equal better / unclear / worse"], rows) \
+        if rows else "_none_"
 
 
-def _sign(ci):
-    lo, hi = ci
-    return "better" if hi < 0 else "worse" if lo > 0 else "unclear"
-
-
-def _key_findings(metrics, bench, closing, cmap) -> list[str]:
-    out = []
-    for label, pick in (("independent-outcome", lambda c: c and c.source != "kalshi_only"),
-                        ("Kalshi-settlement-only", lambda c: c and c.source == "kalshi_only")):
-        groups = [m for m in metrics if m["level"] == "competition" and pick(cmap.get(m["key"]))]
-        suff = [m for m in groups if m["sufficient"] and m.get("skill_vs_naive", {}).get("n")]
-        by_fam = defaultdict(Counter)
-        for m in suff:
-            by_fam[m["family"]][_sign(m["skill_vs_naive"]["d_brier_ci"])] += 1
-        out.append(f"* {label.capitalize()} competition×family groups: {len(groups)} evaluated, {len(suff)} meet the "
-                   "minimum cluster count. Primary model vs naive benchmark (95% CI of ΔBrier):")
-        for fam, c in sorted(by_fam.items()):
-            out.append(f"  * {fam}: better {c['better']}, unclear {c['unclear']}, worse {c['worse']}")
-    rows = [b for b in bench if not b.get("skipped") and b.get("model_minus_kalshi", {}).get("n")]
-    c = Counter(_sign(b["model_minus_kalshi"]["d_brier_ci"]) for b in rows)
-    out.append(f"* Kalshi pre-cutoff mid vs primary model (game winners, {len(rows)} competitions with quotes): "
-               f"Kalshi significantly better in {c['worse']}, model significantly better in {c['better']}, "
-               f"unclear in {c['unclear']}. Baselines are calibrated references, not a source of edge.")
-    if closing and closing.get("closing_line", {}).get("n"):
-        out.append(f"* NFL closing line (post-cutoff information) Brier {_f(closing['closing_line']['brier'])} on "
-                   f"{closing['n_matched']} test contracts; Elo Δ vs closing "
-                   f"{_ci(closing.get('elo_minus_closing'), 'd_brier')}.")
-    out.append("* No profitability or executable-edge conclusions: hourly candles are sparse, fees/slippage are not "
-               "modelled, and the benchmark samples at most 150 (independent) or 40 (Kalshi-only) games per competition.\n")
-    return out
-
-
-def write_results_md(protocol, cov, metrics, status, bench, closing, ids, hashes, excl, comps):
-    cmap = {c.key: c for c in comps}
-    L = []
-    L.append("# Sports Phase 1 — historical baselines (v1)\n")
-    L.append("RESEARCH_ONLY / NO_BET. Generated by `python -m research.sports.run report`; numbers come from "
-             f"protocol `{protocol}` (frozen before test scoring). No profitability or executable-edge claims are made; "
-             "Kalshi comparisons use sparse hourly quotes at the forecast cutoff.\n")
-    L.append("## 0. Key findings (computed)\n")
-    L.extend(_key_findings(metrics, bench, closing, cmap))
-    # coverage summary
-    by_status = Counter(r["phase1_status"] for r in cov)
-    by_path = Counter(r["phase1_path"] for r in cov)
-    L.append("## 1. Coverage across the entire inventory\n")
-    L.append(f"All {len(cov):,} inventory series are listed in `sports_phase1_coverage_v1.csv` with their Phase 1 "
-             "path, status and reason.\n")
-    L.append(_table(["Phase 1 path", "Series"], sorted(by_path.items())))
-    L.append("")
-    L.append(_table(["Phase 1 status", "Series"], sorted(by_status.items())))
-    L.append("")
-    sport_rows = defaultdict(Counter)
-    for r in cov:
-        sport_rows[r["sport"]][r["phase1_status"]] += 1
-    statuses = sorted(by_status)
-    L.append("Series by sport and status:\n")
-    L.append(_table(["Sport"] + statuses, [[s] + [c.get(x, 0) for x in statuses] for s, c in
-                                           sorted(sport_rows.items(), key=lambda kv: -sum(kv[1].values()))]))
-    L.append("")
-    # evaluated combos
-    L.append("## 2. Implemented and evaluated combinations (test period)\n")
-    from .models import SPLITS, HORIZON_MIN
-    L.append(f"Test window: games starting {SPLITS['test_start'][:10]} to {SPLITS['test_end'][:10]} (exclusive); "
-             f"parameters selected on {SPLITS['train_start'][:10]}–{SPLITS['test_start'][:10]} only; ratings burn-in "
-             f"from {SPLITS['history_start'][:10]}. Forecast cutoff = scheduled start − {HORIZON_MIN} min. "
-             "Δ = primary model − naive benchmark (negative is better), 95% cluster-bootstrap CI. "
-             "`ok` = minimum independent clusters met.\n")
-    comp_rows, ko_rows = [], []
-    for m in metrics:
-        if m["level"] != "competition":
-            continue
-        prim = m["models"][m["primary"]]
-        nv = m["models"].get("naive", {})
-        sk = m.get("skill_vs_naive")
-        c = cmap.get(m["key"])
-        row = [m["key"], c.sport if c else "", m["family"], m["primary"], prim["n"], prim["clusters"],
-               "ok" if m["sufficient"] else "insufficient", _f(prim["brier"]), _f(nv.get("brier")),
-               _ci(sk, "d_brier"), _ci(sk, "d_log_loss"), _f(prim["ece"], 3)]
-        (ko_rows if c and c.source == "kalshi_only" else comp_rows).append(row)
-    hdr = ["Competition", "Sport", "Family", "Model", "Contracts", "Clusters", "Sample", "Brier", "Brier naive",
-           "ΔBrier [CI]", "ΔLogLoss [CI]", "ECE"]
-    L.append("### 2a. Independent-outcome competitions\n")
-    L.append(_table(hdr, comp_rows) if comp_rows else "_none evaluated_")
-    L.append("")
-    L.append("### 2b. Pooled by sport (independent outcomes and Kalshi-settlement-only pools)\n")
-    pool_rows = []
-    for m in metrics:
-        if m["level"] != "sport_pool":
-            continue
-        prim = m["models"][m["primary"]]
-        nv = m["models"].get("naive", {})
-        sk = m.get("skill_vs_naive")
-        pool_rows.append([m["key"], m["family"], m["primary"], prim["n"], prim["clusters"],
-                          "ok" if m["sufficient"] else "insufficient", _f(prim["brier"]), _f(nv.get("brier")),
-                          _ci(sk, "d_brier"), _ci(sk, "d_log_loss"), _f(prim["ece"], 3)])
-    L.append(_table(["Sport | pool", "Family", "Model", "Contracts", "Clusters", "Sample", "Brier", "Brier naive",
-                     "ΔBrier [CI]", "ΔLogLoss [CI]", "ECE"], pool_rows) if pool_rows else "_none_")
-    L.append("")
-    L.append("### 2c. Kalshi-settlement-only competitions (class B: labels are Kalshi settlements, no independent check)\n")
-    ko_suff = [r for r in ko_rows if r[6] == "ok"]
-    L.append(f"{len(ko_rows)} Kalshi-only competitions produced test forecasts; {len(ko_suff)} meet the minimum "
-             "cluster count and are listed; all are in `sports_phase1_results_v1.csv`.\n")
-    L.append(_table(hdr, ko_suff) if ko_suff else "_none with sufficient sample_")
-    L.append("")
-    # benchmark
-    L.append("## 3. Kalshi price benchmark at the forecast cutoff (game winners)\n")
-    L.append("Mid of the closing yes bid/ask of the latest hourly candle that *ended* at or before the cutoff; "
-             "quotes older than 3 h or one-sided books are not used and are counted. Sampled clusters ordered by hash "
-             "(labels unused). Δ = model − Kalshi (positive means Kalshi was better).\n")
+def write_results_md(ctx) -> str:
+    protocol, parent, metrics, bench, cov = ctx["protocol"], ctx["parent"], ctx["metrics"], ctx["bench"], ctx["cov"]
+    status, closing, cmap, names = ctx["status"], ctx["closing"], ctx["cmap"], ctx["names"]
+    L = [f"# Sports Phase 1 — historical baselines, retrospective correction ({protocol})\n",
+         f"RESEARCH_ONLY / NO_BET. Generated by `python -m research.sports.run report --protocol {protocol}`. "
+         f"{TEST_PERIOD_NOTE} Parameters and forecasts are those of `{parent}` (prediction journals verified "
+         "identical apart from the protocol field); only the evaluation rules changed. No profitability or "
+         "executable-edge claims are made.\n",
+         f"**Interpretation.** {INTERPRETATION}\n"]
+    # ---- 0 headline vs naive
+    L.append("## 0. Headline: primary model vs naive forecasts (exploratory, unadjusted)\n")
+    L.append("Counts of competition × family groups whose 95% cluster-bootstrap interval of ΔBrier (model − naive) "
+             "lies below zero (better), above zero (worse) or straddles it (unclear). Only groups meeting the minimum "
+             "cluster count are classified. Contract-weighted gives every listed contract equal weight; event-equal "
+             "averages paired losses within each event first, so games with many listed strikes do not dominate.\n")
+    for co in COHORT_ORDER:
+        L.append(f"### {COHORT_LABEL[co]}\n")
+        L.append(_headline_table(naive_headline(metrics, co)))
+        L.append("")
+    L.append("The strict cohort is the headline; exploratory and Kalshi-settlement-only results are reported "
+             "separately and are not pooled with it.\n")
+    # ---- 1 market
+    mh = market_headline(bench)
+    L.append("## 1. Headline: primary model vs Kalshi market reference (exploratory, unadjusted)\n")
+    L.append(f"The benchmark sample is the preserved `{parent}` sample (candidates from the {parent} scored rows, "
+             f"tickers from its quote file; re-derived and asserted identical; quotes recomputed from the cache and "
+             f"asserted identical). A comparison is classified only if it has at least {MIN_MATCHED_CLUSTERS} unique "
+             "matched event clusters after all quote filters, computed on strict-cohort clusters only "
+             "(strict-only losses, CIs and counts). Kalshi-settlement-only comparisons are descriptive (frozen "
+             "40-game cap). Δ = model − Kalshi: positive means Kalshi was better. One market per cluster, so "
+             "contract-weighted and event-equal views coincide here.\n")
+    L.append(f"* Competitions benchmarked: {mh['benchmarked']} ({mh['independent']} independent-source, "
+             f"{mh['kalshi_only']} Kalshi-settlement-only); {mh['skipped']} below the 50-cluster eligibility frame.")
+    L.append(f"* Strict-cohort comparisons with ≥ {MIN_MATCHED_CLUSTERS} matched clusters (headline): {mh['headline']}. "
+             f"Model vs Kalshi: model better {mh['model_vs_kalshi']['better']}, unclear "
+             f"{mh['model_vs_kalshi']['unclear']}, Kalshi better {mh['model_vs_kalshi']['worse']}. "
+             f"Naive vs Kalshi: naive better {mh['naive_vs_kalshi']['better']}, unclear "
+             f"{mh['naive_vs_kalshi']['unclear']}, Kalshi better {mh['naive_vs_kalshi']['worse']}.")
+    L.append(f"* Independent-source competitions without a sufficient strict matched sample (INSUFFICIENT, "
+             f"descriptive only): {len(mh['independent_insufficient_strict'])}"
+             + (f" ({', '.join(mh['independent_insufficient_strict'])})" if mh['independent_insufficient_strict'] else "") + ".")
+    tt = next((b for b in bench if b["competition"] == "k_kxttmatch"), None)
+    if tt:
+        L.append(f"* `k_kxttmatch` (table tennis) had {tt['parent_matched']} matched events in {parent} "
+                 f"(sampled {tt['sampled']}); it is {tt['views']['all_matched']['sufficiency']} and was not a valid "
+                 "comparison.")
+    L.append("* Hourly candles are sparse; fees, spread costs and slippage are not modelled. This is a calibration "
+             "reference, not evidence of executable edge.\n")
     brow = []
-    skipped = [b for b in bench if b.get("skipped")]
-    if skipped:
-        L.append(f"{len(skipped)} competitions with game-winner test forecasts were below the minimum cluster count "
-                 "and were not benchmarked.\n")
     for b in bench:
         if b.get("skipped"):
             continue
-        k = b["kalshi"]
-        brow.append([b["competition"], b["test_clusters"], b["sampled"], b["quote_status"].get("ok", 0),
-                     ", ".join(f"{s}:{n}" for s, n in sorted(b["quote_status"].items()) if s != "ok"),
-                     _f(b["median_quote_age_s"] / 60 if b["median_quote_age_s"] is not None else None, 0),
-                     _f(k.get("brier")), _f(b["model"].get("brier")), _f(b["naive"].get("brier")),
-                     _ci(b.get("model_minus_kalshi"), "d_brier"), _ci(b.get("model_minus_kalshi"), "d_log_loss")])
-    L.append(_table(["Competition", "Test clusters", "Sampled", "Fresh quotes", "Missing/stale", "Median age (min)",
-                     "Brier Kalshi", "Brier model", "Brier naive", "Δ Brier model−Kalshi [CI]", "Δ LogLoss [CI]"], brow)
-             if brow else "_benchmark not run_")
+        a, s = b["views"]["all_matched"], b["views"]["strict_matched"]
+        brow.append([b["competition"], "Kalshi-only" if b["source"] == "kalshi_only" else "independent",
+                     b["eligible_clusters"], b["sampled"], b["parent_matched"], b["matched_all"], b["matched_strict"],
+                     a["sufficiency"].split(" ")[0], _ci(a.get("model_minus_kalshi"), "d_brier"),
+                     s["sufficiency"].split(" ")[0] if b["source"] != "kalshi_only" else "n/a",
+                     _f(s["kalshi"].get("brier")), _f(s["model"].get("brier")),
+                     _ci(s.get("model_minus_kalshi"), "d_brier"), _ci(s.get("naive_minus_kalshi"), "d_brier"),
+                     _f(b["median_quote_age_s"] / 60 if b["median_quote_age_s"] is not None else None, 0)])
+    L.append(_table(["Competition", "Source", "Eligible clusters", "Sampled", f"Matched ({parent})", "Matched (all)",
+                     "Matched (strict)", "All-matched", "All-matched Δ model−Kalshi", "Strict", "Brier Kalshi (strict)",
+                     "Brier model (strict)", "Strict Δ model−Kalshi [CI]", "Strict Δ naive−Kalshi [CI]",
+                     "Median quote age (min)"], brow))
     L.append("")
-    L.append("### Closing-line comparison (NFL, reported separately)\n")
-    if closing and closing.get("closing_line", {}).get("n"):
-        cl = closing["closing_line"]
-        L.append(f"{closing['timing']}. Matched {closing['n_matched']} test contracts. Closing-line Brier "
-                 f"{_f(cl['brier'])}; " + "; ".join(
-                     f"{m} Brier {_f(closing[m]['brier'])} (Δ vs closing {_ci(closing.get(m + '_minus_closing'), 'd_brier')})"
-                     for m in ("elo", "score", "naive") if m in closing) + "\n")
-    else:
-        L.append("_no matched NFL test games_\n")
-    # exclusions
-    L.append("## 4. Exclusions and blockers\n")
+    L.append("### Closing-line comparison (NFL, post-cutoff information, reported separately)\n")
+    for view in ("strict", "all"):
+        v = (closing or {}).get("views", {}).get(view, {})
+        if v.get("closing_line", {}).get("n"):
+            L.append(f"* {view}: matched {v['n_matched']} test contracts; closing-line Brier "
+                     f"{_f(v['closing_line']['brier'])}; " + "; ".join(
+                         f"{m} Brier {_f(v[m]['brier'])} (Δ vs closing {_ci(v.get(m + '_minus_closing'), 'd_brier')})"
+                         for m in ("elo", "score", "naive") if m in v))
+        else:
+            L.append(f"* {view}: no matched NFL test games")
+    L.append("")
+    # ---- 2 cohorts
+    L.extend(cohort_sections(ctx))
+    # ---- 3 weighting
+    L.append("## 4. Weighting sensitivity (every competition × family × cohort)\n")
+    L.append("ΔBrier vs naive under contract weighting (v1-comparable) and event-equal weighting, with the "
+             "exploratory class of each (blank when below the minimum cluster count). `flip` marks a class change.\n")
+    wrows, flips = [], 0
+    for m in metrics:
+        if m["level"] != "competition":
+            continue
+        sk = m.get("skill_vs_naive") or {}
+        prim = m["models"][m["primary"]]
+        cw = _cls(sk, "d_brier") if m["sufficient"] else ""
+        ee = _cls(sk, "d_brier_event") if m["sufficient"] else ""
+        flip = bool(cw and ee and cw != ee)
+        flips += flip
+        wrows.append([m["key"], m["cohort"], m["family"], m["primary"], prim["n"], prim["clusters"],
+                      _f(prim["n"] / prim["clusters"], 2), _ci(sk, "d_brier"), cw, _ci(sk, "d_brier_event"), ee,
+                      "flip" if flip else ""])
+    L.append(f"Class flips between weightings among classified groups: {flips}.\n")
+    L.append(_table(["Competition", "Cohort", "Family", "Model", "Contracts", "Clusters", "Contracts/cluster",
+                     "ΔBrier contract-weighted [CI]", "Class", "ΔBrier event-equal [CI]", "Class", "Flip"], wrows))
+    L.append("")
+    # ---- 5 coverage
+    L.extend(coverage_sections(ctx))
+    # ---- 6 exclusions
+    L.append("## 6. Exclusions and blockers\n")
     blocked = [(k, v.get("reason", "")) for k, v in sorted(status.items()) if v.get("status") == "blocked"]
-    L.append(f"Blocked competitions ({len(blocked)}):\n")
-    L.append(_table(["Competition", "Reason"], blocked) if blocked else "_none_")
-    L.append("")
+    L.append(f"Blocked competitions: {len(blocked)}.\n")
+    if blocked:
+        L.append(_table(["Competition", "Reason"], blocked))
+        L.append("")
     agg = Counter()
-    for i in ids:
+    for i in ctx["ids"]:
         for k, v in (i.get("excluded") or {}).items():
             agg[k] += v
     L.append("Contract-level exclusions during build (all competitions):\n")
@@ -416,89 +452,172 @@ def write_results_md(protocol, cov, metrics, status, bench, closing, ids, hashes
     for v in status.values():
         for k, n in (v.get("excluded") or {}).items():
             ev_ex[k] += n
-    L.append("Excluded at evaluation (gate / mismatch / unfitted scope):\n")
+    L.append("Excluded at evaluation (predictions; each contract has one row per model):\n")
     L.append(_table(["Reason", "Predictions"], ev_ex.most_common()) if ev_ex else "_none_")
     L.append("")
-    sx = Counter(e["reason"] for v in excl.values() for e in v)
-    L.append("Series excluded from competition adapters (no payoff parser / segment):\n")
+    sx = Counter(e["reason"] for v in ctx["excl"].values() for e in v)
+    L.append("Series excluded from competition adapters (no payoff parser / segment), top 25 reasons:\n")
     L.append(_table(["Reason", "Series"], sx.most_common(25)))
     L.append("")
-    # hashes
-    L.append("## 5. Data, protocol and code hashes\n")
-    L.append(_table(["Item", "SHA-256"], [[k, v] for k, v in hashes.items()]))
+    L.append("Known blockers: UEFA cup qualifiers are absent from ESPN's feeds (unresolved identity); no reachable "
+             "independent tennis results source (tennis is Kalshi-settlement-only); segment/score props without a "
+             "payoff parser are excluded; table-tennis series had no candle ended by the cutoff; player props are "
+             "not modelled (no pregame-deployable participation data).\n")
+    # ---- 7 hashes & reproduction
+    L.append("## 7. Hashes, preservation and reproduction\n")
+    L.append(_table(["Item", "Value"], [[k, v] for k, v in ctx["hashes"].items()]))
     L.append("")
-    L.append("## 6. Reproduction\n")
+    vm = ctx["v1_manifest"]
+    L.append(f"`{parent}` preservation: verified against `research/sports/protocols/{parent}.artifacts.json` "
+             f"({len(vm['files'])} files): **{'OK' if not ctx['v1_problems'] else 'FAILED: ' + '; '.join(ctx['v1_problems'][:5])}**. "
+             f"That manifest was assembled retrospectively ({vm['assembled_at']}) and its run-level hashes were "
+             f"checked against the original run's hashes ({(vm.get('checked_against') or {}).get('result', 'not checked')}).\n")
     L.append("```powershell\n"
-             "# full run (network, rate-limited single-flight; ~0.5 s between requests per host)\n"
-             f".venv\\Scripts\\python.exe -m research.sports.run all --protocol {protocol}\n"
-             "# cache-only rerun (no network); must reproduce journals, metrics and hashes above\n"
+             f".venv\\Scripts\\python.exe -m research.sports.run verify --protocol {parent}\n"
              f".venv\\Scripts\\python.exe -m research.sports.run all --cache-only --protocol {protocol}\n"
-             "# filters\n"
+             f".venv\\Scripts\\python.exe -m research.sports.run verify --protocol {protocol}\n"
              f".venv\\Scripts\\python.exe -m research.sports.run evaluate --sport Soccer --family total --protocol {protocol}\n"
-             f".venv\\Scripts\\python.exe -m research.sports.run build --competition nba,nhl --cache-only\n"
              "```\n")
-    L.append("Raw responses: `data/cache/sports/raw/<source>/` (byte-exact body + metadata with sha256, gitignored). "
-             "Normalized data, crosswalks and write-once prediction journals: `data/sports/` (gitignored). "
-             "Metrics: `data/results/sports_phase1/<protocol>/` (gitignored). Protocol: "
-             f"`research/sports/protocols/{protocol}.json` (tracked).\n")
-    # prospective
-    L.append("## 7. Categories needing prospective collection\n")
-    pro = Counter()
-    for r in cov:
-        if r["v1_cell_class"] == "C" or r["contract_family"] == "player_prop":
-            pro[(r["sport"], r["contract_family"])] += 1
-    for m in metrics:
-        if m["level"] == "competition" and not m["sufficient"]:
-            pro[(f"{m['key']} (insufficient test sample)", m["family"])] += 0
-    L.append(_table(["Sport / competition", "Family", "Series"], [[a, b, n] for (a, b), n in sorted(pro.items())]))
+    L.append(f"`{parent}` itself is reproduced at commit `{PRESERVED[parent]}` (this code refuses to rewrite it). "
+             "Raw responses: `data/cache/sports/raw/` (byte-exact, gitignored); normalized data and journals: "
+             f"`data/sports/` (gitignored); metrics: `data/results/sports_phase1/{protocol}/` (gitignored).\n")
+    return "\n".join(L) + "\n"
+
+
+def cohort_sections(ctx) -> list[str]:
+    proto, cov, status, metrics, parent = ctx["proto"], ctx["cov"], ctx["status"], ctx["metrics"], ctx["parent"]
+    L = ["## 2. Reconciliation cohorts\n"]
+    L.append(f"* strict: {COHORT_RULES['strict']}.\n* exploratory: {COHORT_RULES['exploratory']}.\n"
+             f"* failed: {COHORT_RULES['failed']}.\n* {COHORT_RULES['contract_level']}.\n"
+             f"* {parent} admitted series with fewer than {GATE_MIN_N} pre-test contracts using all settled contracts "
+             "(including the test period); v2 does not, so those series are exploratory.\n")
+    sport_c = defaultdict(Counter)
+    comp_rows = []
+    for key, e in sorted(proto["competitions"].items()):
+        g = e.get("gate")
+        if not g:
+            continue
+        cnt = Counter(v["cohort"] for v in g.values())
+        sport_c[e["sport"]].update(cnt)
+        st = status.get(key, {})
+        rows_by = st.get("scored_rows_by_cohort") or {}
+        dis = sum((st.get("test_disagreements_by_series") or {}).values())
+        comp_rows.append([key, e["sport"], cnt["strict"], cnt["exploratory"], cnt["failed"],
+                          rows_by.get("strict", 0), rows_by.get("exploratory", 0), dis])
+    L.append("Independent-source series by sport and cohort:\n")
+    L.append(_table(["Sport", "Strict series", "Exploratory series", "Failed series"],
+                    [[s, c["strict"], c["exploratory"], c["failed"]] for s, c in sorted(sport_c.items())]))
     L.append("")
-    (DOCS / "sports_phase1_results_v1.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    L.append("By competition (scored rows count every model's prediction; disagreements are unique test contracts):\n")
+    L.append(_table(["Competition", "Sport", "Strict series", "Exploratory series", "Failed series",
+                     "Strict scored rows", "Exploratory scored rows", "Test disagreements excluded"], comp_rows))
+    L.append("")
+    fam_c = defaultdict(Counter)
+    for m in metrics:
+        if m["level"] == "competition":
+            fam_c[m["family"]][m["cohort"]] += m["models"][m["primary"]]["n"]
+    L.append("Scored test contracts (primary model) by family and cohort:\n")
+    L.append(_table(["Family"] + COHORT_ORDER, [[f] + [c.get(x, 0) for x in COHORT_ORDER] for f, c in sorted(fam_c.items())]))
+    L.append("")
+    moves = Counter((r["v1_status"], r["coverage_status"]) for r in cov if r["phase1_path"] != "not_attempted")
+    L.append(f"Membership changes ({parent} status → v2 status, attempted series):\n")
+    L.append(_table([f"{parent} status", "v2 status", "Series"], [[a, b, n] for (a, b), n in sorted(moves.items())]))
+    L.append("")
+    L.append("## 3. Settlement disagreements\n")
+    L.append("Series with any disagreement between the independent payoff and Kalshi settlement. Pre-test counts "
+             "determine the cohort; test-period disagreements are excluded contract by contract and never change "
+             "a cohort.\n")
+    drows = []
+    for key, e in sorted(proto["competitions"].items()):
+        dis = (status.get(key, {}).get("test_disagreements_by_series") or {})
+        for s, g in sorted((e.get("gate") or {}).items()):
+            if g["all_agree"] < g["all_n"] or dis.get(s):
+                drows.append([key, s, g["cohort"], f"{g['pre_agree']}/{g['pre_n']}", g["pre_n"] - g["pre_agree"],
+                              f"{g['all_agree']}/{g['all_n']}", dis.get(s, 0)])
+    L.append(_table(["Competition", "Series", "Cohort", "Pre-test agreement", "Pre-test disagreements",
+                     "All-settled agreement", "Test contracts excluded"], drows) if drows else "_none_")
+    L.append("")
+    return L
 
 
-def write_supplement(ids, vol, cov, comps):
-    L = ["# Sports audit supplement v1.1 (corrections to v1)\n",
-         "Preserves `sports_feasibility_v1.md` / `sports_inventory_v1.csv` unchanged; this file records "
-         "corrections and per-competition readiness measured during Phase 1. Generated by the report stage.\n",
-         "## 1. Readiness is per competition and contract specification\n",
-         "A successful sample request in v1 did not establish historical coverage. Phase 1 measures, per series: "
-         "settled markets with a resolved identity, agreement between an independently computed payoff and Kalshi "
-         "settlement (the reconciliation gate), and test-period sample size. See `sports_phase1_coverage_v1.csv` "
-         "(columns `contracts_ok`, `gate_agreement`, `test_contracts`, `test_clusters`, `phase1_status`).\n",
-         "## 2. `volume_fp` units\n",
-         f"`volume_fp` is a fixed-point **contract count**, not dollars. Check: {json.dumps(vol)}. The v1 "
-         "\"Volume\" columns are therefore contracts traded; notional dollars would require prices.\n",
-         "## 3. Live/historical duplication and event groups vs unique outcomes\n",
-         "Markets are deduplicated by ticker across the live and historical tiers (settled copy preferred). "
-         "Kalshi event tickers are not unique games: several series (winner, spread, total, segments) each create "
-         "their own event per game, and doubleheaders or duplicate milestones occur. Outcome units below are the "
-         "independent source game / fight / tournament (or the Kalshi milestone for Kalshi-only data).\n"]
-    rows = []
-    for i in ids:
-        if i.get("blocked"):
-            rows.append([i["competition"], "", "", "", "", "", "", "blocked: " + i["blocked"][:80]])
-            continue
-        if i["source"] == "kalshi_only" and i["ok_contracts"] < 200:
-            continue
-        rows.append([i["competition"], i["raw_market_rows"], i["unique_tickers"], i["tickers_in_both_tiers"],
-                     i["ok_contracts"], i["kalshi_events"], i["kalshi_milestones"], i["unique_outcome_units"]])
-    L.append(_table(["Competition", "Raw market rows", "Unique tickers", "In both tiers", "OK contracts",
-                     "Kalshi events", "Kalshi milestones", "Unique outcome units"], rows))
-    L.append("\n(Kalshi-only competitions with fewer than 200 usable contracts omitted from this table; all are in the coverage CSV.)\n")
-    L.append("## 4. Tennis source blocker re-checked (2026-10-08)\n")
-    L.append("* Jeff Sackmann `tennis_atp` / `tennis_wta`: HTTP 404 on github.com, the GitHub API and "
-             "raw.githubusercontent.com; the owner's public repository list no longer includes them. "
-             "**Unavailable generally** (not a local network issue). Third-party mirrors exist but are unverified and "
-             "were not used.\n"
-             "* tennis-data.co.uk: HTTP 403 (Cloudflare \"Sorry, you have been blocked\") for every URL from this "
-             "machine, while an independent fetch from a different network returned the page. **Available generally, "
-             "blocked from this machine's IP.** Its files are Excel workbooks.\n"
-             "* Consequence: tennis match winners are evaluated on the Kalshi-settlement-only path (class B); "
-             "tennis spreads/totals/set markets stay excluded until an independent results source is reachable.\n")
-    L.append("## 5. Other corrections\n")
-    L.append("* Discovery-cache series files hold per-series summaries only, so Phase 1 re-fetched full market "
-             "records for the selected series (not the whole 3,871-series crawl).\n"
-             "* ESPN scoreboard date ranges (`YYYYMMDD-YYYYMMDD`) return HTTP 400; month (`YYYYMM`) or day queries are used.\n"
-             "* Archived markets return no data from the batch candlesticks endpoint; per-market historical candles are used.\n"
-             "* Soccer full-time markets settle on 90 minutes plus stoppage time; the adapter requires that wording "
-             "and scores regulation from half-time line scores.\n")
-    (DOCS / "sports_audit_supplement_v1_1.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+def coverage_sections(ctx) -> list[str]:
+    cov, comps, names = ctx["cov"], ctx["comps"], ctx["names"]
+    L = ["## 5. Coverage of all inventory series\n"]
+    st = Counter(r["coverage_status"] for r in cov)
+    attempted = sorted({c.key for c in comps})
+    sports = sorted({c.sport for c in comps})
+    L.append(f"Every one of the {len(cov):,} inventory series has an explicit status in `{names['coverage']}`. "
+             f"Attempted competitions: {len(attempted)} across {len(sports)} supported sports "
+             f"({', '.join(sports)}). A supported sport is one with at least one attempted competition; series in "
+             "supported sports may still be unattempted (other families or competitions).\n")
+    L.append(_table(["Coverage status", "Series"], sorted(st.items())))
+    L.append("")
+    by = defaultdict(Counter)
+    for r in cov:
+        by[r["sport"]][r["coverage_status"]] += 1
+    cols = sorted(st)
+    L.append("Series by sport and coverage status:\n")
+    L.append(_table(["Sport"] + cols, [[s] + [c.get(x, 0) for x in cols] for s, c in
+                                       sorted(by.items(), key=lambda kv: -sum(kv[1].values()))]))
+    L.append("")
+    return L
+
+
+def write_comparison_md(ctx) -> str:
+    parent, protocol, metrics, bench, cov, cmap = ctx["parent"], ctx["protocol"], ctx["metrics"], ctx["bench"], \
+        ctx["cov"], ctx["cmap"]
+    _, v1_metrics, v1_status, v1_bench, _ = _load(parent)
+    L = [f"# Sports Phase 1: {parent} → {protocol} comparison\n",
+         f"RESEARCH_ONLY / NO_BET. {TEST_PERIOD_NOTE} Forecasts are unchanged (journals identical apart from "
+         "the protocol field); differences come only from the evaluation corrections below. "
+         f"{INTERPRETATION}\n",
+         "## What changed\n",
+         f"1. Reconciliation: {parent} admitted series with fewer than {GATE_MIN_N} pre-test contracts using all "
+         "settled contracts, including the test period. v2 admits only pre-test-reconciled series to the strict "
+         "cohort; the others are a separately labelled exploratory cohort.",
+         f"2. Market benchmark: the {parent} sample is preserved exactly, but a comparison needs at least "
+         f"{MIN_MATCHED_CLUSTERS} unique matched clusters after all quote filters, measured on strict-cohort "
+         "clusters with strict-only losses and CIs. Kalshi-settlement-only comparisons are descriptive.",
+         "3. Weighting: event-equal metrics are reported alongside contract-weighted ones.",
+         "4. Interpretation: classes are labelled exploratory and unadjusted; naive and market comparisons are separate.\n"]
+    ident = sum(1 for v in ctx["status"].values() if v.get("parent_journal_identical") is True)
+    L.append(f"Prediction journals identical to {parent}: {ident} of "
+             f"{sum(1 for v in ctx['status'].values() if v.get('status') == 'evaluated')} evaluated competitions.\n")
+    L.append("## Headline vs naive (contract-weighted classes, competition × family)\n")
+    v1h = v1_naive_headline(v1_metrics, cmap)
+    v2s, v2e, v2k = naive_headline(metrics, "strict"), naive_headline(metrics, "exploratory"), \
+        naive_headline(metrics, "kalshi_settlement_only")
+    fams = sorted(set(v1h["independent"]) | set(v2s) | set(v2e))
+    fmt = lambda c: f"{c['better']} / {c['unclear']} / {c['worse']}"
+    L.append(_table(["Family", f"{parent} independent (b/u/w)", "v2 strict (b/u/w)", "v2 exploratory (b/u/w)"],
+                    [[f, fmt(v1h["independent"].get(f, Counter())), fmt(v2s[f]["cw"]) if f in v2s else "0 / 0 / 0",
+                      fmt(v2e[f]["cw"]) if f in v2e else "0 / 0 / 0"] for f in fams]))
+    L.append("")
+    kf = sorted(set(v1h["kalshi_only"]) | set(v2k))
+    L.append(_table(["Family", f"{parent} Kalshi-only (b/u/w)", "v2 Kalshi-settlement-only (b/u/w)"],
+                    [[f, fmt(v1h["kalshi_only"].get(f, Counter())), fmt(v2k[f]["cw"]) if f in v2k else "0 / 0 / 0"]
+                     for f in kf]))
+    L.append("")
+    flips = sum(1 for r in results_rows(metrics) if r["level"] == "competition" and r["weighting_class_flip"])
+    L.append(f"Event-equal weighting changes the class of {flips} classified competition × family × cohort groups "
+             "(see the weighting table in the results document).\n")
+    L.append("## Market benchmark\n")
+    v1rows = [b for b in v1_bench if not b.get("skipped") and b.get("model_minus_kalshi", {}).get("n")]
+    c1 = Counter(classify(b["model_minus_kalshi"]["d_brier_ci"]) for b in v1rows)
+    mh = market_headline(bench)
+    L.append(f"* {parent}: {len(v1rows)} competitions classified regardless of matched size, mixed cohorts: "
+             f"model better {c1['better']}, unclear {c1['unclear']}, Kalshi better {c1['worse']}.")
+    L.append(f"* {protocol}: {mh['headline']} strict comparisons with ≥ {MIN_MATCHED_CLUSTERS} matched clusters: model "
+             f"better {mh['model_vs_kalshi']['better']}, unclear {mh['model_vs_kalshi']['unclear']}, Kalshi better "
+             f"{mh['model_vs_kalshi']['worse']}. {mh['kalshi_only']} Kalshi-settlement-only comparisons are "
+             f"descriptive (frozen 40-game cap); {len(mh['independent_insufficient_strict'])} independent-source "
+             "comparisons are INSUFFICIENT on strict clusters.")
+    small = sorted((b["parent_matched"], b["competition"]) for b in bench if not b.get("skipped")
+                   and b["parent_matched"] < MIN_MATCHED_CLUSTERS)
+    L.append(f"* {len(small)} {parent} comparisons had fewer than {MIN_MATCHED_CLUSTERS} matched events; "
+             f"`k_kxttmatch` had {next((n for n, k in small if k == 'k_kxttmatch'), 'n/a')}.\n")
+    L.append("## Coverage status changes (all 3,871 series)\n")
+    moves = Counter((r["v1_status"], r["coverage_status"]) for r in cov)
+    L.append(_table([f"{parent} status", f"{protocol} status", "Series"], [[a, b, n] for (a, b), n in sorted(moves.items())]))
+    L.append("")
+    return "\n".join(L) + "\n"
