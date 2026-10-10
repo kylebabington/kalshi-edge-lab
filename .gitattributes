@@ -11,3 +11,8 @@ data/weather/snapshots/KXHIGHNY-26SEP2[56]/*.json text eol=crlf
 data/weather/snapshot_scores/KXHIGHNY-26SEP2[56]__*.json text eol=crlf
 *.sh text eol=lf
 deploy/** text eol=lf
+# Sports protocols and artifact manifests are verified as exact bytes (stored LF); never convert them on checkout.
+research/sports/protocols/*.json -text
+# Sports research code is hashed into frozen protocols as CRLF working-copy bytes; check it out with CRLF everywhere.
+research/sports/*.py text eol=crlf
+research/sports/phase2/*.py text eol=crlf

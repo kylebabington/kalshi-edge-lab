@@ -259,9 +259,12 @@ def test_v1_protocol_and_tracked_docs_preserved():
     proto = "research/sports/protocols/sports_phase1_v1.json"
     assert man["files"][proto] == "b7e8ddc7aab7a348bee97cf63bc36c7cd0c0005388b21f596c05de4805cc6c24"
     assert sha256_file(REPO / proto) == man["files"][proto]
+    sup = json.loads((REPO / "research/sports/protocols/sports_phase1_v1.docs_portable_v1.json")
+                     .read_text(encoding="utf-8"))
     for d in MAN.DOC_FILES["sports_phase1_v1"]:
         rel = f"docs/research/{d}"
-        assert sha256_file(REPO / rel) == man["files"][rel], rel
+        assert sup["files"][rel]["exact_sha256_in_original_manifest"] == man["files"][rel], rel
+        assert MAN.portable_sha256(REPO / rel) == sup["files"][rel]["portable_sha256"], rel
 
 
 def test_v1_is_refused_by_writing_stages_and_v2_docs_are_distinct():

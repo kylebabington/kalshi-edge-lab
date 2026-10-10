@@ -1,0 +1,24 @@
+{
+ "created_at": "2026-10-10T03:47:40Z",
+ "files": {
+  "docs/research/sports_phase2_coverage_v1.csv": {
+   "exact_sha256_in_original_manifest": "e2a6d36d05274ccb20e3d78878f2b6f52f92716bf5a47b672794053a5fcbd97d",
+   "portable_sha256": "e2a6d36d05274ccb20e3d78878f2b6f52f92716bf5a47b672794053a5fcbd97d"
+  },
+  "docs/research/sports_phase2_results_v1.csv": {
+   "exact_sha256_in_original_manifest": "f994094e82cf7af9011cb8919f1ec3ff7e4f05118d83b3a502811b54dac47d9d",
+   "portable_sha256": "f994094e82cf7af9011cb8919f1ec3ff7e4f05118d83b3a502811b54dac47d9d"
+  },
+  "docs/research/sports_phase2_results_v1.md": {
+   "exact_sha256_in_original_manifest": "6fae9159b929d077c63c13b521dbbb29f04139d27a70eac529de9bea5ee9d3a6",
+   "portable_sha256": "6fae9159b929d077c63c13b521dbbb29f04139d27a70eac529de9bea5ee9d3a6"
+  }
+ },
+ "original_manifest": "research/sports/protocols/sports_phase2_v1.artifacts.json",
+ "original_manifest_sha256": "44ced715c6ae2d4cdf6e6f3f83bb411457c016b8d7c72996311974632533f562",
+ "protocol": "sports_phase2_v1",
+ "rule": "portable_lf_v1",
+ "rule_text": "portable_lf_v1: read the file bytes, replace every CRLF (\\r\\n) with LF (\\n), change nothing else (no trimming, no Unicode normalization, lone CR kept), then sha256",
+ "schema": "docs_portable_v1",
+ "why": "Created together with the original manifest so the tracked documents verify on LF and CRLF checkouts alike (git core.autocrlf may rewrite their line endings); research artifacts keep exact-byte checks."
+}

@@ -476,7 +476,8 @@ def write_results_md(ctx) -> str:
              f".venv\\Scripts\\python.exe -m research.sports.run verify --protocol {parent}\n"
              f".venv\\Scripts\\python.exe -m research.sports.run all --cache-only --protocol {protocol}\n"
              f".venv\\Scripts\\python.exe -m research.sports.run verify --protocol {protocol}\n"
-             f".venv\\Scripts\\python.exe -m research.sports.run evaluate --sport Soccer --family total --protocol {protocol}\n"
+             "# filtered evaluation: written to data/results/sports_phase1_subsets/<slug>/<protocol>/ only\n"
+             f".venv\\Scripts\\python.exe -m research.sports.run evaluate --sport Soccer --family total --cache-only --protocol {protocol}\n"
              "```\n")
     L.append(f"`{parent}` itself is reproduced at commit `{PRESERVED[parent]}` (this code refuses to rewrite it). "
              "Raw responses: `data/cache/sports/raw/` (byte-exact, gitignored); normalized data and journals: "

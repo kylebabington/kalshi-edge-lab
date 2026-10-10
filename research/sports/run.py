@@ -1,7 +1,8 @@
 """Sports Phase 1 CLI (RESEARCH_ONLY / NO_BET).
 
     python -m research.sports.run all --cache-only         # reproduce v2 from the raw cache, no network
-    python -m research.sports.run evaluate --sport Soccer --family total
+    python -m research.sports.run evaluate --sport Soccer --family total --cache-only
+        # filtered: writes data/results/sports_phase1_subsets/<slug>/<protocol>/, never the full results
     python -m research.sports.run build --competition nba,nhl
     python -m research.sports.run verify --protocol sports_phase1_v1
     python -m research.sports.run manifest --protocol sports_phase1_v2
@@ -14,13 +15,17 @@ preserved: only ``verify`` (and ``manifest`` to check its hashes) may target it.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
 import traceback
+from pathlib import Path
 
 from .competitions import all_competitions
-from .core import NORMALIZED, RESULTS, Fetcher, CacheMiss, utc_now_iso, write_json
+from .core import NORMALIZED, REPO_ROOT, RESULTS, Fetcher, CacheMiss, utc_now_iso, write_json
+
+SUBSETS = REPO_ROOT / "data" / "results" / "sports_phase1_subsets"
 
 
 def log(msg: str) -> None:
@@ -76,10 +81,56 @@ def stage_build(args, comps, specs, fetcher):
             log(f"BUILD FAILED {c.key}: {exc!r}")
 
 
+def report_verify(protocol: str, log) -> int:
+    from . import manifest as man
+    d = man.verify_detail(protocol)
+    for x in d["research"]:
+        log(f"VERIFY FAILED {protocol} research artifact: {x}")
+    for x in d["docs"]:
+        log(f"VERIFY FAILED {protocol} document: {x}")
+    log(f"verify {protocol}: research artifacts (exact bytes) {'OK' if not d['research'] else 'FAILED'}; "
+        f"documents [{d['docs_method']}] {'OK' if not d['docs'] else 'FAILED'}")
+    return 1 if d["research"] or d["docs"] else 0
+
+
+FILTERS = ("competition", "family", "source", "sport")
+
+
+def subset_slug(args) -> str | None:
+    """Deterministic directory name for a filtered run (None for the full run)."""
+    parts = []
+    for f in FILTERS:
+        v = getattr(args, f, None)
+        if v:
+            parts.append(f"{f}={','.join(sorted(x.strip() for x in v.split(',') if x.strip()))}")
+    if not parts:
+        return None
+    text = ";".join(parts)
+    safe = "".join(ch if ch.isalnum() or ch in "=,._-" else "_" for ch in text.replace(";", "__"))[:80]
+    return f"{safe}__{hashlib.sha256(text.encode()).hexdigest()[:10]}"
+
+
+def route_outputs(args) -> Path | None:
+    """Send filtered evaluations to a subset directory so full-protocol results are never overwritten.
+
+    Journals stay in the protocol's write-once journal directory (identical bytes are allowed).
+    Benchmark, report and ``all`` only run on the full set.
+    """
+    slug = subset_slug(args)
+    if slug is None:
+        return None
+    if args.stage in ("benchmark", "report", "all"):
+        raise SystemExit(f"stage {args.stage} runs only on the full competition set; drop the filters "
+                         "(use the evaluate stage for filtered runs)")
+    from . import evaluate as ev
+    ev.RESULTS = SUBSETS / slug
+    return ev.RESULTS / args.protocol
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="research.sports.run")
     p.add_argument("stage", choices=["fetch", "build", "select", "evaluate", "benchmark", "report", "all",
-                                     "manifest", "verify"])
+                                     "manifest", "verify", "docs-supplement"])
     p.add_argument("--competition", help="comma-separated competition keys (e.g. nba,epl,k_kxatpmatch)")
     p.add_argument("--sport", help="comma-separated sports (e.g. Basketball,Soccer)")
     p.add_argument("--family", help="comma-separated contract families (game_winner,spread,total,...)")
@@ -90,20 +141,22 @@ def main(argv=None) -> int:
     p.add_argument("--checked-against", help="manifest stage: run-level hash file the artifacts must match")
     p.add_argument("--note", default="", help="manifest stage: provenance note")
     args = p.parse_args(argv)
-    if args.stage in ("manifest", "verify"):
+    if args.stage in ("manifest", "verify", "docs-supplement"):
         from . import manifest as man
         if args.stage == "manifest":
             man.write_manifest(args.protocol, args.checked_against, args.note, log)
             return 0
-        problems = man.verify(args.protocol)
-        for x in problems:
-            log(f"VERIFY FAILED {args.protocol}: {x}")
-        log(f"verify {args.protocol}: {'OK' if not problems else f'{len(problems)} problem(s)'}")
-        return 1 if problems else 0
+        if args.stage == "docs-supplement":
+            man.write_docs_supplement(args.protocol, log)
+            return 0
+        return report_verify(args.protocol, log)
     from .evaluate import PRESERVED
     if args.protocol in PRESERVED:
         raise SystemExit(f"{args.protocol} is preserved; only verify/manifest may target it "
                          f"(reproduce at commit {PRESERVED[args.protocol]})")
+    subset = route_outputs(args)
+    if subset is not None:
+        log(f"filtered run: outputs go to {subset}")
     comps, specs, excl = select_competitions(args)
     fetcher = Fetcher(cache_only=args.cache_only, min_interval=args.min_interval)
     stages = ["fetch", "build", "select", "evaluate", "benchmark", "report"] if args.stage == "all" else [args.stage]

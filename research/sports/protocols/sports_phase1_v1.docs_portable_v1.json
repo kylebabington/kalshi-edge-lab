@@ -1,0 +1,28 @@
+{
+ "created_at": "2026-10-09T20:30:06Z",
+ "files": {
+  "docs/research/sports_audit_supplement_v1_1.md": {
+   "exact_sha256_in_original_manifest": "f54def2e4db2d8f589a192e526266acab3359b34dd8ad78ad2c8a41dedb9f61d",
+   "portable_sha256": "258a04b39feb6e35b6422460b44c82eb808c10e5ec224cb21f92fa32c1e52329"
+  },
+  "docs/research/sports_phase1_coverage_v1.csv": {
+   "exact_sha256_in_original_manifest": "71a81977973a00e49aa32228564ba6b96ca7156ee8bcac781ba9566f5ea2bf99",
+   "portable_sha256": "4bdc1c7307b49694f00fc00402eb93e0db82da8e32d0b05bd9e0fcd76bddaa89"
+  },
+  "docs/research/sports_phase1_results_v1.csv": {
+   "exact_sha256_in_original_manifest": "47c28ef880859d424a4d016ea1ddbdf36355d7b086feb11390e3351efaaa3d9d",
+   "portable_sha256": "920d4ab457e488c218282d7b7641698fd477ac7241ff277ecf505111a6d1b30f"
+  },
+  "docs/research/sports_phase1_results_v1.md": {
+   "exact_sha256_in_original_manifest": "73140439c15e5cc527bf74e6c3afd0a268d611f80a19bb0a324af6ebe2befec9",
+   "portable_sha256": "344f81da6c5c3f56045e0ae6636acae7334ef2ec09cde6a90ad59b49f782b0b3"
+  }
+ },
+ "original_manifest": "research/sports/protocols/sports_phase1_v1.artifacts.json",
+ "original_manifest_sha256": "188c66dd89f08154f99691a6ae908ff6b2ec9054b17dca8a34d523d577090cea",
+ "protocol": "sports_phase1_v1",
+ "rule": "portable_lf_v1",
+ "rule_text": "portable_lf_v1: read the file bytes, replace every CRLF (\\r\\n) with LF (\\n), change nothing else (no trimming, no Unicode normalization, lone CR kept), then sha256",
+ "schema": "docs_portable_v1",
+ "why": "Added 2026-10-09 after the original manifest was assembled. The original manifest pinned the exact bytes of the Windows working copy, where git (core.autocrlf) checks text docs out with CRLF; the repository stores them with LF, so an LF checkout (Linux, autocrlf=input/false) has different bytes for identical content. Docs are human-readable summaries, so they get a portable hash; research artifacts keep exact-byte checks. This file was created only after every listed doc matched its exact hash in the original manifest."
+}

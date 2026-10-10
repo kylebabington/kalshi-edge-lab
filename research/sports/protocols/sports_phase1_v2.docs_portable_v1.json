@@ -1,0 +1,28 @@
+{
+ "created_at": "2026-10-09T20:30:09Z",
+ "files": {
+  "docs/research/sports_phase1_coverage_v2.csv": {
+   "exact_sha256_in_original_manifest": "27fc598845ccda8bd6ca9dfc9105b39c7050d2b8d27ae44309010df2bf198c02",
+   "portable_sha256": "fdc2223b18fddd9bd96bf7a0720fd0a112ab939f64f498a2b493881bd2672540"
+  },
+  "docs/research/sports_phase1_results_v2.csv": {
+   "exact_sha256_in_original_manifest": "87ad2c991d87e8388b97f61de2af2894efe561796b3b039e681cb6c346a0f304",
+   "portable_sha256": "10a268cd60bc94a46a65cfb2625893a653e68328e2ca46387d010d4a9ab4b050"
+  },
+  "docs/research/sports_phase1_results_v2.md": {
+   "exact_sha256_in_original_manifest": "863ae70bc6b0afe1933cc7d6bc4fb41d836898beeeac3b4c5605ba848d57831d",
+   "portable_sha256": "1929bbd8c19fa356e448a0a27445d3b2d6f955b08a29fa3281953854045fd8c8"
+  },
+  "docs/research/sports_phase1_v1_to_v2_comparison.md": {
+   "exact_sha256_in_original_manifest": "05ace4bc671ab695aecd3a62d63b5522d3f30b2c17e889ad7f1266af3d845eea",
+   "portable_sha256": "e95f8c930890f42231c8d9d857cb760afa72dfdd01e959105d6a26f4cd6c6e46"
+  }
+ },
+ "original_manifest": "research/sports/protocols/sports_phase1_v2.artifacts.json",
+ "original_manifest_sha256": "729288738b4e42385688e995c8a2dfa07e100dac64e6d61d2f411f7c9072b40c",
+ "protocol": "sports_phase1_v2",
+ "rule": "portable_lf_v1",
+ "rule_text": "portable_lf_v1: read the file bytes, replace every CRLF (\\r\\n) with LF (\\n), change nothing else (no trimming, no Unicode normalization, lone CR kept), then sha256",
+ "schema": "docs_portable_v1",
+ "why": "Added 2026-10-09 after the original manifest was assembled. The original manifest pinned the exact bytes of the Windows working copy, where git (core.autocrlf) checks text docs out with CRLF; the repository stores them with LF, so an LF checkout (Linux, autocrlf=input/false) has different bytes for identical content. Docs are human-readable summaries, so they get a portable hash; research artifacts keep exact-byte checks. This file was created only after every listed doc matched its exact hash in the original manifest."
+}
