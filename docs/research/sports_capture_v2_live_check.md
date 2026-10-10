@@ -79,3 +79,28 @@ Example (Rice at East Carolina, cutoff 16:00Z, `prediction_as_of` 15:45:31.98Z, 
   - Groups by sport, competition, family and cohort are in `sports_capture_v2_pilot_scores.csv`.
 
 Re-run `settle` and then `report` after the NCAAF games settle (tonight UTC) to score the calibrated and blend candidates.
+
+## First NCAAF scoring check (2026-10-10T16:51Z): pending
+
+`settle`, `verify-scores` and `report --no-write` were run with the existing pipeline. Nothing in the code, models, protocols or records was changed.
+
+- **NCAAF:** all 461 contracts in the 10 captured games are PENDING. The saved settlement evidence shows market status `active` with an empty result for every one. No NCAAF score is finalized, so the check stopped here: no waiting, no assigned outcomes, no backfill. The calibrated and blend verification (identity game winners, zero-weight zero-intercept totals, nonzero-intercept spreads, and the common-contract sets) remains pending until these markets reach a confirmed final status.
+- **Other competitions:**
+  - 503 contracts finalized (192 yes, 311 no) in 26 events, with 16 more contracts pending;
+  - `verify-scores`: 503 OK, 0 refused;
+  - a repeat `settle` left all 503 finalized scores byte-identical (0 changed, 0 new).
+- **Labelled contracts and unique events by family** (frozen candidate; market in parentheses):
+
+| family | contracts | events |
+|---|---|---|
+| game_winner | 48 (19) | 19 (19) |
+| spread | 68 (34) | 17 (17) |
+| total | 102 (34) | 17 (17) |
+| team_total | 46 (18) | 9 (9) |
+| segment | 222 (-) | 17 (-) |
+| score_props | 17 (-) | 17 (-) |
+
+- **frozen - market on the 105 common contracts in 26 events:** Brier +0.0111 (event-equal +0.0271) and log loss +0.0288 (event-equal +0.0623). Descriptive only. Many strikes and segments come from the same game, so contract counts overstate the number of independent observations; the event counts are the relevant sample size.
+- **Not yet scored:** no labelled contract has a calibrated or blend probability (none of the settled competitions has a fitted map).
+
+`sports_capture_v2_pilot_scores.csv` was regenerated from these 503 scores.
