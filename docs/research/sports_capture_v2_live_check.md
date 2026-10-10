@@ -1,6 +1,6 @@
 # `sports_phase2_capture_v2`: manual live check (2026-10-10)
 
-RESEARCH_ONLY / NO_BET. These two manual window runs were made right after the protocol was frozen (2026-10-10T12:27:49Z). Records and raw evidence are local (`data/sports/phase2/capture_v2/`, `data/cache/sports/raw_capture_v2/`) and not committed. No outcomes are evaluated here.
+RESEARCH_ONLY / NO_BET. Two all-competition window runs were made right after the protocol was frozen (2026-10-10T12:27:49Z), followed by one NCAAF run for the fitted-candidate check. Records and raw evidence are local (`data/sports/phase2/capture_v2/`, `data/cache/sports/raw_capture_v2/`) and not committed. Settlement scoring is in the last section and in `sports_capture_v2_scoring.md`.
 
 ## Runs
 
@@ -33,8 +33,49 @@ Example (bundesliga espn:401884773, cutoff 12:30:00Z, `prediction_as_of` 12:29:4
 
 ## Offline replay
 
-`python -m research.sports.live.run replay --all` covered 54 records (34 WINDOW_CAPTURE, 17 MISSED, 3 DUPLICATE_ATTEMPT): 54 OK, 0 refused or mismatched. Every candidate probability was reproduced from saved evidence bytes only, after checking the record checksum, the global and dependency pins, and the evidence hashes.
+`python -m research.sports.live.run replay --all` covered 54 records after the first two runs (34 WINDOW_CAPTURE, 17 MISSED, 3 DUPLICATE_ATTEMPT): 54 OK, 0 refused or mismatched. After the NCAAF run it covered 85 records: 85 OK. Every candidate probability was reproduced from saved evidence bytes only, after checking the record checksum, the global and dependency pins, and the evidence hashes.
 
-## Still pending
+## NCAAF fitted-candidate check
 
-A live window with a fitted calibration or blend map (NCAAF, ATP or WTA main tour) has not been captured. To capture one, run `capture --mode window --competitions ncaaf` during [start - 80 min, start - 60 min] of an NCAAF game. On 2026-10-10 the first such window opens at 14:40Z.
+The run (`capture --mode window --competitions ncaaf`, run id 20261010T154238574921Z) started at 15:42:38Z, after the 14:40Z and 15:10Z windows had expired. It wrote 21 MISSED records for those games (none was captured or backfilled) and accepted 10 WINDOW_CAPTURE records for kickoffs at 16:45 and 17:00Z. Horizons were 74.09 to 74.47 min. No problems or failed attempts occurred.
+
+`python -m research.sports.scoring.run fitted-check --competitions ncaaf` verified all 10 records: checksum, pins, dependencies, raw evidence hashes and timing, then offline replay OK. It found no problems.
+
+| family | contracts | calibrated available | pinned calibration | calibrated = frozen | blend available | pinned blend | zero model weight | zero intercept | blend = market |
+|---|---|---|---|---|---|---|---|---|---|
+| game_winner | 20 | 20 | identity (a 0, b 1) | 20 / 20 (identity map) | 10 | w 0.3, c 0 | 0 | 10 | 0 / 10 |
+| spread | 167 | 167 | intercept (a 0.1597) | 0 / 167 | 20 | w 0, c -0.1032 | 20 | 0 | 0 / 20 |
+| total | 126 | 126 | platt (a -0.1150, b 0.9043) | 0 / 126 | 10 | w 0, c 0 | 10 | 10 | 10 / 10 |
+| team_total | 48 | 0 (no map) | - | - | 0 | - | - | - | - |
+| segment | 100 | 0 (no map) | - | - | 0 (no market by scope) | - | - | - | - |
+
+- Every calibrated and blend value equals the pinned `sports_phase2_v1` map applied to the recorded frozen and market probabilities exactly.
+- Game-winner calibration is the identity, so calibrated legitimately equals frozen.
+- Spread has zero model weight but a nonzero intercept: blend = sigmoid(-0.1032 + logit(market)), which is not the market.
+- Total has zero weight and zero intercept, so blend equals the market (inside the 1e-4 clip range).
+- Every market candidate came from the latest hourly candle ended by `prediction_as_of`, the 15:00Z candle, aged about 46 min (under the 3 h limit), with a two-sided book; p is the bid/ask mid.
+
+Example (Rice at East Carolina, cutoff 16:00Z, `prediction_as_of` 15:45:31.98Z, candle ended 15:00Z):
+
+| contract | frozen | calibrated | market | blend |
+|---|---|---|---|---|
+| KXNCAAFGAME-...-ECU | 0.8479 | 0.8479 (identity) | 0.775 | 0.7992 (w 0.3) |
+| KXNCAAFSPREAD-...-ECU12 | 0.6014 | 0.6390 | 0.465 | 0.4394 (w 0, c -0.1032) |
+| KXNCAAFTOTAL-...-52 | 0.4576 | 0.4332 | 0.385 | 0.385 (w 0, c 0) |
+
+## Settlement scoring (as of 2026-10-10T15:51Z)
+
+- **Coverage:** 44 eligible WINDOW_CAPTURE records (44 events, 980 contracts). Excluded: 38 MISSED, 3 DUPLICATE_ATTEMPT.
+- **Settled so far:** 212 contracts were confirmed final (86 yes, 126 no) in 11 events: 9 soccer, 1 tennis, 1 table tennis. There were no void, nonbinary, inconsistent or failed lookups.
+- **Pending:** 768 contracts were not final in the latest run, including every NCAAF contract (games still in progress).
+- **Idempotency on real data:** re-running `settle` left all 209 earlier scores byte-identical and added 3 newly settled ones. `verify-scores`: all OK.
+- **No calibrated or blend probabilities are scored yet.** The settled events have no fitted maps, and the NCAAF games are not settled. Missing inputs among labelled contracts:
+  - calibrated: 212 "training support below threshold";
+  - market: 106 segment (out of scope), 6 score props (out of scope), 63 not selected by the per-event contract rule;
+  - blend: those same 112 out-of-scope contracts, plus 100 "matched support below threshold".
+- **Descriptive point estimates** (operational pilot, not representative, no classification):
+  - frozen: 212 contracts and 11 events, Brier 0.1747 (event-equal 0.1967).
+  - frozen - market on 37 common contracts in 7 events: Brier +0.0110 (event-equal +0.0416) and log loss +0.0366 (event-equal +0.0978), i.e. the market was more accurate on these contracts.
+  - Groups by sport, competition, family and cohort are in `sports_capture_v2_pilot_scores.csv`.
+
+Re-run `settle` and then `report` after the NCAAF games settle (tonight UTC) to score the calibrated and blend candidates.
