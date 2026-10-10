@@ -1,0 +1,1746 @@
+{
+ "adapters": {
+  "espn_fight": {
+   "comparability": "exact",
+   "history": "frozen normalized fights + ESPN scoreboards from the last frozen result - 2 days",
+   "linking": "Kalshi milestone fighters -> frozen fighter crosswalk -> ESPN fight within 36 h",
+   "status": "supported"
+  },
+  "espn_golf": {
+   "comparability": "field_assumption_differs",
+   "field": "prediction-time ESPN listed competitors (no outcome fields). Phase 1 used the field listed in the source *result* (late withdrawals included); live and historical forecasts are therefore not exactly comparable. If no field is listed by prediction_as_of, the frozen predictor is unavailable (never reconstructed from results).",
+   "history": "frozen normalized tournaments + ESPN scoreboards",
+   "linking": "Kalshi tournament milestone -> frozen golfer crosswalk -> ESPN event within 3 days with >= 70% field overlap",
+   "status": "supported"
+  },
+  "espn_team": {
+   "comparability": "exact",
+   "history": "frozen normalized events + ESPN scoreboards from the last frozen result - 2 days",
+   "linking": "Kalshi milestone home/away -> frozen participant crosswalk -> ESPN scoreboard game (Phase 1 match_games rule)",
+   "status": "supported"
+  },
+  "jolpica": {
+   "reason": "the frozen F1 field model needs the race entrant list; Jolpica publishes entrants only with results, so no prediction-time field source exists",
+   "status": "unsupported"
+  },
+  "kalshi_only": {
+   "comparability": "exact",
+   "history": "frozen normalized events + settled Kalshi markets since the freeze (available_at = settlement time)",
+   "linking": "two-market two-participant Kalshi event with a milestone start",
+   "status": "supported"
+  }
+ },
+ "comparability": {
+  "exact": "same frozen predictor, parameters and input semantics as the historical forecasts",
+  "field_assumption_differs": "prediction-time field instead of the historical result field; not exactly comparable with the Phase 1/Phase 2 historical forecasts"
+ },
+ "dependencies": {
+  "argentina": {
+   "data/sports/crosswalk/argentina_participants.json": "62f59aee691e5cfbde2622d1849140e714e28c7f95879a33fa2e3862248efb18",
+   "data/sports/normalized/argentina/contracts.jsonl": "9e0cb82fa9704fdc880a48e577e467f4648fea815bff1bd5144e7d41b8c2d76f",
+   "data/sports/normalized/argentina/events.jsonl": "a5bef6c0c2b7bfcbaa87cc375491ed8a7b9da9c5dfb94eb4ad97a7e65a441fea",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "brasileiro": {
+   "data/sports/crosswalk/brasileiro_participants.json": "6be4afa940f0893725089521ff05aeba66b5e94b2422c8bdfefabaf56206b376",
+   "data/sports/normalized/brasileiro/contracts.jsonl": "57ecca2d65dbff541e7d2880df519da3493a55ddb57b10a5c8a3f00bf59d47ef",
+   "data/sports/normalized/brasileiro/events.jsonl": "8fff34e37bccd779a30de056be9798a6a1fe71e2586d2a47d45a0ab97ff8adf0",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "bundesliga": {
+   "data/sports/crosswalk/bundesliga_participants.json": "4b131fa31c9a4d7b642423275659d7d31ea62c3ad9b6ce9c1e9f9f3b6061c1a5",
+   "data/sports/normalized/bundesliga/contracts.jsonl": "1d69a59c337328ff24ef23caa9879bfd961eedfc40e44562abd3bca9ccd024e0",
+   "data/sports/normalized/bundesliga/events.jsonl": "828694db2de43c7a3c3d0ec46f71d2a9799b384d036f0134acaa21ad83334d45",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "bundesliga2": {
+   "data/sports/crosswalk/bundesliga2_participants.json": "60c52d8c3e8b36f99a1426659996567393cd16dbf71a44f722c92011670e8d95",
+   "data/sports/normalized/bundesliga2/contracts.jsonl": "fe8dda4efb9c5667a3af45ccd8bdf23917ae6981f09e733faf559eb727543bf9",
+   "data/sports/normalized/bundesliga2/events.jsonl": "609d845eb662353e4ba6258e1082aa662706a3a70abfbd7406495b69afea6240",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "eflc": {
+   "data/sports/crosswalk/eflc_participants.json": "b72fdcdf1c2031b5512df7edbc0c1a295330aa12721fefaeb0eb513d4f680854",
+   "data/sports/normalized/eflc/contracts.jsonl": "917ba1d4e9129a40fbf69f7974e1d0191f5f8df8f883a90a2ba6f15c1c57ad7e",
+   "data/sports/normalized/eflc/events.jsonl": "7503f6f3ab49ce93e3886f852067afb27175b649dad20c9ecdbb756586391cfa",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "epl": {
+   "data/sports/crosswalk/epl_participants.json": "ef2c93b1b4b4fe51c91aa2079287783f0d61f8afd555172fd16bf773245c85a6",
+   "data/sports/normalized/epl/contracts.jsonl": "b31e8376d1c58f5f801d2c26bf2ceeb5539edfa3134366a3404e6b20d92f157a",
+   "data/sports/normalized/epl/events.jsonl": "6593decbb662e1dc0fc2a00ac8f6d5477b604f9af316770c2a42900412923d8f",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "eredivisie": {
+   "data/sports/crosswalk/eredivisie_participants.json": "2d94bc8f71b8089030d68d15ef117e4215d87198b0e2232d286aa4a6144c14df",
+   "data/sports/normalized/eredivisie/contracts.jsonl": "e866ae7a1175b7382f8036e3d796c367355a56c7748c435e23b7af3055d03840",
+   "data/sports/normalized/eredivisie/events.jsonl": "fd1c5c3a1873762a4dd90d36c3b425c7e300e9995433040416f41d5391ed48af",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "f1": {
+   "data/sports/crosswalk/f1_participants.json": "08800dce20635ae8e5004c1d38d5eee80c1b99c2cd661f52a7146c2492f045a8",
+   "data/sports/normalized/f1/contracts.jsonl": "b619f6bb1737c5d31710a8c02e861e449fb79cabd7310ab8eb46dc6761cb70c8",
+   "data/sports/normalized/f1/events.jsonl": "9a74d235e83582380b615998a4a84778a9fe256577e2b86cbc1859c5111cc760",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kx1sthomegame": {
+   "data/sports/normalized/k_kx1sthomegame/contracts.jsonl": "5c9d293671e82b2ba2c9f564b0eb045e24022e45665b8197fba4e89a8f2e5d6e",
+   "data/sports/normalized/k_kx1sthomegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxabagame": {
+   "data/sports/normalized/k_kxabagame/contracts.jsonl": "b65f07324067eb0705913c9bd34abbfc14f1076b0f888388f59b553d34f6898c",
+   "data/sports/normalized/k_kxabagame/events.jsonl": "ff8a315ab08d7e04e77456b0d67e3fa321cbb42bd6aa74896cba3fc2325ee531",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxacbgame": {
+   "data/sports/normalized/k_kxacbgame/contracts.jsonl": "5b86fd1449507011fe3ba39116bae69c7b57c545d66d00544d41892ce8c6d40d",
+   "data/sports/normalized/k_kxacbgame/events.jsonl": "ee6dbe383a83582b1904b75578bac5bea6e48c1c26a8bd7a3b8da5c9828a227b",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxafcacgame": {
+   "data/sports/normalized/k_kxafcacgame/contracts.jsonl": "f5c7d978bf3cc7f139083cc0c573c943536cd698927b673d0dd4e326ed804fb7",
+   "data/sports/normalized/k_kxafcacgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxafcongame": {
+   "data/sports/normalized/k_kxafcongame/contracts.jsonl": "85ab03221e5cbd84f99d943b3ece51d1ccd17fc2dc0f08f1d912fa018e6b0b2d",
+   "data/sports/normalized/k_kxafcongame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxaflgame": {
+   "data/sports/normalized/k_kxaflgame/contracts.jsonl": "ed5710ace26d7691f090fe99e53904980e1249b5d618bc36757c7d7f395776f5",
+   "data/sports/normalized/k_kxaflgame/events.jsonl": "345b52ea209de28dbc7b41b2e3197869a76d48ffcf1a3978fbe70ac0df5fca95",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxahlgame": {
+   "data/sports/normalized/k_kxahlgame/contracts.jsonl": "bad4a9a36e87133c51b1aed60be331ea488d3f42a74b3a673663963cd3a05dec",
+   "data/sports/normalized/k_kxahlgame/events.jsonl": "dd94a8db0cfeefc23561053e341fa4d0cdf8521a6f2fb22572b2fa33ec1ff17f",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxaleaguegame": {
+   "data/sports/normalized/k_kxaleaguegame/contracts.jsonl": "1af13ade21685f9bd3d97feb42f174c89f979378f6499b014c8f3f87c37ca920",
+   "data/sports/normalized/k_kxaleaguegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxallsvenskangame": {
+   "data/sports/normalized/k_kxallsvenskangame/contracts.jsonl": "6d2e2791cdc74460ad258cedf02d072a52c36a2f8916d6d611ce3ebc8b888620",
+   "data/sports/normalized/k_kxallsvenskangame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxapfddhgame": {
+   "data/sports/normalized/k_kxapfddhgame/contracts.jsonl": "12a4ffa658f098478b6124f2fe06e4260f2da347f96676b831d23e41408374d3",
+   "data/sports/normalized/k_kxapfddhgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxarglnbgame": {
+   "data/sports/normalized/k_kxarglnbgame/contracts.jsonl": "a138969ac84dafa7b39e656b7680a642f8a1e40e4ba7b8ea6e1e99c3532a2adf",
+   "data/sports/normalized/k_kxarglnbgame/events.jsonl": "86bbb237c925732122526f02fe592add1ee5142bdd3af127207a384e0a289f4d",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxargnacbgame": {
+   "data/sports/normalized/k_kxargnacbgame/contracts.jsonl": "9b996222a22a0bc9b0653f00f6451482fd95c658219953bbdbd7b14a0def1b1b",
+   "data/sports/normalized/k_kxargnacbgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxaseangame": {
+   "data/sports/normalized/k_kxaseangame/contracts.jsonl": "86c223373ef88e26c136dd3abf1a1953df81e30b9e44c257c5ec4f3594913080",
+   "data/sports/normalized/k_kxaseangame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxatpchallengerdoubles": {
+   "data/sports/normalized/k_kxatpchallengerdoubles/contracts.jsonl": "33ae82d934b6b5d8274d6936a1690fe6a8eb2e489567e42ac43297c8e918b9b7",
+   "data/sports/normalized/k_kxatpchallengerdoubles/events.jsonl": "d60634021dbbd8f8b623fa7d8d9db3e3be381ee6ecb24ff1847427289a156f64",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxatpchallengermatch": {
+   "data/sports/normalized/k_kxatpchallengermatch/contracts.jsonl": "dc733b72c5eab012e9933828e4573f0099c432042e6dd6835ca6877b5f3bd34b",
+   "data/sports/normalized/k_kxatpchallengermatch/events.jsonl": "ac38197d8328a7dab563a95e8147ee4f1a862fa0a9b3465f675167f393151697",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxatpdoubles": {
+   "data/sports/normalized/k_kxatpdoubles/contracts.jsonl": "a28a3d06d9b12da95e5b8ab9db602b1019dbf85a058f4f022152847cfe5b92f1",
+   "data/sports/normalized/k_kxatpdoubles/events.jsonl": "281d5f122fdd1321e9f9aaaba853a4a3a7919d8b07e10c03b1f90e8a01740414",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxatpmatch": {
+   "data/sports/normalized/k_kxatpmatch/contracts.jsonl": "e4d66929d8868b9501aaa0fdfc147511bfe9d5ce95559c0a9ac6ac94e204f651",
+   "data/sports/normalized/k_kxatpmatch/events.jsonl": "4b0489739e4c43f14582b806b057f96afc5e8701ee7d5d4fe2c6837f4b122118",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxautbslgame": {
+   "data/sports/normalized/k_kxautbslgame/contracts.jsonl": "3fb4d22c574e00aa2e124cafaff202bb447243526947ff2d3c95eb95d62c2b82",
+   "data/sports/normalized/k_kxautbslgame/events.jsonl": "172b0fba26d01e3133fce7c8246c58f77bbdab99886f07812c3ef075742c69d5",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbalgame": {
+   "data/sports/normalized/k_kxbalgame/contracts.jsonl": "9bc6183f269b899212afbef99250a34ac075bccc3be2880291ccf769365e7583",
+   "data/sports/normalized/k_kxbalgame/events.jsonl": "9df94c4d5f4c9ef5d8a863406794361b35ae55997a2ff48fd595c1d2cd18c1f1",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxballerleaguegame": {
+   "data/sports/normalized/k_kxballerleaguegame/contracts.jsonl": "03ddeb944d1b28ead0964a10f1fb9f8500412b79fe62dc6b42acfbd22302c17a",
+   "data/sports/normalized/k_kxballerleaguegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbattleofsexes": {
+   "data/sports/normalized/k_kxbattleofsexes/contracts.jsonl": "99efa180dccf0c35931deead96de6f9d31d4cde78b1bbfd40641219c880f24ca",
+   "data/sports/normalized/k_kxbattleofsexes/events.jsonl": "99228755c888db2fb3379dbb6bcc6fbafa6a726fbe256d3563f7dde7be928d3a",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbbintlgame": {
+   "data/sports/normalized/k_kxbbintlgame/contracts.jsonl": "fee337b97d22af4b36045a01d82e433aa48c76c5e492fef808a68f5e8cbb9414",
+   "data/sports/normalized/k_kxbbintlgame/events.jsonl": "996e7247af60abdfb464d1f2bf5a94831e75d11115077ef21271b18a4257c164",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbblgame": {
+   "data/sports/normalized/k_kxbblgame/contracts.jsonl": "65dc21d1907feed9b77ae289a10ee3780f4c9bf70743342018dd689b33bf20f4",
+   "data/sports/normalized/k_kxbblgame/events.jsonl": "5b96937fd7b4bd900aaf40fa6d00ff0a2c00bf1c3691580b287c57d6a10f496c",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbbseriea2game": {
+   "data/sports/normalized/k_kxbbseriea2game/contracts.jsonl": "2d3339b299681b89ac8bfef1fdbac0c694364b0954fc4f9686a27801829fba18",
+   "data/sports/normalized/k_kxbbseriea2game/events.jsonl": "3865130b3d579c4d4c65d113fc2322996ad9e4e2f973d516473b6bf87b6ad1cd",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbbserieagame": {
+   "data/sports/normalized/k_kxbbserieagame/contracts.jsonl": "9d0673761100b007e8377238ce5ca70dc2d39132732456a3999ce248d9b5f9d9",
+   "data/sports/normalized/k_kxbbserieagame/events.jsonl": "0e00478d2f3f9baadf1d3d85116769e999995e54dbe6fbbc5d3944365ead44b4",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbbseriebgame": {
+   "data/sports/normalized/k_kxbbseriebgame/contracts.jsonl": "69e484f0c94bb18c26a57fa2fde969aedfaca6f78df2bcd39c1dfc5313956654",
+   "data/sports/normalized/k_kxbbseriebgame/events.jsonl": "b2c35dae76f24f933846681ea4ba19a062bfe34d41179fd69cd873936b97d994",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbdsftchallenge": {
+   "data/sports/normalized/k_kxbdsftchallenge/contracts.jsonl": "b6b85fa53dd96217c25e8cb94dfd09e973c1c4f78546ca611fec0d3a18c736b4",
+   "data/sports/normalized/k_kxbdsftchallenge/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbelgianplgame": {
+   "data/sports/normalized/k_kxbelgianplgame/contracts.jsonl": "6a29dd9a7cfe9d430a0653b48d8ce2526cf1400b7faeb884ac77fb3a3b657967",
+   "data/sports/normalized/k_kxbelgianplgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbig3game": {
+   "data/sports/normalized/k_kxbig3game/contracts.jsonl": "c0ab21f9662e4a0381732e023fb64a9a120816df73a2eebe98ae50c909f5bfeb",
+   "data/sports/normalized/k_kxbig3game/events.jsonl": "038bf867f9ba11a3910643afe8c3087efdefe0ee3af18c200aed1fad50aab648",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbilbasketball": {
+   "data/sports/normalized/k_kxbilbasketball/contracts.jsonl": "4dfe781780c74cb63ae9a53dacc4b82d10e63880652c3d22bae6d6eefd38becc",
+   "data/sports/normalized/k_kxbilbasketball/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbilgame": {
+   "data/sports/normalized/k_kxbilgame/contracts.jsonl": "851c5248bd4985b2475a9aad71bcfe1a6043c9715c0e05b689e93e2c9d5eecba",
+   "data/sports/normalized/k_kxbilgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbolpdivgame": {
+   "data/sports/normalized/k_kxbolpdivgame/contracts.jsonl": "8711a27f0977e28f06f2c439724511912e835c7cfa8d3bed9143457252c8e3ab",
+   "data/sports/normalized/k_kxbolpdivgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbrasileirobgame": {
+   "data/sports/normalized/k_kxbrasileirobgame/contracts.jsonl": "346b287840e7e2d87ae688cbd2e9b0c9f1dc67efcf7491363258130ecc706fad",
+   "data/sports/normalized/k_kxbrasileirobgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbrasileirocgame": {
+   "data/sports/normalized/k_kxbrasileirocgame/contracts.jsonl": "4c9910ab847b5e458cb4db009160fed04ccf853bd05b2b29ca3c923c5a9d3062",
+   "data/sports/normalized/k_kxbrasileirocgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbslgame": {
+   "data/sports/normalized/k_kxbslgame/contracts.jsonl": "d6d03bef855a7cc4a4f3c1ef7a8f5a5d472981eb3f32809651d33d9e804e3b5e",
+   "data/sports/normalized/k_kxbslgame/events.jsonl": "77ba42f4e2c36b68a87084657fc69605fa1d330c5342a2f5d9ed85788c3c7931",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxbsngame": {
+   "data/sports/normalized/k_kxbsngame/contracts.jsonl": "09c02a8268086656da814bbe86a1264196d1df04bf8f932482eceab1f6355fd0",
+   "data/sports/normalized/k_kxbsngame/events.jsonl": "3eff79bb763313e9beb9cf02a420c16491f5de4c3e9bc06fd5fac82f591c72ca",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcanplgame": {
+   "data/sports/normalized/k_kxcanplgame/contracts.jsonl": "a98c48ab68d06886fc4af1858ed1162d31cf4f759e0adfd9f5cacb02c9f59353",
+   "data/sports/normalized/k_kxcanplgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcbagame": {
+   "data/sports/normalized/k_kxcbagame/contracts.jsonl": "b0164eff56c72f07d0bf21aae976be00ff4e325a2e68c1c1fef7fa88f73df6ce",
+   "data/sports/normalized/k_kxcbagame/events.jsonl": "fd2aa18e3f1759762d27386726bd2967bd6042356dd00e9cdad112594892f0e4",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxceblgame": {
+   "data/sports/normalized/k_kxceblgame/contracts.jsonl": "abab6716e48e4c89560d37beee2a28de5f6948d9c25be715f5e27b009aea04e8",
+   "data/sports/normalized/k_kxceblgame/events.jsonl": "2e6798d867980f0916d280582025578a3d5b0bfd74c9c6b4a0a6908470f73acb",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcflgame": {
+   "data/sports/normalized/k_kxcflgame/contracts.jsonl": "b35aee911cff77abaedad605d487478eacdf8bc5eedde3e9e493775850f5e7f6",
+   "data/sports/normalized/k_kxcflgame/events.jsonl": "709ea4e10f0ca751658e14a870f08ea1a34638980a86a3e39d7bfa29e2bd81c0",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxchessmatch": {
+   "data/sports/normalized/k_kxchessmatch/contracts.jsonl": "a400ce884aa678c52444fb164b5ed5ff808ac6240258acd60a81cd897375144d",
+   "data/sports/normalized/k_kxchessmatch/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxchlldpgame": {
+   "data/sports/normalized/k_kxchlldpgame/contracts.jsonl": "42788cbe784af35974464307d3f7b0facd058bdca4e80014130a604a7fb07109",
+   "data/sports/normalized/k_kxchlldpgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxchnl1game": {
+   "data/sports/normalized/k_kxchnl1game/contracts.jsonl": "19264092898e7cdd8c60f6ade8c7741ca9d4b86288719e8f0b7c550f8543fabb",
+   "data/sports/normalized/k_kxchnl1game/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxchnslgame": {
+   "data/sports/normalized/k_kxchnslgame/contracts.jsonl": "ce1de4a32d157421d2264b2cf93831bbf5abfbefcf812ee00938f680e2c02026",
+   "data/sports/normalized/k_kxchnslgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxclubfgame": {
+   "data/sports/normalized/k_kxclubfgame/contracts.jsonl": "385fc0f3d1a2303892f75e23747508b02b53f4c48a066f4ae41c60de8d2b8379",
+   "data/sports/normalized/k_kxclubfgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxclubwcgame": {
+   "data/sports/normalized/k_kxclubwcgame/contracts.jsonl": "47f94ef8f202bc9924fcbd991a00dacfe6faa246b6bf8e7d9cb28f8a2c36a35d",
+   "data/sports/normalized/k_kxclubwcgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcodgame": {
+   "data/sports/normalized/k_kxcodgame/contracts.jsonl": "b88b049c2ba3054509b571a36770d680312fbb10ef53ec88e2057d735fd09fc5",
+   "data/sports/normalized/k_kxcodgame/events.jsonl": "ece6b196857c3b4734801d1d8ba64cfb559c76fbb4fce2b65cf4c2a082f49fa1",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxconcacafnlgame": {
+   "data/sports/normalized/k_kxconcacafnlgame/contracts.jsonl": "4cfb71f13d027a8f65ea2405021902d4b01f97975d47c487f61eeefbf953c8fa",
+   "data/sports/normalized/k_kxconcacafnlgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxconmebollibgame": {
+   "data/sports/normalized/k_kxconmebollibgame/contracts.jsonl": "8cab3bf6110a2333a98c983e411bef786001a1c18e56202cadfdbf4c3a582e8b",
+   "data/sports/normalized/k_kxconmebollibgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxconmebolsudgame": {
+   "data/sports/normalized/k_kxconmebolsudgame/contracts.jsonl": "85b6e7bd9df947519e0f05edc2ddedda0b49c14e681d05afd1930376f7c4d6e7",
+   "data/sports/normalized/k_kxconmebolsudgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcopadelreygame": {
+   "data/sports/normalized/k_kxcopadelreygame/contracts.jsonl": "3dcd569c95be775a1cced1fcdf358ad01351c74fd7418353de68c9fa973aba8e",
+   "data/sports/normalized/k_kxcopadelreygame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcopadobrasilgame": {
+   "data/sports/normalized/k_kxcopadobrasilgame/contracts.jsonl": "d3dcbcfbc97a4ea991d0d661208411f3a310ae2fa7f9313d373128a232951499",
+   "data/sports/normalized/k_kxcopadobrasilgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcoppaitaliagame": {
+   "data/sports/normalized/k_kxcoppaitaliagame/contracts.jsonl": "2f34aa862c731e91d3f539d0111c09ddc6ffe1e715c900bd6260d4473052862c",
+   "data/sports/normalized/k_kxcoppaitaliagame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcoupedefrancegame": {
+   "data/sports/normalized/k_kxcoupedefrancegame/contracts.jsonl": "00b53b646ee903bc3741379988fa90cbc211af438957259301db9dfe77147c37",
+   "data/sports/normalized/k_kxcoupedefrancegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcplmatch": {
+   "data/sports/normalized/k_kxcplmatch/contracts.jsonl": "ff2d49ce59dc9482f1f32d1bc99ceb43b1e2a2d6aafcbabb6cea28f13b43c391",
+   "data/sports/normalized/k_kxcplmatch/events.jsonl": "634de8361ce76fb2820bc7d9c99d34eb7e8b0b411f45a59578d1f29b5cc25d0b",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcricketodimatch": {
+   "data/sports/normalized/k_kxcricketodimatch/contracts.jsonl": "4aeff11511af26f68290c56b4ac06072f2366d24c412695a96619f6906107665",
+   "data/sports/normalized/k_kxcricketodimatch/events.jsonl": "a7b73e0ea7ae1719e16179f9ac98698df91a8d8df079dfd15cd9ae5e49483be4",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcrickett20imatch": {
+   "data/sports/normalized/k_kxcrickett20imatch/contracts.jsonl": "eeb7a4968dace26151c4d8231fe82420321fadb53d3d4796e394269556a29084",
+   "data/sports/normalized/k_kxcrickett20imatch/events.jsonl": "ad886037b35d3c67adf6e934e896cb855c266a9b50182db703f714b48bc06d16",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcrickettestmatch": {
+   "data/sports/normalized/k_kxcrickettestmatch/contracts.jsonl": "164725131ab5c95cf9266c202c3a82c43de5f165da67753794829107f4f5e02d",
+   "data/sports/normalized/k_kxcrickettestmatch/events.jsonl": "82793761d0ae84da17d9b303df0ecec529a1b843865870542ae3cfd9bb19d2c2",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcs2game": {
+   "data/sports/normalized/k_kxcs2game/contracts.jsonl": "9d22f54453d43c6fac6a5978ca8ea3d1b76d708577423757d348a5178247ceca",
+   "data/sports/normalized/k_kxcs2game/events.jsonl": "2b9ee3bf76ebcf9d6b21a0a1f8174ffb8e82a115f418cc24acb92e76e9010ed0",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxcsgogame": {
+   "data/sports/normalized/k_kxcsgogame/contracts.jsonl": "515a8d7ead1175667c24cbb6083445475a00c45164805ea6d0e857a0519b3f9e",
+   "data/sports/normalized/k_kxcsgogame/events.jsonl": "717c722ba56bbb5a70af39495184e544fda51721719816f592d078a0d036d0b5",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxczeflgame": {
+   "data/sports/normalized/k_kxczeflgame/contracts.jsonl": "5aaed78a1965c11317499c70e23336e820a4c13decb522c1fc0fd567c0566a43",
+   "data/sports/normalized/k_kxczeflgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxczefnlgame": {
+   "data/sports/normalized/k_kxczefnlgame/contracts.jsonl": "4c890c47104b3a8594047b735ef383d53a2964485b140e17c27b7bfb12044b9d",
+   "data/sports/normalized/k_kxczefnlgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxczenblgame": {
+   "data/sports/normalized/k_kxczenblgame/contracts.jsonl": "c17a774831c35967086e7bd55b93a4dbb39ed2bf4b227e4a82379676c724d2c2",
+   "data/sports/normalized/k_kxczenblgame/events.jsonl": "ac8a9e7a0d131a7e436bf59e67e67b6614e141b31ba834ad999de6b40be01da1",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxdartsmatch": {
+   "data/sports/normalized/k_kxdartsmatch/contracts.jsonl": "1851336759eae63caf66729a25f57e38b096e9560bf6a4762df3fcbe34b2d0d8",
+   "data/sports/normalized/k_kxdartsmatch/events.jsonl": "6e14fa79fa1a8ce9adf9efde80810b71c67240c72a768ea37063705f71295986",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxdaviscupmatch": {
+   "data/sports/normalized/k_kxdaviscupmatch/contracts.jsonl": "d91662412c42cc62de018f727b419e1488a5c7ec8bae865f47865282f1751220",
+   "data/sports/normalized/k_kxdaviscupmatch/events.jsonl": "89f0d36d43ee6e5025d410d6dcdfe230fdb2d43d3e65440eea8d55020a64f0dc",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxdbbgame": {
+   "data/sports/normalized/k_kxdbbgame/contracts.jsonl": "4c7ac8266b43836653264c51f75f5656ebc6734a1e374530c54c6908284e75aa",
+   "data/sports/normalized/k_kxdbbgame/events.jsonl": "45fa787614a67d062bf3a9a0bb0952aeaa5f26e1cc074a66877b6143a637b0e7",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxdelgame": {
+   "data/sports/normalized/k_kxdelgame/contracts.jsonl": "cf8f6d3e9ed08de655952e3619929c4b018a3c641373e2691c02790d7e8edad7",
+   "data/sports/normalized/k_kxdelgame/events.jsonl": "91fd235e7550952d8f9229482c2f1e97c962b3ca3f7c16722e11701d4d8c651d",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxdensuperligagame": {
+   "data/sports/normalized/k_kxdensuperligagame/contracts.jsonl": "9b5a2481af63c340699da5bc00fec225e8b6eb23aaf43d09f71b57472fccfdcc",
+   "data/sports/normalized/k_kxdensuperligagame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxdfbpokalgame": {
+   "data/sports/normalized/k_kxdfbpokalgame/contracts.jsonl": "f38c78a64987ac8e4ee96f04a82ab35f1f743e368a4f2e8fb9a88b3f606a966e",
+   "data/sports/normalized/k_kxdfbpokalgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxdimayorgame": {
+   "data/sports/normalized/k_kxdimayorgame/contracts.jsonl": "56ea4e312b9c76b748261cffc428648025c1a9bfa3c98539c61c207a2029ecbd",
+   "data/sports/normalized/k_kxdimayorgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxdota2game": {
+   "data/sports/normalized/k_kxdota2game/contracts.jsonl": "f84cdb84f9ca30b17605132fecabb0dd2c30c949181911468075704c60ed9edb",
+   "data/sports/normalized/k_kxdota2game/events.jsonl": "cf9ed62615ca0640aaeb6b26f0a8ac71b6644d3e13cbd65a805f691c8c2154a2",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxebasketballgame": {
+   "data/sports/normalized/k_kxebasketballgame/contracts.jsonl": "b194b258304de3fb61ff7c1c289c13f677a6061b040ce6a7d558ff6236094f17",
+   "data/sports/normalized/k_kxebasketballgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxeculpgame": {
+   "data/sports/normalized/k_kxeculpgame/contracts.jsonl": "44071ccc269d71c8ace7b9760c26033e56198ebadb80b7e0550f3d2f299720ab",
+   "data/sports/normalized/k_kxeculpgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxeerstedivgame": {
+   "data/sports/normalized/k_kxeerstedivgame/contracts.jsonl": "34e73c5ffb62c0ef010f4b0b051d30032d85df1c4174ba85f6e587124732d8ad",
+   "data/sports/normalized/k_kxeerstedivgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxeflcupgame": {
+   "data/sports/normalized/k_kxeflcupgame/contracts.jsonl": "0e38ab9f34d585e094dad66f2c77884f645f9e7e63b026e8e6fd81351eef8bd4",
+   "data/sports/normalized/k_kxeflcupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxefll1game": {
+   "data/sports/normalized/k_kxefll1game/contracts.jsonl": "e4f3ea1cf03fe06fe8c763e6b159c20279fa255cfa8e8f3d657c752fc60e2e51",
+   "data/sports/normalized/k_kxefll1game/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxefltrophygame": {
+   "data/sports/normalized/k_kxefltrophygame/contracts.jsonl": "680ee45d6e4ecd7c6a9df64cfde44996165f3377f3658e36777c98e5f04312d7",
+   "data/sports/normalized/k_kxefltrophygame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxegyplgame": {
+   "data/sports/normalized/k_kxegyplgame/contracts.jsonl": "ca6c7abdb6e8fd7e319cc71654ee2678062931fb04a98b31d7c684cd5e334839",
+   "data/sports/normalized/k_kxegyplgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxekstraklasagame": {
+   "data/sports/normalized/k_kxekstraklasagame/contracts.jsonl": "9f07ff4103a884c92e5f01812aae47485a4b333463796944be92a007772c266f",
+   "data/sports/normalized/k_kxekstraklasagame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxelhgame": {
+   "data/sports/normalized/k_kxelhgame/contracts.jsonl": "6b9653c20caed7ace85eee7334a3e1414173fae281c34da9a44b0a07aea893ad",
+   "data/sports/normalized/k_kxelhgame/events.jsonl": "50b2ec519b0a77d2eac863edd4ccb8483cdfd560bac6f0c86bcd8fd4f2cf7529",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxeliteseriengame": {
+   "data/sports/normalized/k_kxeliteseriengame/contracts.jsonl": "5ba7fd198b91b42c67d8aa476b4409db08d45badf95e8439dafc3c475948279a",
+   "data/sports/normalized/k_kxeliteseriengame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxengcsgame": {
+   "data/sports/normalized/k_kxengcsgame/contracts.jsonl": "981413a705e05ca74bafc9581f8833b94cd0a6fb3f807eb7872a58ee65615289",
+   "data/sports/normalized/k_kxengcsgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxengnlgame": {
+   "data/sports/normalized/k_kxengnlgame/contracts.jsonl": "74854b97daf737dee346e4839037d3c4142bf9c59f2e5ca4a82be2e2e3344543",
+   "data/sports/normalized/k_kxengnlgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxeredivisiewgame": {
+   "data/sports/normalized/k_kxeredivisiewgame/contracts.jsonl": "8b688802ee42434e800a1d700dee6bc80a35bc52c7db7413832764f52556de54",
+   "data/sports/normalized/k_kxeredivisiewgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxesoccergame": {
+   "data/sports/normalized/k_kxesoccergame/contracts.jsonl": "4f8f27e49329d358dacf473ba4c038efa01062819e65c35f96c3331362829012",
+   "data/sports/normalized/k_kxesoccergame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxespsupercupgame": {
+   "data/sports/normalized/k_kxespsupercupgame/contracts.jsonl": "89270f22aafac5241a93767006620cc980a09bf102c7fbb698e4f4a2af0563a2",
+   "data/sports/normalized/k_kxespsupercupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxettangame": {
+   "data/sports/normalized/k_kxettangame/contracts.jsonl": "00fedf9a436472c3f5e01352193af7ada4ae3d66d2e666812cb812549750897b",
+   "data/sports/normalized/k_kxettangame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxeurocupgame": {
+   "data/sports/normalized/k_kxeurocupgame/contracts.jsonl": "9599dcbee0dbf2757f2095bf6614a674d50c1b247e9d02e1deaa1fda12540060",
+   "data/sports/normalized/k_kxeurocupgame/events.jsonl": "67cae76630a0ed98cdc296ac1b7881d1d4251f41504a31b578790b39be168297",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxeuroleaguegame": {
+   "data/sports/normalized/k_kxeuroleaguegame/contracts.jsonl": "924976d98fbc9718e247900f78fd5528d8a65bac5162bd951452b826d518fec2",
+   "data/sports/normalized/k_kxeuroleaguegame/events.jsonl": "41d80c57a7e4b45534f8173e4b6c4539f147fc39e99b2a7215f8e2db8b96fe8d",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxewslgame": {
+   "data/sports/normalized/k_kxewslgame/contracts.jsonl": "27e6e4370db1779e7ee030687ce399e02283aaef74aaa35ffd269a378814feff",
+   "data/sports/normalized/k_kxewslgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxexhibitionmen": {
+   "data/sports/normalized/k_kxexhibitionmen/contracts.jsonl": "3e4111ccabeaaec35cfbd7d21c541213d5773e7f049cd7190398f405e5b2af44",
+   "data/sports/normalized/k_kxexhibitionmen/events.jsonl": "773c9f112f4d906229746f4fdb319566df691899253cc0d067da121ac011a98d",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfacupgame": {
+   "data/sports/normalized/k_kxfacupgame/contracts.jsonl": "cbc8a8f241a798be99178e52b604e302681ae9a68386b12fd04bc549def4f67b",
+   "data/sports/normalized/k_kxfacupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfibaecupgame": {
+   "data/sports/normalized/k_kxfibaecupgame/contracts.jsonl": "2b6f95adec87faf1be6157c8537719a39b44c99b4bbf5905597961d52827f729",
+   "data/sports/normalized/k_kxfibaecupgame/events.jsonl": "f05455902507ab22a62b376f113559e3f0b12b5a74bce45e3ea4494c35e2bb63",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfibagame": {
+   "data/sports/normalized/k_kxfibagame/contracts.jsonl": "01bf29d81f0494ee246c67de66290e7dea17f6c32676cbebc550537ffff49856",
+   "data/sports/normalized/k_kxfibagame/events.jsonl": "2eec742bbf94ed279f021ef3c99a9fb5e1ecae49713115028bfed9b1633ffc14",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfifagame": {
+   "data/sports/normalized/k_kxfifagame/contracts.jsonl": "3e2b327ef3876fbb233c1d8d56fb8ab2127f936d98706574ea8a2c3d3b09e864",
+   "data/sports/normalized/k_kxfifagame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfifauspullgame": {
+   "data/sports/normalized/k_kxfifauspullgame/contracts.jsonl": "a55d328f25864cd07f914c880cf94034abde98550d5c5ab3bbb9a4ece9757657",
+   "data/sports/normalized/k_kxfifauspullgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfifawgame": {
+   "data/sports/normalized/k_kxfifawgame/contracts.jsonl": "ba468a66181151e157e6a4aa3d82da5c061871528a6895297e364b61edf37556",
+   "data/sports/normalized/k_kxfifawgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfinalissimagame": {
+   "data/sports/normalized/k_kxfinalissimagame/contracts.jsonl": "90c7c6d9ee92d6da7405c5b3d9ed7fb5ed522fec7dff342b5c29950d67e66196",
+   "data/sports/normalized/k_kxfinalissimagame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfincupgame": {
+   "data/sports/normalized/k_kxfincupgame/contracts.jsonl": "d3abf329c2b874cc5d9400fb254d7782560cb299331d0818b544a407e8445e0c",
+   "data/sports/normalized/k_kxfincupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfinylgame": {
+   "data/sports/normalized/k_kxfinylgame/contracts.jsonl": "d8da7cc1e01000be1801fc8d76966313f1f3cd8cf3bb44cfabd1250f253058fa",
+   "data/sports/normalized/k_kxfinylgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfloydtysonfight": {
+   "data/sports/normalized/k_kxfloydtysonfight/contracts.jsonl": "a69973a5a1a8e87bbd1c24a6727ef1072c283e9444fa63dbbde70abc0834545e",
+   "data/sports/normalized/k_kxfloydtysonfight/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfomen": {
+   "data/sports/normalized/k_kxfomen/contracts.jsonl": "785ba4f8f5f776941f676408436f217ef8c62dcb710beee10ab34da60362e10b",
+   "data/sports/normalized/k_kxfomen/events.jsonl": "d8534168710e646ea53cad4866d57f0dd012dac7bc26aa2871994cae7c5ddcdf",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfortnite": {
+   "data/sports/normalized/k_kxfortnite/contracts.jsonl": "6b636e57cf0f1f53d616f545fd388fd45f8beb144e0b6756930635f1e73fae4f",
+   "data/sports/normalized/k_kxfortnite/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfowomen": {
+   "data/sports/normalized/k_kxfowomen/contracts.jsonl": "d28ee64e805faac26a62516cc9c7001e4b3e80557e4ad64c3118d03f6c198f19",
+   "data/sports/normalized/k_kxfowomen/events.jsonl": "208e507ce5020b9526ccf30d0d5ace5d4cf88cac104af0dc81264161ab3a67e3",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfrasupercupgame": {
+   "data/sports/normalized/k_kxfrasupercupgame/contracts.jsonl": "e8fe132d9c4923b7771e3e6292302d9ca8ce1850d28d65625a72ececc1d966bb",
+   "data/sports/normalized/k_kxfrasupercupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfrocupgame": {
+   "data/sports/normalized/k_kxfrocupgame/contracts.jsonl": "a781c00189261c130b5fb0fcb66397b08d0e23202506ea903a5458127415d8f5",
+   "data/sports/normalized/k_kxfrocupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfroplgame": {
+   "data/sports/normalized/k_kxfroplgame/contracts.jsonl": "32eb07ea5667e6f8b4ab314f3662b0dd62aae2a6ace097bd2abbce63d2f81a1a",
+   "data/sports/normalized/k_kxfroplgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxfuryjoshua": {
+   "data/sports/normalized/k_kxfuryjoshua/contracts.jsonl": "4a7d65d41949d391182449e6d98401dd2c5e19d4470c07da8e00e077929764f0",
+   "data/sports/normalized/k_kxfuryjoshua/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxgblgame": {
+   "data/sports/normalized/k_kxgblgame/contracts.jsonl": "a9485020a7a5fc2b33ed1ce3192a127a4b4da949b32bee018fd3196d30a7dbce",
+   "data/sports/normalized/k_kxgblgame/events.jsonl": "23f8370dc1e079a366ffda08a0ac6a699f6479c56f5ea4cda0e19e6691d19042",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxger3lgame": {
+   "data/sports/normalized/k_kxger3lgame/contracts.jsonl": "10430583bf838d0741aa74de6cfdf6e8037ac85656f87e100bc829d2f8b8d67c",
+   "data/sports/normalized/k_kxger3lgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxgerscgame": {
+   "data/sports/normalized/k_kxgerscgame/contracts.jsonl": "aa6096a16f82fc0e122db002f2c244160e910c5c4047d305a25f13b4a993f0fa",
+   "data/sports/normalized/k_kxgerscgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxgrecupgame": {
+   "data/sports/normalized/k_kxgrecupgame/contracts.jsonl": "942a3dcc43dcfa7ea40cc0e0d14628bd7c7f1ea6a7b4fd680aa6433603c26b3f",
+   "data/sports/normalized/k_kxgrecupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxgreycup": {
+   "data/sports/normalized/k_kxgreycup/contracts.jsonl": "50b6e15c50cb1c4be0435e8e500e2c8d52989d9d8774ff184fec32aaaa2ddaf7",
+   "data/sports/normalized/k_kxgreycup/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxhnlgame": {
+   "data/sports/normalized/k_kxhnlgame/contracts.jsonl": "19cebc90cff587b2335edce4b4bf647573b12ec5ba1375f21762a2136f3017f5",
+   "data/sports/normalized/k_kxhnlgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxhundredmatch": {
+   "data/sports/normalized/k_kxhundredmatch/contracts.jsonl": "357380c3ec2c16618885bac8fed493b4ee5de8b3dd3583e97214c3b721575c09",
+   "data/sports/normalized/k_kxhundredmatch/events.jsonl": "aa35d5c1c0262b17796c517b14a4804f0a94e9007e84f2bd5ff34745c9dc5ca2",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxidnslgame": {
+   "data/sports/normalized/k_kxidnslgame/contracts.jsonl": "336e0fe42daa297a532d800cd077d362c5277a70bc1c6e886d6c55dff3f7cd06",
+   "data/sports/normalized/k_kxidnslgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxiihfgame": {
+   "data/sports/normalized/k_kxiihfgame/contracts.jsonl": "1865a9cb4ecc687f50106eae79fa04284a47f1e6b81bb9c0aada00ae05124d95",
+   "data/sports/normalized/k_kxiihfgame/events.jsonl": "918822e1587fc70798a5a653f731398708452e21d9c3779773c3a21bcda6f193",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxinterconcupgame": {
+   "data/sports/normalized/k_kxinterconcupgame/contracts.jsonl": "265c9e48b7814f4480a30b8121b7de76b332c503539ecf8e469d9d51cdc148d3",
+   "data/sports/normalized/k_kxinterconcupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxintlfriendlygame": {
+   "data/sports/normalized/k_kxintlfriendlygame/contracts.jsonl": "54bca7ab8733f0a7ff97b21ae4cb1ed801643f2e05be58b209997caf93073197",
+   "data/sports/normalized/k_kxintlfriendlygame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxipl": {
+   "data/sports/normalized/k_kxipl/contracts.jsonl": "01978be04c7e6f71ee9ff608b1aec9a9f281c15c29a9d0f3815fe7d2fedf7c69",
+   "data/sports/normalized/k_kxipl/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxiplgame": {
+   "data/sports/normalized/k_kxiplgame/contracts.jsonl": "41674e94f5f6aeca55859f1dd2bd85249700c409130a157454a69c3f31a90a35",
+   "data/sports/normalized/k_kxiplgame/events.jsonl": "335356f92806fe36b13258b41c7376a90e647c712b4ebe310f397a20c9ea81a5",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxislgame": {
+   "data/sports/normalized/k_kxislgame/contracts.jsonl": "843ec7e10386652f724caa17d86a77907ce5bbb7a39ec5fb5727b3ef0e27d4cb",
+   "data/sports/normalized/k_kxislgame/events.jsonl": "40cb9cc4b40d1c90ead4be202aab0761851f77fb8da11d545249dbd21c610e80",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxisrnlgame": {
+   "data/sports/normalized/k_kxisrnlgame/contracts.jsonl": "5a9c1d6fa65729c702a3fb5d54c45ff7cfedb4117f954497ada9816751b9b1ab",
+   "data/sports/normalized/k_kxisrnlgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxisrplcupgame": {
+   "data/sports/normalized/k_kxisrplcupgame/contracts.jsonl": "0d565a63cf24e60c100d96fb5e8fb43b769998aac231615d43f2f19fb55296a6",
+   "data/sports/normalized/k_kxisrplcupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxisrplgame": {
+   "data/sports/normalized/k_kxisrplgame/contracts.jsonl": "c3acd64f50b3be408a2fd48bac944d5da4a103eb37e86e75eb8856aa731eee70",
+   "data/sports/normalized/k_kxisrplgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxitasupercupgame": {
+   "data/sports/normalized/k_kxitasupercupgame/contracts.jsonl": "7f4b4eb3261144da7ac4e5238e28f057fbc1794dfb92592d317430eec65f6ae3",
+   "data/sports/normalized/k_kxitasupercupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxitfdoubles": {
+   "data/sports/normalized/k_kxitfdoubles/contracts.jsonl": "4e3db717939b5f8a2b4676dd65d56a17b5acc33b02825e804e6662794f7b7e9b",
+   "data/sports/normalized/k_kxitfdoubles/events.jsonl": "054aa1e1d98e152f8c0b3b9c8dd85169e084329b98c1378b05290f91da0df95a",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxitfmatch": {
+   "data/sports/normalized/k_kxitfmatch/contracts.jsonl": "e39dd310fed0ed01bf60b748220f2d8e51797f30c4950f8ab1f0f6960cf6da8d",
+   "data/sports/normalized/k_kxitfmatch/events.jsonl": "910755b9c55ddedb3761e83f51e6808c7402b3e054b647c59e5651c7f887c81e",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxitfwdoubles": {
+   "data/sports/normalized/k_kxitfwdoubles/contracts.jsonl": "c61063176c4bf2f702573b884bf8c56724e56a2c3e81b46a7948c58ad2230bb1",
+   "data/sports/normalized/k_kxitfwdoubles/events.jsonl": "9c6709aecebd27df569a133156c4e84d94b7cd3a7963c0b147d1a7fb6e9c6896",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxitfwmatch": {
+   "data/sports/normalized/k_kxitfwmatch/contracts.jsonl": "109420609600205fcebda0a079410821f437a7ff8ca19e20eaf38e1c354eb495",
+   "data/sports/normalized/k_kxitfwmatch/events.jsonl": "543116b42078b0d4de41478e53b9db268545ee4bc9738b8f5dce23baeaab3a7b",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxittfmenmatch": {
+   "data/sports/normalized/k_kxittfmenmatch/contracts.jsonl": "0e459b05119c53776e0e88f0b1873338620a03e4e4a5c0dd746e0d76b9283197",
+   "data/sports/normalized/k_kxittfmenmatch/events.jsonl": "17ba37236d4494d678272bc32fe8f7e7b47f589a902dd0f692914c30de18ff57",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxiwmen": {
+   "data/sports/normalized/k_kxiwmen/contracts.jsonl": "883f13debdac4062ce285cb44bda393dfe67e165986b8e162d8324896cf6a125",
+   "data/sports/normalized/k_kxiwmen/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxiwwomen": {
+   "data/sports/normalized/k_kxiwwomen/contracts.jsonl": "2e68c71440af23d7f70643051d326c3a3348ca05c867262764735de82ceb55ac",
+   "data/sports/normalized/k_kxiwwomen/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxj2leaguegame": {
+   "data/sports/normalized/k_kxj2leaguegame/contracts.jsonl": "336b6969276fb11f900c8b2bd8364862e2ffd7228dcf4e94f0939cab2cc0c83e",
+   "data/sports/normalized/k_kxj2leaguegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxjbleaguegame": {
+   "data/sports/normalized/k_kxjbleaguegame/contracts.jsonl": "e02ebc2b2ea322b4bfb483fa196f254e1c3699c34846ca5b8f775274571eb47a",
+   "data/sports/normalized/k_kxjbleaguegame/events.jsonl": "f99fef54d53d24e03fb8e71f9478357cb6a21cedce7a620f06a3cb601e3c5376",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxjleaguegame": {
+   "data/sports/normalized/k_kxjleaguegame/contracts.jsonl": "089e964c877fa0c335c2bf44ae27cc771cb9219085b0f40c827842acfb0c892e",
+   "data/sports/normalized/k_kxjleaguegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxjudgementdaygame": {
+   "data/sports/normalized/k_kxjudgementdaygame/contracts.jsonl": "50ebd2a8ca7f2e801211416cf7f517ccb7ff68f3051b963a301d71d07af9abdb",
+   "data/sports/normalized/k_kxjudgementdaygame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxk2leaguegame": {
+   "data/sports/normalized/k_kxk2leaguegame/contracts.jsonl": "254af2eb6d71cb27805844f8f5b75b62e705a17a46f51bf9ffec4c731be9917e",
+   "data/sports/normalized/k_kxk2leaguegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxkblgame": {
+   "data/sports/normalized/k_kxkblgame/contracts.jsonl": "50dd2ee3b8bf67972d569eeca6692834f4af3c16a67b3e6939433306140a2ab9",
+   "data/sports/normalized/k_kxkblgame/events.jsonl": "7d52c9346a8584872fe4c1e1241f1c174c42ad94f84abe6bf7a5c71621421703",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxkbogame": {
+   "data/sports/normalized/k_kxkbogame/contracts.jsonl": "5319690a4274b24b03b2d0b54011901463944028e552a5b01427d578b1a8e7e1",
+   "data/sports/normalized/k_kxkbogame/events.jsonl": "90db9cd45812f7b2f83e1861969b9592e98bf9fa7ca50d8477dce885314dc687",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxkhlgame": {
+   "data/sports/normalized/k_kxkhlgame/contracts.jsonl": "acb39e743d08ad68ba2c5e57823660f33f01a568d789abc3c8d22c1dff702bf3",
+   "data/sports/normalized/k_kxkhlgame/events.jsonl": "20850dcc3def541f42b04ff1de449b0061f7df8774d3671eb2b6c60bd98a3f84",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxkleaguegame": {
+   "data/sports/normalized/k_kxkleaguegame/contracts.jsonl": "ff48d713d2f4bff9fc5bb03ad3a9b0512849d3cfd6a1072044028bc69f2ef145",
+   "data/sports/normalized/k_kxkleaguegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxknvbcupgame": {
+   "data/sports/normalized/k_kxknvbcupgame/contracts.jsonl": "132a7fed5be9a7fe2fec5588c01a2e31496fbab66c5af34aa78b5bd1c786197e",
+   "data/sports/normalized/k_kxknvbcupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxkorisliigagame": {
+   "data/sports/normalized/k_kxkorisliigagame/contracts.jsonl": "28a9e79e1394c3d98ab109dd0a1b7b19a531a3b5f80f49516437d28d72e40591",
+   "data/sports/normalized/k_kxkorisliigagame/events.jsonl": "b7beb8c060341a72fe1469e0773e3a90408bd74a33571a4502b81696832f1f5c",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlaliga2game": {
+   "data/sports/normalized/k_kxlaliga2game/contracts.jsonl": "df6741d4437af68f8e496b5e3db75bc300f9aa1e5a0ca8e4f595b403e0f0b9bd",
+   "data/sports/normalized/k_kxlaliga2game/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlavercupdoublesmatch": {
+   "data/sports/normalized/k_kxlavercupdoublesmatch/contracts.jsonl": "67a899c7b5f7b0422606ba0199f7a2db650d6c9bcd1349ccbc1ccd0284808b40",
+   "data/sports/normalized/k_kxlavercupdoublesmatch/events.jsonl": "1bdafbc2fd29111daf65c9a3bb28d352907d6ea07977faf7d08c63eaafa32a47",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlavercupmatch": {
+   "data/sports/normalized/k_kxlavercupmatch/contracts.jsonl": "94ac7565eec0f4244a8a197d2382951ca74ddfe1ab61ec678fd5ba2abaf8f8ff",
+   "data/sports/normalized/k_kxlavercupmatch/events.jsonl": "660bcbb3fb16e6c86747460bb964522d81ff4b7cbed0a60eecd10b54498fd98b",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlbpgame": {
+   "data/sports/normalized/k_kxlbpgame/contracts.jsonl": "e61beafabf35083149ba7deb59f9094b8d4def02fce7b2e456f44cc8575730da",
+   "data/sports/normalized/k_kxlbpgame/events.jsonl": "e49a4ad44d8e5e8ec19f40842b733aa7da75600604e705aea940b470285723fc",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxleaguescupgame": {
+   "data/sports/normalized/k_kxleaguescupgame/contracts.jsonl": "e9f06faed072f507df19ddb3ab26ce317babee3f758eacfdced4f0b2b4380a54",
+   "data/sports/normalized/k_kxleaguescupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxligaexpgame": {
+   "data/sports/normalized/k_kxligaexpgame/contracts.jsonl": "6c1ffd9fe09518b260468b06136565c230f67d294094d57a8ef5333d497d46da",
+   "data/sports/normalized/k_kxligaexpgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxligue2game": {
+   "data/sports/normalized/k_kxligue2game/contracts.jsonl": "77c92126fe3a4b704f88068a1adaa76e99ad40d659576ce93e768680a1d8cff3",
+   "data/sports/normalized/k_kxligue2game/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxliigagame": {
+   "data/sports/normalized/k_kxliigagame/contracts.jsonl": "e531a71366b9139b129e42779bc156c2e8cf9b2565689fb84959dd70e530f14a",
+   "data/sports/normalized/k_kxliigagame/events.jsonl": "38dea6cbb9fb4f4868bace2633d91252054839580fd5215fd76356b6e9e69d1f",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlklgame": {
+   "data/sports/normalized/k_kxlklgame/contracts.jsonl": "0816a6366a9e85b8e6c78451c945e4f719bd2f2425f4cf82f36a44124e36bd03",
+   "data/sports/normalized/k_kxlklgame/events.jsonl": "c29747f7f0d2dbe3f02aadba39ac495cd4760211adf0d69acb36e4d8cad2c515",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlmbgame": {
+   "data/sports/normalized/k_kxlmbgame/contracts.jsonl": "34abfdd9ea46ce685bf5554df51d9318dbc2c7515b4e7ad437e26a4871b50823",
+   "data/sports/normalized/k_kxlmbgame/events.jsonl": "06617a1420b56a14c295b17df1313f7b4f90ed589d24c88a6348dbca90bd8712",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlnbelite2game": {
+   "data/sports/normalized/k_kxlnbelite2game/contracts.jsonl": "fc0134ab9cff0458cea25a0e6e67d359a0f9ffefb191fc8b136608025114953b",
+   "data/sports/normalized/k_kxlnbelite2game/events.jsonl": "5947244a740d7d1979cebe0c16e280ef6736dd3ef48b923a000038882a486083",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlnbelitegame": {
+   "data/sports/normalized/k_kxlnbelitegame/contracts.jsonl": "2d4f4f1ed627572c0f32f27b54d8c060257cc9665787d703f2de307e695ee3ec",
+   "data/sports/normalized/k_kxlnbelitegame/events.jsonl": "ad3550e6edebdd1c4e999cf52eba7cbc46147ad28d45884ebcbc9ea258d047cf",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlnbpgame": {
+   "data/sports/normalized/k_kxlnbpgame/contracts.jsonl": "e53a771346877059b11d377ff5f0fdc0f5f20b45b7723fba370481bfd5078d6b",
+   "data/sports/normalized/k_kxlnbpgame/events.jsonl": "253367561f9267e6fcefcad5e1af275c51a7933b1f75b20104f681a6aeb93539",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlolgame": {
+   "data/sports/normalized/k_kxlolgame/contracts.jsonl": "0d5f946f4f0a96e5b3eb389b56ab779d5d60177dddc0b6b334d0305aa03a63d6",
+   "data/sports/normalized/k_kxlolgame/events.jsonl": "5d4a0ae689cb60ff005391ef5c9297dae8bbfb2bb9041d3be909977ce8a31682",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlolgames": {
+   "data/sports/normalized/k_kxlolgames/contracts.jsonl": "83498e19508ca2941483afada516f9027a8b390fcbeb6dac81a7926a593eed02",
+   "data/sports/normalized/k_kxlolgames/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlpbgame": {
+   "data/sports/normalized/k_kxlpbgame/contracts.jsonl": "49b8c766ec908f3a643c557d4b6088f15c702db111f4e38da21b08f5d5d02879",
+   "data/sports/normalized/k_kxlpbgame/events.jsonl": "64b9dc9441493d0d6d016a80ccd8e0b210388a926c4e68da625d6eedbf5f316b",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlplmatch": {
+   "data/sports/normalized/k_kxlplmatch/contracts.jsonl": "8dda398d8aad52ed2cf3ac202ae76de17a90db241d8ddf7ccad7108bd1abae04",
+   "data/sports/normalized/k_kxlplmatch/events.jsonl": "16f80446b309f796ccb4fcefc0aa2362f1f607d494bf0dcc179b031733919d67",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxlvavirgame": {
+   "data/sports/normalized/k_kxlvavirgame/contracts.jsonl": "3b411a3157fb41d80705669fe16b4a69fd0dd71bdf944aae193674cd28d134ca",
+   "data/sports/normalized/k_kxlvavirgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmadmen": {
+   "data/sports/normalized/k_kxmadmen/contracts.jsonl": "90a3e9c120905af14059635f8452d0bc94db7c9170a764651163caeb89a6be5f",
+   "data/sports/normalized/k_kxmadmen/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmadwomen": {
+   "data/sports/normalized/k_kxmadwomen/contracts.jsonl": "d27c98ae32b436ada2577d349b26e59760e584dbbd46e75e4cf875db5ae27f80",
+   "data/sports/normalized/k_kxmadwomen/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmcgregorfightnext": {
+   "data/sports/normalized/k_kxmcgregorfightnext/contracts.jsonl": "464514b16862d585ca91bdb27e42ba2619564bbd6379b5f9953651d15b05516f",
+   "data/sports/normalized/k_kxmcgregorfightnext/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmenworldcup": {
+   "data/sports/normalized/k_kxmenworldcup/contracts.jsonl": "8612da3da52ea4b27512318012c602f7f4bc7089d4d4172198d773d2218f8f66",
+   "data/sports/normalized/k_kxmenworldcup/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmilbgame": {
+   "data/sports/normalized/k_kxmilbgame/contracts.jsonl": "5a1dca0a7ee07e1a6299764fa41a442a2383092e108d31ffa765a283e8462bf1",
+   "data/sports/normalized/k_kxmilbgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmixeddoublesmatch": {
+   "data/sports/normalized/k_kxmixeddoublesmatch/contracts.jsonl": "b5f8955f098d0451e3430f58cff1d3f6c600835ed41186bc6ef2535cd4c5ac10",
+   "data/sports/normalized/k_kxmixeddoublesmatch/events.jsonl": "3e32d125b321a57032bf7d973ebaac78c8bf967a26145e2be9ccc530762f0f6e",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmlbworld": {
+   "data/sports/normalized/k_kxmlbworld/contracts.jsonl": "00b8a5d3c6a396348b1f39304a38b1faa2b9dc6065c335f3639a87881b0f9d4f",
+   "data/sports/normalized/k_kxmlbworld/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmlsastgame": {
+   "data/sports/normalized/k_kxmlsastgame/contracts.jsonl": "48b0a30a1613bc97c9c9762cfd7ed91a7820de2cb70be4c90cc18bcf4810d8fa",
+   "data/sports/normalized/k_kxmlsastgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmmafight": {
+   "data/sports/normalized/k_kxmmafight/contracts.jsonl": "527cea39066a7bda8108674d350d6f208219099ceb2177761d66402f855f82ca",
+   "data/sports/normalized/k_kxmmafight/events.jsonl": "422c49461509bf48c3937ad413ad9aeee55d8f088737fc34088f956ade94712c",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmomen": {
+   "data/sports/normalized/k_kxmomen/contracts.jsonl": "e23a9e60221673601c2e70e38f059ca240424d0001e3da3bd12fd43db3121696",
+   "data/sports/normalized/k_kxmomen/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmowomen": {
+   "data/sports/normalized/k_kxmowomen/contracts.jsonl": "92159bb65fe5b74693f861143bd2e7a80c4e099f754452fa31d126f4981f07ba",
+   "data/sports/normalized/k_kxmowomen/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxmyslgame": {
+   "data/sports/normalized/k_kxmyslgame/contracts.jsonl": "956c78714b6b4a563a7072cdfe325ad152e626899502dfd3c471c3b5f5d5cba0",
+   "data/sports/normalized/k_kxmyslgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxnbaallstar": {
+   "data/sports/normalized/k_kxnbaallstar/contracts.jsonl": "ebcceb71dfc247423fb3cdf2e8b938a1957fc93439157793cda6194b779d40df",
+   "data/sports/normalized/k_kxnbaallstar/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxnbasummergame": {
+   "data/sports/normalized/k_kxnbasummergame/contracts.jsonl": "f1d014fc74e268d0903ce4346b7af0260369e8dba1e66c90ce43e8d76104addb",
+   "data/sports/normalized/k_kxnbasummergame/events.jsonl": "c271b49cfae5f3b636e8196727f80815243b17fab27da5832ca6f290edf7b584",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxnbbgame": {
+   "data/sports/normalized/k_kxnbbgame/contracts.jsonl": "604131647d376c38665d0dbfa8869280200bacafb06b40fa9339dd2dafc28a6a",
+   "data/sports/normalized/k_kxnbbgame/events.jsonl": "7023ca75a0ba9dee6684282c6d1b6a3e6f18f5b021cbc4eeadc267a96b291601",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxnblgame": {
+   "data/sports/normalized/k_kxnblgame/contracts.jsonl": "5649e44f613665ead2e8e6172ff20386e355ca10f5f32d3c82c8a145e19a15c8",
+   "data/sports/normalized/k_kxnblgame/events.jsonl": "a4442e134607e834a6d2a62a8f0209dba8c46fb76b5252e58ebff6960d5c18c8",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxncaabbgame": {
+   "data/sports/normalized/k_kxncaabbgame/contracts.jsonl": "86c06801cd24808c452ccecaeb326cb4758328faccecb4f9bec256007b14ef51",
+   "data/sports/normalized/k_kxncaabbgame/events.jsonl": "f05d618ac4a8d4632f0e083af4d55ae743e922fa0e9d13d757ac83b0321e6596",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxncaahgame": {
+   "data/sports/normalized/k_kxncaahgame/contracts.jsonl": "7f1c9680d0212d4f87edc91d5686eab166c57270160a02b78a6bfc4a26228d53",
+   "data/sports/normalized/k_kxncaahgame/events.jsonl": "2d8e1d6a48ec57a002977c3ffd0b8f21e9635509dbb469cda27c76232fd81afe",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxncaahockeygame": {
+   "data/sports/normalized/k_kxncaahockeygame/contracts.jsonl": "0526868de3bc10dc85c2429d832e89b4d16e1e8177e3e2777671df686a8d3667",
+   "data/sports/normalized/k_kxncaahockeygame/events.jsonl": "e4e7e1a77b657739f69ff4df702231784003d491ba90dd43c9bf3e40a1223ad6",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxncaambcbc": {
+   "data/sports/normalized/k_kxncaambcbc/contracts.jsonl": "94cceaea096d45d0cad657c6f166aaaaac7baed72f2eaa2bd720494babce7674",
+   "data/sports/normalized/k_kxncaambcbc/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxncaamlaxgame": {
+   "data/sports/normalized/k_kxncaamlaxgame/contracts.jsonl": "27aaa639ee1612839700a5581f398e138eb12ea35f05165af159f775869bc6f7",
+   "data/sports/normalized/k_kxncaamlaxgame/events.jsonl": "6b2ac70eab2cb3fd071c2220122c4bff77e93585bab7073451e2876b203d0eef",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxncaamsoccergame": {
+   "data/sports/normalized/k_kxncaamsoccergame/contracts.jsonl": "2a0c3236f86f0d90641c688ef0cff98b2d166bf7988a1a02b233f2820dda7ae9",
+   "data/sports/normalized/k_kxncaamsoccergame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxncaasbgame": {
+   "data/sports/normalized/k_kxncaasbgame/contracts.jsonl": "4a10044bcb1070f8bd33e516aef6e58baafecb2ce7de0fe4c8d2a236f5703391",
+   "data/sports/normalized/k_kxncaasbgame/events.jsonl": "ffa109cd0e1eb662e73d82e4959cb9125de2fb5086b96349adc9397672ab63ec",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxncaawvmatch": {
+   "data/sports/normalized/k_kxncaawvmatch/contracts.jsonl": "f8358e15cfb580d25fd3a63e75ee04095479bb901d9d39a26f577acbf28a6e63",
+   "data/sports/normalized/k_kxncaawvmatch/events.jsonl": "1602b8fb195fadc22185deba86fa4ffd70158126e26e63a12c0efab71841136a",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxnflcelebritygame": {
+   "data/sports/normalized/k_kxnflcelebritygame/contracts.jsonl": "75c96d59aa1c45cbaaf0714a43b07eada7a53f800edbe8eefcdef5b37ec02fc8",
+   "data/sports/normalized/k_kxnflcelebritygame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxnlgame": {
+   "data/sports/normalized/k_kxnlgame/contracts.jsonl": "7d2ed90e8d808e565332e116851b113642a25b77463282a7f00a6d1dae52e52e",
+   "data/sports/normalized/k_kxnlgame/events.jsonl": "6e4e327be85cbaa0fc92033c8ece8ac1f852a2fe43fac6b5c68b50343caa1fba",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxnpbgame": {
+   "data/sports/normalized/k_kxnpbgame/contracts.jsonl": "b02947d67a71c8d10db40082cf4b45a8fb975bfa7a5e84a622f1293985bdc9f1",
+   "data/sports/normalized/k_kxnpbgame/events.jsonl": "47a67f09900eb6399d49ac7216c1627704d3ba58fddabe634ed1518228357077",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxnwslgame": {
+   "data/sports/normalized/k_kxnwslgame/contracts.jsonl": "08005b555c2cbf7532908705bff9e53cc280eb2eeff1a564455b95a49de399f7",
+   "data/sports/normalized/k_kxnwslgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxnznblgame": {
+   "data/sports/normalized/k_kxnznblgame/contracts.jsonl": "3d3214299eee17e7462cbe768eba88a71d8a4bae74ef265104bd0903e52e67a7",
+   "data/sports/normalized/k_kxnznblgame/events.jsonl": "d8b642da26df0a051c4a7ce5b823a3ccdd2302ca9a993e8090059b94d9b36417",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxodimatch": {
+   "data/sports/normalized/k_kxodimatch/contracts.jsonl": "d9d1d65007f5b980872ebdc40351650aa765a22bb81c93d7ee0554a805b1a5d4",
+   "data/sports/normalized/k_kxodimatch/events.jsonl": "9f29848400a4f72ffd31dbbc044ad8437a2783deb4699b10450e1d6c50ce8a1e",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxotdbasketball": {
+   "data/sports/normalized/k_kxotdbasketball/contracts.jsonl": "dfc60d75b7ba6876ba2ab0be77fbbd76f878789c3190579a2775ed698e90ec25",
+   "data/sports/normalized/k_kxotdbasketball/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxowgame": {
+   "data/sports/normalized/k_kxowgame/contracts.jsonl": "2d2bb95a841ca90003d6abcf4bcf142b11b6af4003d2be18f4a3fc48b49329df",
+   "data/sports/normalized/k_kxowgame/events.jsonl": "5665618c1df84b6ee2e9f785ea585744f0594313c5e35566b352cff0616244dd",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxpbagame": {
+   "data/sports/normalized/k_kxpbagame/contracts.jsonl": "1dcb7db439ce9310b998dcc3539efed47329a5b780ba691b4847c12a6f3c5ba3",
+   "data/sports/normalized/k_kxpbagame/events.jsonl": "26e1c1c24e79690b4ad6d1fb2c4fe9de4074a649fc5886a4949437c18b86b0cf",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxperliga1game": {
+   "data/sports/normalized/k_kxperliga1game/contracts.jsonl": "975789b8293d5d5db48b9c77a672b43e96c385faba4486f52b1e038f1e990077",
+   "data/sports/normalized/k_kxperliga1game/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxphklgame": {
+   "data/sports/normalized/k_kxphklgame/contracts.jsonl": "9b06373cba07cf34164234202c168ceaf2440765d02352f00ceaf0352e70d8d6",
+   "data/sports/normalized/k_kxphklgame/events.jsonl": "85e32fcc11499238b32bbdf7a19e66e60e95a276ac6e188eb89fafbb68b760e8",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxpickleballmatch": {
+   "data/sports/normalized/k_kxpickleballmatch/contracts.jsonl": "2af0b0244270cc121ae7f0fcdb5b136f16c2ac5efebf846da2b6b4429b1f26a8",
+   "data/sports/normalized/k_kxpickleballmatch/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxplkgame": {
+   "data/sports/normalized/k_kxplkgame/contracts.jsonl": "ee414e8ed67f8bf4ccc5f8e37c01c749a9a0efa490a810e39e6462f13fa1c79a",
+   "data/sports/normalized/k_kxplkgame/events.jsonl": "4889ed2c336f2cdaa0d47ebcafde13a3056c9359561b73397acc28dfd42b923a",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxpllgame": {
+   "data/sports/normalized/k_kxpllgame/contracts.jsonl": "791b4fd76593195916e127faca977206f4026c70dc1fed1f13913495447c0858",
+   "data/sports/normalized/k_kxpllgame/events.jsonl": "75805dd0e62b01bf409811b54b53559e0b93b8489ca371b4b2c76b4198f7bb45",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxpppkso": {
+   "data/sports/normalized/k_kxpppkso/contracts.jsonl": "eedc76dd3765653f90f4b662b020336e8f8189632a2f8a43c68d94a109686b96",
+   "data/sports/normalized/k_kxpppkso/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxpremmatch": {
+   "data/sports/normalized/k_kxpremmatch/contracts.jsonl": "dce32aa132f1f36d3dbd362cade35d829a479de1be631a47b7241e91051fa1d4",
+   "data/sports/normalized/k_kxpremmatch/events.jsonl": "a881ea6ca529d02093b49a4934747c92113947aed04e732e8f6b8645cdb8a956",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxpslgame": {
+   "data/sports/normalized/k_kxpslgame/contracts.jsonl": "b36e8eb1addc3f208f483db7a19aa3ccff614ee7a341f05fa8bdb2c971e0ac7e",
+   "data/sports/normalized/k_kxpslgame/events.jsonl": "cd84f02e47872f89e432b90987e6de07c6b5906a3136d0069040133a32e61734",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxr6game": {
+   "data/sports/normalized/k_kxr6game/contracts.jsonl": "13789f7e8cb383dc9bbf86137efb31b36e8146da9b471c48ab626e7a5094214e",
+   "data/sports/normalized/k_kxr6game/events.jsonl": "04eeab0a7fb8cbe73a491d308b3bd48281f6e854ccae88d9824879d3db49a363",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxrlgame": {
+   "data/sports/normalized/k_kxrlgame/contracts.jsonl": "68f6369009dac275c07e721dbd3cdebb1fc59ba283e5b41a824fd21aa78f8afb",
+   "data/sports/normalized/k_kxrlgame/events.jsonl": "4464e1296da5f25debdb0c9a2013d1746d5726bf74eab59a2a28757ef5fe9200",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxrugbyeslmatch": {
+   "data/sports/normalized/k_kxrugbyeslmatch/contracts.jsonl": "3d0a2bc3d581b0c3ad4eb984f86392398002192faa597873cfe5991aaecfa79e",
+   "data/sports/normalized/k_kxrugbyeslmatch/events.jsonl": "8d2f470137faab82994647a93b2107ee26b824b792545af1c198e2adfc64ac06",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxrugbyfra14match": {
+   "data/sports/normalized/k_kxrugbyfra14match/contracts.jsonl": "ef821cd30b13f3e6452143719f4c098d7d05dfdae6dce799ce3f6b2672c9b57b",
+   "data/sports/normalized/k_kxrugbyfra14match/events.jsonl": "3537c36150283c574021edff11bc63a691afa42af010261cdd995c908f934e67",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxrugbygpremmatch": {
+   "data/sports/normalized/k_kxrugbygpremmatch/contracts.jsonl": "722c7d6be865d96105732edd62c7fe446014b742ea76239f893623ca8f7068d5",
+   "data/sports/normalized/k_kxrugbygpremmatch/events.jsonl": "8711d06dccc6905ebd5c28cfe6780cc192234b042b6c7eea0fbb568bacc58f24",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxrugbymlrmatch": {
+   "data/sports/normalized/k_kxrugbymlrmatch/contracts.jsonl": "81bf3d4bfaaecaf3cb802341de633f2b296f41fdd8a904bdfafb038e3d0bf285",
+   "data/sports/normalized/k_kxrugbymlrmatch/events.jsonl": "cdd40ac8c140bf6bbbc18b23cd6a656f874ea801202183b9de7f7973ed9a2cc4",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxrugbynrlmatch": {
+   "data/sports/normalized/k_kxrugbynrlmatch/contracts.jsonl": "d426a3a6df35ba3cbeba2712585f21d05750e7bef3ca183a475eb20b20caf587",
+   "data/sports/normalized/k_kxrugbynrlmatch/events.jsonl": "ba59aebde6d7766f43f8659dfab30b74d3739dd42e8fc74b9cdb0cb80b664387",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsblgame": {
+   "data/sports/normalized/k_kxsblgame/contracts.jsonl": "2153e1d77ed3f66c11d2916f3e893c27b2b3be85da270153c0c51da33df42c6b",
+   "data/sports/normalized/k_kxsblgame/events.jsonl": "9c66b1606741e1984ae4d194521e745e1831ed8ccc9d1fb8d51c4fcc24c5e296",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxscocupgame": {
+   "data/sports/normalized/k_kxscocupgame/contracts.jsonl": "7755049a5cbee6b147b555c4536aa77cfcba90677a32a860b36917e11104c56a",
+   "data/sports/normalized/k_kxscocupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxscottishpremgame": {
+   "data/sports/normalized/k_kxscottishpremgame/contracts.jsonl": "c304e59e4ff4d3c0c8ca64daa7d5de1a17c73a69c751b89bd74d629c428efe4c",
+   "data/sports/normalized/k_kxscottishpremgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxserieawgame": {
+   "data/sports/normalized/k_kxserieawgame/contracts.jsonl": "0406ab0322162cfc755db1b9004bc8689ffc7cd094960113b874c3bf9bef30cf",
+   "data/sports/normalized/k_kxserieawgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxseriebgame": {
+   "data/sports/normalized/k_kxseriebgame/contracts.jsonl": "f6efe0ec248ae4852b033c1fdde13051687d54eaeec469aa3b71056c5dfd3b06",
+   "data/sports/normalized/k_kxseriebgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxserieccupgame": {
+   "data/sports/normalized/k_kxserieccupgame/contracts.jsonl": "184331ea5bd9ff428127f467f878ddb3f49f24a64a09a0dcbb680111afb6820f",
+   "data/sports/normalized/k_kxserieccupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxseriecgame": {
+   "data/sports/normalized/k_kxseriecgame/contracts.jsonl": "7b5f423e87036fa427cbf8643d1212f8e9fb27231f7d3828c2cb162cad6536d0",
+   "data/sports/normalized/k_kxseriecgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsesblgame": {
+   "data/sports/normalized/k_kxsesblgame/contracts.jsonl": "9780f69f6fbe245604c8838671c4b9f42bfe2435ff15290b958c18308bee9dc1",
+   "data/sports/normalized/k_kxsesblgame/events.jsonl": "6afc252c24cbbd09e1ce379271568c36f6ac0374f736516b4dc08ca6c72e566f",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsgpplgame": {
+   "data/sports/normalized/k_kxsgpplgame/contracts.jsonl": "863e5432f03c03d09fae67401be169018db891d92676ab5a1da4ce82961c977e",
+   "data/sports/normalized/k_kxsgpplgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxshlgame": {
+   "data/sports/normalized/k_kxshlgame/contracts.jsonl": "d02d4d679dfef8921b5e1fc12672e0684955ca2aa74f575dd5bf417bc4f14930",
+   "data/sports/normalized/k_kxshlgame/events.jsonl": "ba69f947e25abdb93e1c80c8fba69903a9c9ec5c9d2af27257667954dbb883e2",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsixkingsslammatch": {
+   "data/sports/normalized/k_kxsixkingsslammatch/contracts.jsonl": "2a9ce4ec14a4c1be7afea51e26b54d9c3968c4a34a956a8880ec1602dd1b696f",
+   "data/sports/normalized/k_kxsixkingsslammatch/events.jsonl": "00195964447f6277e0be22c6887949d7470fe95838eea2542189b7fab876143e",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsixnationsmatch": {
+   "data/sports/normalized/k_kxsixnationsmatch/contracts.jsonl": "ee22ec418d839e240f58900e8ffcd28147fea2d05aeb0e602d265453723e2da8",
+   "data/sports/normalized/k_kxsixnationsmatch/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsklgame": {
+   "data/sports/normalized/k_kxsklgame/contracts.jsonl": "e51a958f4e04527b7ec9c0816a3ef9243ca3cc87c4c0bae68bac58b5b2439eb2",
+   "data/sports/normalized/k_kxsklgame/events.jsonl": "177f05b97b1a4032be79a387095c6a2350af32f3d68a662a3f15a1c9f95c959c",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxslbgame": {
+   "data/sports/normalized/k_kxslbgame/contracts.jsonl": "cdd6d454e6a93c07599c0401f5a409239d80b7869e2360663b82787be37867fd",
+   "data/sports/normalized/k_kxslbgame/events.jsonl": "95971bc9f3b93786ebc670e0cbf2c0bb2f50425e0ff6c768ed49a4da0546df11",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxslgreecegame": {
+   "data/sports/normalized/k_kxslgreecegame/contracts.jsonl": "a9666afdb8427ecfa92a674e1e6deade9eeeee5d31d9b9e8c9c6a057d1a24332",
+   "data/sports/normalized/k_kxslgreecegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsowbballgame": {
+   "data/sports/normalized/k_kxsowbballgame/contracts.jsonl": "a86b532c77fc922beac2192024f3079f3d4ed5b68cf4a597bdcf81496cb1ddce",
+   "data/sports/normalized/k_kxsowbballgame/events.jsonl": "c362dee3d129b68c2d982d5b262e190d198c53a1af11b33d0dd34b46efa1bec3",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxspbgame": {
+   "data/sports/normalized/k_kxspbgame/contracts.jsonl": "02c6e0a460fce8060f8a8b46a85259d96091561bd8bdf8ac4918866342617eab",
+   "data/sports/normalized/k_kxspbgame/events.jsonl": "2034ec74b95884b48c581a8655460199b42c49cf22401a2e53727b519e5864e1",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsquashmatch": {
+   "data/sports/normalized/k_kxsquashmatch/contracts.jsonl": "75f5700e7d8b1fe687206ef8fe32879608cdedb951e394edb3ec5779f3d2ed79",
+   "data/sports/normalized/k_kxsquashmatch/events.jsonl": "ec2359f3f78ce50f27bf6921db893bb89a4d029416102fac6cba53bdc22187bf",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsrbslgame": {
+   "data/sports/normalized/k_kxsrbslgame/contracts.jsonl": "15b02ce99126455a3f59ffb5c6db33ee333f26ac3cd618722d35fc37f8cb303d",
+   "data/sports/normalized/k_kxsrbslgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsshieldmatch": {
+   "data/sports/normalized/k_kxsshieldmatch/contracts.jsonl": "b06c2dce6274f641e90f4995dc5acc44445d5811e0fc96a6979aeb6e11130e8a",
+   "data/sports/normalized/k_kxsshieldmatch/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsuperliggame": {
+   "data/sports/normalized/k_kxsuperliggame/contracts.jsonl": "8b2a693fda95128d84c3a054ca88fafc647a10f8d5fa710658e4d31c8986ee7e",
+   "data/sports/normalized/k_kxsuperliggame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsvk2lgame": {
+   "data/sports/normalized/k_kxsvk2lgame/contracts.jsonl": "f9b8cf2c3a9c34024ae58e5bd8f7c06dd391747663efa1b1c3483a169dad1a4e",
+   "data/sports/normalized/k_kxsvk2lgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsvkcupgame": {
+   "data/sports/normalized/k_kxsvkcupgame/contracts.jsonl": "7da7dd45802fa227da04672f5be71684f622906bd026972f6053de634fd8d094",
+   "data/sports/normalized/k_kxsvkcupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxsvnplgame": {
+   "data/sports/normalized/k_kxsvnplgame/contracts.jsonl": "2889d06f34ef300f59e31349cd244fa80843c3c5a79d0da7e4f539386c361f38",
+   "data/sports/normalized/k_kxsvnplgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxswissleaguegame": {
+   "data/sports/normalized/k_kxswissleaguegame/contracts.jsonl": "3c34990e76d8891e8f7ca3c7637519f2e60e374b2bc20690ae8fd30bc00f0a75",
+   "data/sports/normalized/k_kxswissleaguegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxt20canadamatch": {
+   "data/sports/normalized/k_kxt20canadamatch/contracts.jsonl": "95280b2c43db6aa38ee2d33badc941520c483cb25dfb7054b4875288124db7a4",
+   "data/sports/normalized/k_kxt20canadamatch/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxt20match": {
+   "data/sports/normalized/k_kxt20match/contracts.jsonl": "32d793f07012b13595cb19ed788d4eb973fd26567ea35f2a1e0051fcfdff50fc",
+   "data/sports/normalized/k_kxt20match/events.jsonl": "52cf6c239b97bdc17ee8a506b04170275d651bf3609a9faba06c5f03986f4943",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtabletennis": {
+   "data/sports/normalized/k_kxtabletennis/contracts.jsonl": "429ab3808604511632ac33647591ce6feec68c35431ea0e5bb2c286b9b467544",
+   "data/sports/normalized/k_kxtabletennis/events.jsonl": "75cc1eb65e3cb119a9116fc251a4e4adb830cf38b04acabf9fa17fec29b9f034",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtabletennismatch": {
+   "data/sports/normalized/k_kxtabletennismatch/contracts.jsonl": "d5cdc21ad3324f35e91dcefa4d049672956a85030fe479caaf35cb2ea8b01885",
+   "data/sports/normalized/k_kxtabletennismatch/events.jsonl": "d779aa7760cef2443489423ee656d0ed74695faea2459ee9eb6e7c8fa628bf55",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtacaportgame": {
+   "data/sports/normalized/k_kxtacaportgame/contracts.jsonl": "ba3de48202f3380309dbba5dae5a94e77726ce3c8bc7b116f10ae39941eb7882",
+   "data/sports/normalized/k_kxtacaportgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtatumreturn": {
+   "data/sports/normalized/k_kxtatumreturn/contracts.jsonl": "c6cd6025ac85810897c972db964b84c9b45ad714d499f5c763c243f97973d58c",
+   "data/sports/normalized/k_kxtatumreturn/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtbtgame": {
+   "data/sports/normalized/k_kxtbtgame/contracts.jsonl": "e00ae3997e1fba717752e8ca2248178ca89d77ea2a3c19a54bc4e9435e91af4d",
+   "data/sports/normalized/k_kxtbtgame/events.jsonl": "af777d3f5dbc81fa9e8392523e13fe95294620cca18c1af632c53102663df84b",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtennisexhibition": {
+   "data/sports/normalized/k_kxtennisexhibition/contracts.jsonl": "e7506ed6d8fef15a8cb3391af13609e0ede786ed688aedd417b9bafbeb3632ba",
+   "data/sports/normalized/k_kxtennisexhibition/events.jsonl": "04d092d2f8ebd54c5d8272d0155b36381d959575ba39f2b4748adeb3f5e20188",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtestmatch": {
+   "data/sports/normalized/k_kxtestmatch/contracts.jsonl": "b3722d2692978f7d4d43a0a2f3b2a9b86a38a93fd7094dff89e5ed3da96e56b1",
+   "data/sports/normalized/k_kxtestmatch/events.jsonl": "8dade35c6d5b87c3a2938619afcbe2d4b3aca42f7031fc04e450165c6aba1de7",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtff1liggame": {
+   "data/sports/normalized/k_kxtff1liggame/contracts.jsonl": "23a202a4489724cb461d3ab62c98018c23fe901fdebb7a4bdd13bd5d54f17454",
+   "data/sports/normalized/k_kxtff1liggame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxthail1game": {
+   "data/sports/normalized/k_kxthail1game/contracts.jsonl": "6a02ead2f8fc8e6fc7ea550b33c4394f2c4c3b558a67be8b95c11cf7c70b6572",
+   "data/sports/normalized/k_kxthail1game/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtitledtuesday": {
+   "data/sports/normalized/k_kxtitledtuesday/contracts.jsonl": "c610bb952c76169f69c3d86594597bcb6ec569aedbad956dc66644b9af0e69b9",
+   "data/sports/normalized/k_kxtitledtuesday/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtncbasketball": {
+   "data/sports/normalized/k_kxtncbasketball/contracts.jsonl": "af16b3762082e462099835c9acb471a8039183e01078560327f8141ad17e29e7",
+   "data/sports/normalized/k_kxtncbasketball/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxttelitematch": {
+   "data/sports/normalized/k_kxttelitematch/contracts.jsonl": "300eff1357df2d30d7eb3e471dc3ea6ed35b748da7bfb3d9d071022f57e733a5",
+   "data/sports/normalized/k_kxttelitematch/events.jsonl": "7fbf52e1e6893c2eac14d082e1f1659e7a0c1b9e1d670d1317f435c4a7012581",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxttmatch": {
+   "data/sports/normalized/k_kxttmatch/contracts.jsonl": "177dbc4ed787206f2e7a0caf44f16b1b3b1fc34e429e7c3d6aab053a374d1fe1",
+   "data/sports/normalized/k_kxttmatch/events.jsonl": "6ee9aaf2fad35d19b3a626ed8d73ef1735778909b24407e40dfeeaa8b67d32d0",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxttstarmatch": {
+   "data/sports/normalized/k_kxttstarmatch/contracts.jsonl": "7b23dddb9f27037843338cfff6e3103f19aaf858c9eaeadc273541aefd0dcfca",
+   "data/sports/normalized/k_kxttstarmatch/events.jsonl": "cf87a9a33aad58bd483e3c8915a0e11d0b57091a5264bb7436c97c208af939ae",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxtweededivgame": {
+   "data/sports/normalized/k_kxtweededivgame/contracts.jsonl": "4fe51f487b02f472cf0b7d7435c8b1eddf7f531f47b5c25a9368cdb0caa65562",
+   "data/sports/normalized/k_kxtweededivgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxuaeplgame": {
+   "data/sports/normalized/k_kxuaeplgame/contracts.jsonl": "a78c49b9db394d15e743fc97c8ac5089b4ce06ace9fd30011a3ae18db190f9dd",
+   "data/sports/normalized/k_kxuaeplgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxuefanlgame": {
+   "data/sports/normalized/k_kxuefanlgame/contracts.jsonl": "1dc508b0cda09cc04a6805e7a0e472ee1d2a7325f6d670cc700cb89b69fd913e",
+   "data/sports/normalized/k_kxuefanlgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxuefascgame": {
+   "data/sports/normalized/k_kxuefascgame/contracts.jsonl": "77bfc7b8be8fdf0f2b8559c58bda8dd859820868d8971dcfceec46c609e9683e",
+   "data/sports/normalized/k_kxuefascgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxufcoccur": {
+   "data/sports/normalized/k_kxufcoccur/contracts.jsonl": "7afdbb49ac2de1dc2664163e2c235e85b42ec2bddefee704c72a191a2d7a6cfd",
+   "data/sports/normalized/k_kxufcoccur/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxuflgame": {
+   "data/sports/normalized/k_kxuflgame/contracts.jsonl": "ffc00c306e402d01953182625695acd5c42d17885b8c06cc7f7a4d55a0013833",
+   "data/sports/normalized/k_kxuflgame/events.jsonl": "abfe7bb9676ec91e0819981683b08148c311f43cb485539db01263ca60c637bd",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxunitedcupmatch": {
+   "data/sports/normalized/k_kxunitedcupmatch/contracts.jsonl": "655a580576869f7b0b2b29db8f23ab293fb5cf98f9b27e5abb675f1a72809bfc",
+   "data/sports/normalized/k_kxunitedcupmatch/events.jsonl": "f7c905ba36bb7170bf77a3a7610ad5c4c518961cea8cd9cddaccd5a473c3ce1d",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxunrivaledgame": {
+   "data/sports/normalized/k_kxunrivaledgame/contracts.jsonl": "0074ff84ae874942ccb63380623cefe50c8e0b78ddca6eba9aa3289fdd8064a7",
+   "data/sports/normalized/k_kxunrivaledgame/events.jsonl": "77029954be8382525a422893665d5137735570bae2bbeaa76dffaf06d0143231",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxurypdgame": {
+   "data/sports/normalized/k_kxurypdgame/contracts.jsonl": "a643e3a0099fed670117a819a91bd53d51476908e00395c5ca928feeb3adf3ba",
+   "data/sports/normalized/k_kxurypdgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxuslcupgame": {
+   "data/sports/normalized/k_kxuslcupgame/contracts.jsonl": "de0a99484e01fa0f067eafdbd716e62cf5829199a9d85b3eedc76616f56e643e",
+   "data/sports/normalized/k_kxuslcupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxusopencupgame": {
+   "data/sports/normalized/k_kxusopencupgame/contracts.jsonl": "1bac4ce460bc570b4f7d77c25878034123c0a39868d3d96aa7aed5461d9708c9",
+   "data/sports/normalized/k_kxusopencupgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxvalorantgame": {
+   "data/sports/normalized/k_kxvalorantgame/contracts.jsonl": "6446aa5c835d02506bf9721254aed809eb1513dc6216b967fe64f339f93745dc",
+   "data/sports/normalized/k_kxvalorantgame/events.jsonl": "f643d0e5ebd1a620fcb3033b18a520c6a7aa1a84eb72a489a55047b193a26e3d",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxvbagame": {
+   "data/sports/normalized/k_kxvbagame/contracts.jsonl": "ffa3393338ece9b89705e0fd2e52691d57f0b3d350b404d707eda87dcb541eed",
+   "data/sports/normalized/k_kxvbagame/events.jsonl": "9e540deefdfb629ba14fdc21a49cd3a91c383255d34ea0ab1943770e6686ff24",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxvenfutvegame": {
+   "data/sports/normalized/k_kxvenfutvegame/contracts.jsonl": "8c657fd8a35a26eeb087f90c26b511c5e56d47dfdee01d0eb1e0827d9945aad8",
+   "data/sports/normalized/k_kxvenfutvegame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxvleague1game": {
+   "data/sports/normalized/k_kxvleague1game/contracts.jsonl": "4bcbbf70fd005382f2ed3dbd2963d13e81cf997aaf7bd0dd5a4359f810051a34",
+   "data/sports/normalized/k_kxvleague1game/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxvolleyballmatch": {
+   "data/sports/normalized/k_kxvolleyballmatch/contracts.jsonl": "efbf5a3c313490434b5f5379f90ec3e5606119ca4b7ce3e3982a57705bde0aa6",
+   "data/sports/normalized/k_kxvolleyballmatch/events.jsonl": "cdc7d527661266bc1bc8c490a61430ca0df9568828be3aee01129af43d7bd96d",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxvtbgame": {
+   "data/sports/normalized/k_kxvtbgame/contracts.jsonl": "ff03a5fee782d53fad73ae93edce1be0fe3dc32bd931c1e5df2708d04c2ac7e1",
+   "data/sports/normalized/k_kxvtbgame/events.jsonl": "2e9807967bae4d30865a4968685afe9371ce5eddb8a57745c0d51eb62ae60078",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwbcgame": {
+   "data/sports/normalized/k_kxwbcgame/contracts.jsonl": "c99eff2e8517be39a95ba89c2185f2cbc0a5a811a90de35930fc988733226704",
+   "data/sports/normalized/k_kxwbcgame/events.jsonl": "f93a55fa42b751b5231f01e305ee0e1f5b00903d995a4d5963bd0e372d797c30",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwcadvance": {
+   "data/sports/normalized/k_kxwcadvance/contracts.jsonl": "9ed5e721f1b8d4d31806d252950153ffa6779da2fa2cc7c8bd218a9ea3e5fec8",
+   "data/sports/normalized/k_kxwcadvance/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwcgame": {
+   "data/sports/normalized/k_kxwcgame/contracts.jsonl": "11f9cc4e668dbc016417315ed77575c9e842f157badffaef57bd84f1995746bc",
+   "data/sports/normalized/k_kxwcgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwfibagame": {
+   "data/sports/normalized/k_kxwfibagame/contracts.jsonl": "767572e8f63cccf461c3d28a9f7cbee99566542d415b303e02c7bf2523a4fab1",
+   "data/sports/normalized/k_kxwfibagame/events.jsonl": "4eb357da8e980554057c16bc4b4a8723005bf842b2aca29aa7406616e1a4ddc7",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwhundredmatch": {
+   "data/sports/normalized/k_kxwhundredmatch/contracts.jsonl": "7581702bb3d8a575c5aecb87c74d072a9d7d9d627ab74c61adba275005f345e5",
+   "data/sports/normalized/k_kxwhundredmatch/events.jsonl": "c348d2f17cee8ac14fd84356690c4c14b6440ac5ae6f5186addc8cb78fd0f13b",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwllgame": {
+   "data/sports/normalized/k_kxwllgame/contracts.jsonl": "efc696a20df04370040e4313493c31df5805f1ab934d25e47ffde1ad75cd3800",
+   "data/sports/normalized/k_kxwllgame/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwmarmad": {
+   "data/sports/normalized/k_kxwmarmad/contracts.jsonl": "61be3f4ce11e0124e5b11f2300dce9d77e0b8915d5783d875123dc79f152708e",
+   "data/sports/normalized/k_kxwmarmad/events.jsonl": "d673ad4023e8114ebd3625033a39d2174133b2847725fb7d0b32de487c557f3d",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwodimatch": {
+   "data/sports/normalized/k_kxwodimatch/contracts.jsonl": "67d5fcd353e615a995b6bc6a15f8f391e8688763206efabe131491b3e40f8b02",
+   "data/sports/normalized/k_kxwodimatch/events.jsonl": "e56f586388951a209cfadac6c985d915d7c78d251fb1c180fe0f0f67ec9b52b1",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwomhockey": {
+   "data/sports/normalized/k_kxwomhockey/contracts.jsonl": "cdb192351804577a59f32d70b768cc97fb59eeb0d0049ab1c2e852a17f6b457b",
+   "data/sports/normalized/k_kxwomhockey/events.jsonl": "00463fcf4174265f371bd66e9ea8eed9f3f6b513e6bd9bcc1a6a99acf1d3a692",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwowhockey": {
+   "data/sports/normalized/k_kxwowhockey/contracts.jsonl": "a4a7998c9ff8d60b2d7016bf7945bca370eb06b15173307c894acc03be57d411",
+   "data/sports/normalized/k_kxwowhockey/events.jsonl": "d26c1e7f212f7055e13e2b6b98c8c9a7f07beb87a252927302f8a256a44f7760",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwplgame": {
+   "data/sports/normalized/k_kxwplgame/contracts.jsonl": "b5343fc2c210345b96ae4c497280e5fa62665d03c1f84bb28e88897ad0c43542",
+   "data/sports/normalized/k_kxwplgame/events.jsonl": "244ed860606ef36074103b2c13da702813024b962bf15e1c5685dc7a25a1708f",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwt20match": {
+   "data/sports/normalized/k_kxwt20match/contracts.jsonl": "e4651d5177eaffa1435a29e8917abdbbe1de7b432ff050e389a8ab73bc0f6696",
+   "data/sports/normalized/k_kxwt20match/events.jsonl": "a05178cc0c605ef5be6ec11b3ebedf97c2b995c0e32bd6a2b184055cf01c0c74",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwt20worldcup": {
+   "data/sports/normalized/k_kxwt20worldcup/contracts.jsonl": "b681344ba2cda7e049ed044e212ec973b535f77dda8887148962022684c81be1",
+   "data/sports/normalized/k_kxwt20worldcup/events.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwtachallengermatch": {
+   "data/sports/normalized/k_kxwtachallengermatch/contracts.jsonl": "7fe0c719d512b698e7f4fae3ff9ea6042a6f1221458753f552a971b7befaccc6",
+   "data/sports/normalized/k_kxwtachallengermatch/events.jsonl": "3764d5b8a6255189c2f96afe8c9adce83711b591e800e01569d9a0f7274bb907",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwtadoubles": {
+   "data/sports/normalized/k_kxwtadoubles/contracts.jsonl": "70dcef514a1d6612a1355fc9735840ee42eae31525b62e7a76cf3c8f3f69a7d8",
+   "data/sports/normalized/k_kxwtadoubles/events.jsonl": "130c2bd2b65c44ea1f9dd4df343da1733a5c284729a4436af69350b587286bfe",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwtamatch": {
+   "data/sports/normalized/k_kxwtamatch/contracts.jsonl": "718bab208f2ac8789b6fc4987cca9706c908d164c83574ad710df1e61312e6ed",
+   "data/sports/normalized/k_kxwtamatch/events.jsonl": "08ff09c764c68c6fda7fa15d7f7cbdb4a7167aaa98292523952e223e80cbe3e1",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "k_kxwtestmatch": {
+   "data/sports/normalized/k_kxwtestmatch/contracts.jsonl": "3de3f9cfc7d45d21316e9b9ebbd4520cbc698c8ac8e09c54351812cdb426ddd3",
+   "data/sports/normalized/k_kxwtestmatch/events.jsonl": "aca87bd7fa4b9dc33eb6c6dfa73374812a23036349bc6df97c2ac091ae399217",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "laliga": {
+   "data/sports/crosswalk/laliga_participants.json": "83782750169e5bcb3640e2d611527260f8c525c1cb25221c466a1f6dff01839a",
+   "data/sports/normalized/laliga/contracts.jsonl": "811310e77ce118aa723fbc2a049a66b769a1da82835dc92c10e637c9ef2ab915",
+   "data/sports/normalized/laliga/events.jsonl": "883b3dd3824384fcef5e870db34f5dbbfb3389c0515c545e9a6b0cd8876736b2",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "ligamx": {
+   "data/sports/crosswalk/ligamx_participants.json": "d9d5aad428a4f46263400d9f48888719b1bf6387e3326aaae25d6a9f0709ab21",
+   "data/sports/normalized/ligamx/contracts.jsonl": "640e6b97242561f70035c87415bd0f8ccb354fa057e7a6f82d7e92a6688be57b",
+   "data/sports/normalized/ligamx/events.jsonl": "cb2c77f670dbcbda27ecabb217635ac5785ac654b0daac066c420148b3551ef8",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "ligaportugal": {
+   "data/sports/crosswalk/ligaportugal_participants.json": "b6796c327c069d2b10f8d0f284fdc3a7285428a6a3734954bf60af623d0c123b",
+   "data/sports/normalized/ligaportugal/contracts.jsonl": "bcc902970204e84a8aad645e7e8924e97315a537aee24ce69a1e72f7e05f8a9a",
+   "data/sports/normalized/ligaportugal/events.jsonl": "621db7ec1e8678172d215499828b640949737da160e89a5b531774c8404db04c",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "ligue1": {
+   "data/sports/crosswalk/ligue1_participants.json": "f2d92a9c534fcfa55cdccdc150b03dacdc22eaddfccb426a92921964c8cede40",
+   "data/sports/normalized/ligue1/contracts.jsonl": "0cd764ec675567b4e8ea54cd6d645a6d82f36ec12d7ceba7217846b6f1fd96a2",
+   "data/sports/normalized/ligue1/events.jsonl": "6799189fb2da23bc7fe4dda643fb5e7eaf76c05f4a38acde55a8e1797406d681",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "mlb": {
+   "data/sports/crosswalk/mlb_participants.json": "9aaf997cee6f1f9fc319eb99efd7b56b0a6dbe91acafeb473a7c97f0bb650d76",
+   "data/sports/normalized/mlb/contracts.jsonl": "7b5447f0231434a0762c82d7dafd843d65b02f8da50c6cea4c43aaac1bd9562f",
+   "data/sports/normalized/mlb/events.jsonl": "ea505688fddf56ed0ffe17dfac15900192619f93c4b13d3aad08c7d6ec982e10",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "mls": {
+   "data/sports/crosswalk/mls_participants.json": "9472d3e084e0e1a294ee6b84742052a312ad1c020e90f00c899c4c9f419b0109",
+   "data/sports/normalized/mls/contracts.jsonl": "3c41bd33533e3c0c792e7a9a63ef6ee5e5d0b464958fe2a1f66c3b09b0c54d19",
+   "data/sports/normalized/mls/events.jsonl": "44356f826bb113a95309e1a76210995fb26abfd536334ea3bba76bc57ca15048",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "nba": {
+   "data/sports/crosswalk/nba_participants.json": "6c23d313218266dc808b911cf7645966e572cfcf94568730644d45e28b23642c",
+   "data/sports/normalized/nba/contracts.jsonl": "2b0dfd5bfe0d2ab1ac05bc7831a08014384a067993c52bad126bf9f719965317",
+   "data/sports/normalized/nba/events.jsonl": "d5c460b8024cbb0e84988a353911f7551a5d3c9ab36f8ddbdeda274e309b10c1",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "ncaaf": {
+   "data/sports/crosswalk/ncaaf_participants.json": "460ae32abcf61fddeff6a58a895892b8764478ae0fd96f2962e9b9bf6ae318ee",
+   "data/sports/normalized/ncaaf/contracts.jsonl": "d55c6320dfff689ca0d68b6c98ea98d9d5d0d2555a4cafc1f06efec8238d93f7",
+   "data/sports/normalized/ncaaf/events.jsonl": "e83a818ca59a262842c590a1bc6b42e282922ba77009ae903dd9615f51538120",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "ncaamb": {
+   "data/sports/crosswalk/ncaamb_participants.json": "a2d2655f812d8751176efbdba3a4a4036737696427fd2ec5cd0a07c3a74a0f48",
+   "data/sports/normalized/ncaamb/contracts.jsonl": "a1b257da03bb256b04b4632810c8fb8306857f7138ffe1e15901c8be3cc3d285",
+   "data/sports/normalized/ncaamb/events.jsonl": "4643fef6c2855c5f282b78616f04dd8d95a74084e1a6fd443ae69cf0d51daf98",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "ncaawb": {
+   "data/sports/crosswalk/ncaawb_participants.json": "2ecb20feed49be09b672b827e536898b5e792435461ee3cbbc85d735f0287be0",
+   "data/sports/normalized/ncaawb/contracts.jsonl": "dd60d82edae371cbdd92283ea9ab26261c0f88a9081348d76239f86da6a1d6c1",
+   "data/sports/normalized/ncaawb/events.jsonl": "9d920de0d35b29cb9f01fc093cfee75e1080188c060e042af60bd123535c1bc4",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "nfl": {
+   "data/sports/crosswalk/nfl_participants.json": "d781fc2b2b3811fdc77858e549ea8bc34598ad1dba9cc8869ac1b0a3d4a3ab7c",
+   "data/sports/normalized/nfl/contracts.jsonl": "2a79b5b266400b182831bcc50b7470b0cf8e63c2bcaad8ec4ee7c4a6c7a14a6a",
+   "data/sports/normalized/nfl/events.jsonl": "893a357fb90298350927e401123bb1ef3df46f5bcc353d6253f74aedf39083ae",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "nhl": {
+   "data/sports/crosswalk/nhl_participants.json": "8375b772d4ff4779f1dd1ed72206675a2768caa22734f00763ced6acb16462a0",
+   "data/sports/normalized/nhl/contracts.jsonl": "40d4f818cf4ec89dd8147c75fa460fdad06798d08f501c47530bdf4dc2ca5f4f",
+   "data/sports/normalized/nhl/events.jsonl": "7283e55f292d264ef52436202b1c5962e7cb86ade72c417b33c44af49b25d519",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "pga": {
+   "data/sports/crosswalk/pga_participants.json": "ed55d9e5d30b69bad04d1a9eec1ee0e26ae10068e7022fb40fcae50a510ac65c",
+   "data/sports/normalized/pga/contracts.jsonl": "d40f8cacd1b59e7071ccaaf5d39d490ebb162273f4b240453c5f2a49242929c9",
+   "data/sports/normalized/pga/events.jsonl": "fe0dd56c48f2727690adc9e38b5cd139121491e01857170faee03b79a23c1571",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "saudi": {
+   "data/sports/crosswalk/saudi_participants.json": "184c6a0f9f0998ba9ffbba9dba8fa33223ccd48fd9b99e28f4d22fe1cb30ddd8",
+   "data/sports/normalized/saudi/contracts.jsonl": "7ad1532c744d6d5874f67b82c6e3426dcbebeb6ef51a7e138dc9adfa64307ac3",
+   "data/sports/normalized/saudi/events.jsonl": "ae63942b0d9546940238241482d18cfc0715202401cd99ab9ea8fcba5832fb42",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "seriea": {
+   "data/sports/crosswalk/seriea_participants.json": "78c1cf2aef0e715030b7ea2f79d7b512fa2df36afba614bedf3bc25c702f3fa4",
+   "data/sports/normalized/seriea/contracts.jsonl": "034fc1414764913271e2898199547860c48eec78956bdb9227d52f632cb40e7c",
+   "data/sports/normalized/seriea/events.jsonl": "7b5ce0eb1a46aa081a032ccbf0faa0670bce068042eb2379a1f79710d490fd4a",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "ucl": {
+   "data/sports/crosswalk/ucl_participants.json": "ddf63514a490689d051792f0ca8dd7f61292bb6d32308d891695506d3c5c3d71",
+   "data/sports/normalized/ucl/contracts.jsonl": "0f09088f42ba4f1186309ce5663763980f250d7ae75dd90e364ec243179db9a7",
+   "data/sports/normalized/ucl/events.jsonl": "393594231992a986e2460a2022edcf8938d51a40d280b52a88fedaa010057338",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "uecl": {
+   "data/sports/crosswalk/uecl_participants.json": "e423155636ef55e6a869243a8ebc07384dc9b12a0519ae037f8edce29a1d5cd5",
+   "data/sports/normalized/uecl/contracts.jsonl": "cc92ce41b88d844ebcfa034a1b4ebd535a5a333c8635aa3ea6b2c3e25502fdc4",
+   "data/sports/normalized/uecl/events.jsonl": "b54ccded06ee7fa494ae6145d6b89ffdf4f12663f55db51fd4ae724bc5d77a6f",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "uel": {
+   "data/sports/crosswalk/uel_participants.json": "4cbd8ec7546af658f77bd1fe6f81f685b3059f95db8eb16ec92ec05bebece029",
+   "data/sports/normalized/uel/contracts.jsonl": "2fef6e1df2205f59cb0445c1094cfaa54f490e97718db416875d844d93f8f914",
+   "data/sports/normalized/uel/events.jsonl": "b8370d6943c44e0df6e14c48cbc8adf20e447211106f4994bf514527ba5a77fb",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "ufc": {
+   "data/sports/crosswalk/ufc_participants.json": "d07292a9a02b38c874cdba8fb8f02359bf04a8064a87f9856f0a5e228ae3fa6a",
+   "data/sports/normalized/ufc/contracts.jsonl": "e60fb43f2812be2a66258dc5ec709f7a3dceac98b2fc6f51fcf0b83aa6ad8213",
+   "data/sports/normalized/ufc/events.jsonl": "058bd20ccd14d9cd142e89e0feeb4b94564221ae5d45288e598467c7383f9c48",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  },
+  "wnba": {
+   "data/sports/crosswalk/wnba_participants.json": "bb3e13e44641093032a50414c8671c09481f56927a3889c73346da7e180b9f71",
+   "data/sports/normalized/wnba/contracts.jsonl": "63acb5ec2f45393dbdb2a70ff83ebcbcdaf2a1396bb2d0a33183b41d501c2501",
+   "data/sports/normalized/wnba/events.jsonl": "a265f2b29e6797f31f77deb80a465ae491b8d13ba17bc2f06787ba04ba1758df",
+   "docs/research/sports_inventory_v1.csv": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa"
+  }
+ },
+ "frozen_at": "2026-10-10T12:27:49Z",
+ "live_code_files": [
+  "config.py",
+  "discover.py",
+  "sources.py",
+  "predict.py",
+  "pins.py",
+  "capture.py",
+  "replay.py"
+ ],
+ "no_bet": true,
+ "parent_preserved": "sports_phase2_v1 protocol, journals and results are unchanged; this protocol only adds a prospective collector",
+ "parent_protocol": "sports_phase2_v1",
+ "phase1_protocol": "sports_phase1_v2",
+ "pins": {
+  "live_code_hash": "f0060654af3b1a38d96607c575f0d27ae8f11fa0f40c84589077a6d6c34305b1",
+  "phase1_code_hash": "5672164410b0a02702382137a19b020c791ef55e171ed6dca4524dc53c04a195",
+  "phase1_protocol_sha256": "66283d9e2a6b679d4391a53d195d122269fbeed62a4c76f24a77e7dae4d0f4c6",
+  "phase2_code_hash": "74adc71a8e5758c242528aa81eb835551cca6eb9a0f51d5500bc5321fb3ef50c",
+  "phase2_protocol_sha256": "b95e662b233931caafbedfa16b04081d3c9ca01a2e43abfafa0c81867c81cb39"
+ },
+ "protocol": "sports_phase2_capture_v2",
+ "research_only": true,
+ "rules": {
+  "as_of_view": "events whose result is not released (frozen Phase 1 release rule) by prediction_as_of lose every outcome-derived field; pregame fields are kept",
+  "candidates": {
+   "blend": "sigma(c + w*logit(p_model) + (1-w)*logit(p_market)) (w, c selected on F3)",
+   "calibrated": "logistic recalibration of the frozen model (form and ridge strength selected on F3)",
+   "frozen": "Phase 1 primary model (elo for two-way game winners, score model otherwise), parameters re-selected per fold for out-of-fold rows; for 2026 the sports_phase1_v2 journal forecasts verbatim",
+   "market": "Kalshi mid at the forecast cutoff (last hourly candle ended by cutoff, age <= 3h, two-sided book)",
+   "order": [
+    "frozen",
+    "calibrated",
+    "market",
+    "blend"
+   ]
+  },
+  "contract_rules": {
+   "game_winner": "1 per event: home side (non-tie) if present, else lexicographically first ticker (Phase 1 rule)",
+   "spread": "2 per event: per side (home, away), the lower-median strike among that side's eligible strikes",
+   "team_total": "2 per event: per side, the lower-median strike among that side's eligible strikes",
+   "total": "2 per event: the lower-median and upper-median strike among eligible strikes (1 if only one)"
+  },
+  "discovery": {
+   "early_lookahead_hours": {
+    "default": 6.0,
+    "max": 48.0
+   },
+   "history_overlap_days": 2,
+   "max_pages": 200,
+   "milestone_min_start": "2026-10-01T00:00:00Z",
+   "page_limits": {
+    "markets": 1000,
+    "milestones": 500
+   },
+   "window_discovery_hours": [
+    -2.0,
+    1.75
+   ]
+  },
+  "horizon_minutes": 60,
+  "idempotency": {
+   "accepted": "first record meeting every recording rule; exclusive create; never replaced",
+   "duplicate": "DUPLICATE_ATTEMPT under attempts/<run_id>/ referencing the accepted record's sha256",
+   "failed": "FAILED_ATTEMPT records under attempts/<run_id>/; they never occupy the accepted slot",
+   "key": "(mode slot, competition, event cluster); slot = checkpoint (window mode) or early",
+   "missed": "MISSED accepted only in window mode after now > cutoff without an accepted capture, for events discovered before their start or with earlier failed attempts"
+  },
+  "market_families": [
+   "game_winner",
+   "spread",
+   "total",
+   "team_total"
+  ],
+  "modes": {
+   "early": "EARLY_SNAPSHOT: development record finalized before the window opens; never a checkpoint record and never MISSED.",
+   "window": "WINDOW_CAPTURE: prediction_as_of inside [cutoff - 20 min, cutoff]; the actual horizon is recorded (not an exact T-60 observation). Never writes EARLY_SNAPSHOT records."
+  },
+  "network": {
+   "concurrency": 1,
+   "max_retries": 2,
+   "min_interval_s": 0.5,
+   "timeout_s": 45.0
+  },
+  "primary_model": "phase2.folds.primary_row over the Phase 1 predictor output (no Elo substitution)",
+  "quote": {
+   "diagnostics": "current yes bid/ask from the market listing are saved separately and never used as a candidate or blend input",
+   "lookback_hours": 24,
+   "max_age_hours": 3,
+   "period_interval_min": 60,
+   "reference_time": "prediction_as_of (not the scheduled cutoff)",
+   "request": "hourly candles over [request_time - 24 h, request_time]; a quote is used only if the latest candle ended at or before prediction_as_of; if an hour boundary passes between the candle request and prediction_as_of the market candidate is unavailable",
+   "rule": "same as Phase 1: latest hourly candle with end_period_ts <= cutoff, two-sided yes book, age <= 3h; bid <= 0 or ask >= 1 is no quote"
+  },
+  "recording_rules": [
+   "capture and parent protocol pins, Phase 1/Phase 2/live code hashes and every prediction dependency (normalized history, crosswalks, inventory) match the frozen capture protocol",
+   "milestone discovery and every market/history page set paginated to completion",
+   "every evidence request returned HTTP 200 and its bytes are saved",
+   "every evidence retrieval completed at or before prediction_as_of",
+   "every result used by a predictor was released (frozen Phase 1 release rule) at or before prediction_as_of",
+   "window mode: cutoff - 20 min <= prediction_as_of <= finalized_at <= cutoff",
+   "early mode: finalized_at < cutoff - 20 min",
+   "each of the four candidates carries a probability or an explicit unavailability reason"
+  ],
+  "statuses": {
+   "DUPLICATE_ATTEMPT": "attempt after an accepted record exists; the accepted record is never replaced",
+   "EARLY_SNAPSHOT": "accepted early development snapshot (first per event)",
+   "FAILED_ATTEMPT": "attempt that broke a recording rule (network error, incomplete pagination, pin failure, timing); never occupies the accepted slot; another attempt may follow inside the window",
+   "MISSED": "accepted checkpoint record written only after the window expired without an accepted capture",
+   "WINDOW_CAPTURE": "accepted checkpoint capture (first attempt satisfying every recording rule)"
+  },
+  "window_minutes": 20
+ },
+ "scheduler": "none (manual invocation only)"
+}

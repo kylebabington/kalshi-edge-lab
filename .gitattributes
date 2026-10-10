@@ -16,3 +16,4 @@ research/sports/protocols/*.json -text
 # Sports research code is hashed into frozen protocols as CRLF working-copy bytes; check it out with CRLF everywhere.
 research/sports/*.py text eol=crlf
 research/sports/phase2/*.py text eol=crlf
+research/sports/live/*.py text eol=crlf
