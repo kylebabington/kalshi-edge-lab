@@ -26,7 +26,13 @@ def main(argv=None) -> int:
     a = p.parse_args(argv)
     if a.stage == "settle":
         from . import score as SC
-        return SC.run(log)
+        from ..ops.lock import LockBusy, sports_lock
+        try:
+            with sports_lock("manual settle", log=log):
+                return SC.run(log)
+        except LockBusy as exc:
+            log(f"{exc}; not settling (manual and scheduled sports runs share one lock)")
+            return 3
     if a.stage == "verify-scores":
         from . import score as SC
         return SC.verify_scores(log)

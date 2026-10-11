@@ -3,6 +3,7 @@ import type { WeatherEvent } from '../types/weather'
 import { EventCard } from '../components/EventCard'
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
 import type { ModelSummary } from '../types/weather'
+import { SportsSummaryPanel } from '../components/sports/SportsSummaryPanel'
 
 type Props = {
   loading: boolean
@@ -11,7 +12,16 @@ type Props = {
   summary: ModelSummary | null
 }
 
-export function DashboardPage({ loading, error, events, summary }: Props) {
+export function DashboardPage(props: Props) {
+  return (
+    <div className="space-y-6">
+      <WeatherDashboard {...props} />
+      <SportsSummaryPanel />
+    </div>
+  )
+}
+
+function WeatherDashboard({ loading, error, events, summary }: Props) {
   if (loading) return <LoadingState label="Loading live weather markets…" />
   if (error) return <ErrorState message={error} />
 
@@ -42,7 +52,7 @@ export function DashboardPage({ loading, error, events, summary }: Props) {
 
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="panel">
-          <h3 className="font-semibold">Model Health</h3>
+          <h3 className="font-semibold">Weather Model Health</h3>
           {summary?.model_summary_available ? (
             <dl className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between gap-3">

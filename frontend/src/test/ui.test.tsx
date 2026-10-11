@@ -21,6 +21,11 @@ vi.mock('../api/weather', () => ({
   fetchSnapshot: vi.fn(async () => mockSnapshot),
 }))
 
+vi.mock('../api/sports', async () => {
+  const mocks = await import('../mocks/sports')
+  return { fetchSportsSummary: vi.fn(async () => mocks.mockSportsSummary) }
+})
+
 describe('UI foundation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -70,7 +75,7 @@ describe('UI foundation', () => {
     expect(mockWeatherEvent.prediction.prediction_status).toBe(
       'INSUFFICIENT_TARGET_REGIME_HISTORY',
     )
-    expect(mockWeatherEvent.research_status.trade_recommendations).toBe('DISABLED')
+    expect(mockWeatherEvent.research_status?.trade_recommendations).toBe('DISABLED')
   })
 
   it('probability comparison does not invent trade controls', () => {

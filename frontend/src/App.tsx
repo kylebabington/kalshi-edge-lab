@@ -9,6 +9,8 @@ import { MarketsPage } from './pages/MarketsPage'
 import { MarketDetailPage } from './pages/MarketDetailPage'
 import { WeatherModelPage } from './pages/WeatherModelPage'
 import { ResearchPage } from './pages/ResearchPage'
+import { SportsPage } from './pages/SportsPage'
+import { SportsEventPage } from './pages/SportsEventPage'
 
 function MarketDetailRoute({
   live,
@@ -144,6 +146,8 @@ export default function App() {
             />
           }
         />
+        <Route path="/sports" element={<SportsPage />} />
+        <Route path="/sports/events/:eventId" element={<SportsEventPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

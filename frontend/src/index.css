@@ -57,7 +57,10 @@ a {
 }
 
 button:focus-visible,
-a:focus-visible {
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -117,4 +120,60 @@ a:focus-visible {
   font-size: 0.75rem;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+.filter-control {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  min-height: 2.25rem;
+}
+
+.pager-button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.8rem;
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.pager-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.data-table caption {
+  text-align: left;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding-bottom: 0.4rem;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table thead th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.data-table tbody th {
+  font-weight: 500;
 }

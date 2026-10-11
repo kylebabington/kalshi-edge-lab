@@ -6,6 +6,7 @@ const nav = [
   { to: '/markets', label: 'Markets' },
   { to: '/weather-model', label: 'Weather Model' },
   { to: '/research', label: 'Research' },
+  { to: '/sports', label: 'Sports' },
 ]
 
 type Props = {
@@ -25,7 +26,7 @@ export function AppShell({ apiStatus, modelStatus }: Props) {
             {isMockMode() ? <span className="badge badge-info ml-2">Mock Data</span> : null}
           </div>
         </div>
-        <nav className="flex flex-row lg:flex-col gap-2">
+        <nav aria-label="Main" className="flex flex-row flex-wrap lg:flex-col gap-2">
           {nav.map((item) => (
             <NavLink
               key={item.to}
@@ -45,7 +46,7 @@ export function AppShell({ apiStatus, modelStatus }: Props) {
         </nav>
         <div className="mt-auto space-y-2 text-xs text-[var(--text-muted)]">
           <div className="status-chip">API: {apiStatus}</div>
-          <div className="status-chip">Model: {modelStatus}</div>
+          <div className="status-chip">Weather model: {modelStatus}</div>
           <div className="status-chip">Mode: RESEARCH ONLY</div>
         </div>
       </aside>

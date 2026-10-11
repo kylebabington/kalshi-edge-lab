@@ -380,6 +380,23 @@ API base: `http://localhost:8000`
 
 CORS allows only `http://localhost:5173`.
 
+Sports (read-only; every handler reads saved artifacts and never fetches upstream, captures, settles,
+writes reports or starts the collector):
+
+- `GET /api/sports/summary` — counts, candidate availability, last capture, collector brief
+- `GET /api/sports/events?sport=&competition=&family=&cohort=&status=&q=&page=&page_size=` —
+  `status` is `all|captured|upcoming|awaiting_settlement|settled|missed`
+- `GET /api/sports/events/{event_id}` — `event_id` is `competition|cluster` (URL-encode it), one event with
+  all of its contracts
+- `GET /api/sports/results?sport=&competition=&family=&cohort=&weighting=event|contract`
+- `GET /api/sports/coverage?sport=&competition=&family=&status=&q=&page=&page_size=`
+- `GET /api/sports/historical?protocol=&level=&key=&family=&cohort=&comparison=&page=&page_size=`
+- `GET /api/sports/collector` — status files plus a passive `schtasks /Query`; `unknown` when unreadable
+
+UI routes: `/sports` (tabs Events, Results, Coverage, Historical Research; filters live in the URL) and
+`/sports/events/:eventId`. Which local artifacts populate each view, and how the 5-minute sports collector
+is operated, is in [docs/research/sports_collector_v1.md](docs/research/sports_collector_v1.md).
+
 ### Frontend
 
 ```powershell
@@ -400,6 +417,8 @@ $env:VITE_USE_MOCK="true"; npm run dev
 .\.venv\Scripts\python.exe -m pytest -q
 cd frontend
 npm test
+npm run lint
+npm run build   # tsc -b + vite build
 ```
 
 ---

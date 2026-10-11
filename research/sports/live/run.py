@@ -1,4 +1,7 @@
-"""Sports prospective capture v2 command line (RESEARCH_ONLY / NO_BET; manual only, never scheduled).
+"""Sports prospective capture v2 command line (RESEARCH_ONLY / NO_BET).
+
+Manual entry point. The scheduled cycle (research.sports.ops.collector) calls the same capture code;
+``capture`` takes the shared sports lock so manual and scheduled runs never overlap.
 
     python -m research.sports.live.run matrix                       # offline availability matrix (all 313 competitions)
     python -m research.sports.live.run freeze                       # freeze sports_phase2_capture_v2 (write-once)
@@ -60,7 +63,13 @@ def main(argv=None) -> int:
         if a.mode == "window" and a.lookahead_hours is not None:
             raise SystemExit("--lookahead-hours applies to early mode only")
         from . import capture as CP
-        return CP.run(a.mode, a.competitions, log, lookahead_h=a.lookahead_hours)
+        from ..ops.lock import LockBusy, sports_lock
+        try:
+            with sports_lock(f"manual capture --mode {a.mode}", log=log):
+                return CP.run(a.mode, a.competitions, log, lookahead_h=a.lookahead_hours)
+        except LockBusy as exc:
+            log(f"{exc}; not capturing (manual and scheduled sports runs share one lock)")
+            return 3
     from . import replay as RP
     if a.all:
         return RP.replay_all(log)
