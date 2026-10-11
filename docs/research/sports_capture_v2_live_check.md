@@ -104,3 +104,5 @@ Re-run `settle` and then `report` after the NCAAF games settle (tonight UTC) to 
 - **Not yet scored:** no labelled contract has a calibrated or blend probability (none of the settled competitions has a fitted map).
 
 `sports_capture_v2_pilot_scores.csv` was regenerated from these 503 scores.
+
+Update 2026-10-11T12:19Z: all 461 NCAAF contracts are now final. The completed verification is in `sports_capture_v2_ncaaf_scoring_check.md`, and the pilot CSV was regenerated from 978 scores.
