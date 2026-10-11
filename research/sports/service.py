@@ -313,7 +313,13 @@ def _view(s: dict, settle: dict, now: float) -> str:
     return "settled" if settle["state"] in ("settled",) else "awaiting_settlement"
 
 
-def _event_item(s: dict, ev_scores: dict, pending: dict, now: float) -> dict:
+def _collection_modes() -> dict:
+    from .ops import provenance as PV
+    return PV.run_modes()
+
+
+def _event_item(s: dict, ev_scores: dict, pending: dict, now: float, modes: dict | None = None) -> dict:
+    from .ops import provenance as PV
     ttl = event_title(s)
     desc = {}
     if s["status"] == "WINDOW_CAPTURE":
@@ -336,6 +342,7 @@ def _event_item(s: dict, ev_scores: dict, pending: dict, now: float) -> dict:
         "contracts_total": len(s["contracts"]), "contracts_ok": len(ok),
         "candidate_available": {k: sum(1 for c in ok if c["p"][k]) for k in CANDIDATES},
         "comparability": s["comparability"], "integrity": {"record_checksum": "ok" if s["checksum_ok"] else "MISMATCH"},
+        "collection_mode": PV.mode_of(s.get("run_id"), modes if modes is not None else _collection_modes()),
     }
 
 
@@ -347,6 +354,8 @@ def _matches(item: dict, f: dict) -> bool:
     if f.get("family") and f["family"] not in item["families"]:
         return False
     if f.get("cohort") and f["cohort"] not in item["cohorts"]:
+        return False
+    if f.get("collection") and item.get("collection_mode") != f["collection"]:
         return False
     st = f.get("status")
     if st and st != "all":
@@ -373,7 +382,8 @@ def all_events(now: float | None = None) -> list[dict]:
     idx = _score_index(scores())
     run = latest_settlement_run() or {}
     pending = {d["ticker"]: d for d in run.get("diagnostics") or []}
-    out = [_event_item(s, idx.get(s["event_id"], {}), pending, now) for s in records() if "unreadable" not in s]
+    modes = _collection_modes()
+    out = [_event_item(s, idx.get(s["event_id"], {}), pending, now, modes) for s in records() if "unreadable" not in s]
     return sorted(out, key=_sort_key)
 
 
@@ -443,6 +453,16 @@ def _dep_label(path: str) -> str:
     return path.replace("data/sports/", "").replace("docs/research/", "")
 
 
+def _collection_info(run_id: str | None) -> dict:
+    from .ops import provenance as PV
+    modes = _collection_modes()
+    mode = PV.mode_of(run_id, modes)
+    return {"mode": mode, "label": PV.MODE_LABELS[mode],
+            "cycle_started_at": (modes.get(run_id) or {}).get("cycle_started_at"),
+            "amendment": PV.AMENDMENT["id"], "amendment_doc": PV.AMENDMENT["doc"],
+            "note": "Derived from the collector cycle log by run_id; the record itself is unchanged."}
+
+
 def _provenance(rec: dict, s: dict, ev_scores: dict) -> dict:
     proto = _protocol_info()
     ev = rec.get("evidence") or []
@@ -467,6 +487,7 @@ def _provenance(rec: dict, s: dict, ev_scores: dict) -> dict:
                                                                          if not x["checksum_ok"])},
             "note": "Full offline reproduction: python -m research.sports.live.run replay --all (not run by the API)",
         },
+        "collection": _collection_info(rec.get("run_id")),
         "pins": rec.get("pins") or {},
         "dependencies": {_dep_label(k): v for k, v in deps.items()},
         "timing": {"window_open": rec.get("window_open"), "market_pick_time": rec.get("market_pick_time"),
@@ -815,7 +836,18 @@ def get_summary() -> dict:
                       "unreadable_records": sum(1 for s in recs if s.get("unreadable")),
                       "score_checksum_mismatches": sum(1 for s in scores() if not s["checksum_ok"])},
         "collector": collector_brief(),
+        "collection": _collection_summary(items),
     }
+
+
+def _collection_summary(items: list[dict]) -> dict:
+    from .ops import provenance as PV
+    by = {m: {"captured": 0, "missed": 0} for m in PV.MODES}
+    for i in items:
+        by[i["collection_mode"]]["captured" if i["capture_status"] == "WINDOW_CAPTURE" else "missed"] += 1
+    return {"by_mode": by, "labels": PV.MODE_LABELS,
+            "amendment": {k: PV.AMENDMENT[k] for k in ("id", "date", "doc", "cadence_minutes", "collector_commit",
+                                                       "first_scheduled_action_at", "first_trigger_run_at")}}
 
 
 def collector_brief() -> dict:
@@ -828,6 +860,15 @@ def collector_brief() -> dict:
             "last_successful_capture_at": st.get("last_successful_capture_at"),
             "last_settlement_check_at": st.get("last_settlement_check_at"),
             "consecutive_failures": st.get("consecutive_failures")}
+
+
+def _backup_brief() -> dict:
+    from .ops import backup as BK
+    st = BK.read_status()
+    if not st:
+        return {"recorded": False, "note": "no sports state backup recorded on this machine"}
+    return {"recorded": True, **{k: st.get(k) for k in ("backup", "at", "finished_at", "files", "bytes",
+                                                          "missing_count", "incomplete", "local_head", "ref")}}
 
 
 def get_collector_status(task_query=None) -> dict:
@@ -864,6 +905,7 @@ def get_collector_status(task_query=None) -> dict:
                       "last_score_written_at": last_score, "minutes_since_last_score": age(last_score),
                       "last_cycle_finished_at": ((st or {}).get("last_cycle") or {}).get("finished_at"),
                       "minutes_since_last_cycle": age(((st or {}).get("last_cycle") or {}).get("finished_at"))},
+        "backup": _backup_brief(),
         "limits": "Captures need the machine awake, logged in and online during each event's 20-minute window. "
                   "Sleep, shutdown, logoff or an internet failure produce MISSED records; missed forecasts are "
                   "never reconstructed from later downloads.",

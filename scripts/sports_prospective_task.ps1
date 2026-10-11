@@ -13,6 +13,8 @@
     writes its own data\logs\sports\collector_YYYY-MM-DD.log, collector_cycles.jsonl and
     collector_status.json.
   - No retry loop: the next cycle starts 5 minutes later and accepted records are never replaced.
+  - After the cycle, `research.sports.ops.backup run --if-due` pushes the private sports-state backup
+    at most hourly (separate ref and clone from the weather backup; waits for the weather lock).
   - Independent of the weather task, its wrapper, lock and logs.
 #>
 $ErrorActionPreference = 'Stop'
@@ -55,6 +57,29 @@ try {
         Remove-Item $err -Force
     }
     if (Test-Path $out) { Remove-Item $out -Force }
+
+    # Hourly private sports-state backup after the cycle has released the sports lock. Its result is
+    # logged (and in data\logs\sports\backup_status.json) but never changes the cycle's exit code.
+    try {
+        $bout = Join-Path $LogDir ".task_$stamp.backup.out"
+        $berr = Join-Path $LogDir ".task_$stamp.backup.err"
+        $bproc = Start-Process -FilePath $Python `
+            -ArgumentList @('-m', 'research.sports.ops.backup', 'run', '--if-due', '--purpose', 'scheduled') `
+            -WorkingDirectory $RepoRoot -NoNewWindow -PassThru `
+            -RedirectStandardOutput $bout -RedirectStandardError $berr
+        $null = $bproc.Handle
+        try { $bproc.PriorityClass = 'BelowNormal' } catch { }
+        $bproc.WaitForExit()
+        foreach ($f in @($bout, $berr)) {
+            if (Test-Path $f) {
+                Get-Content -Path $f -Encoding UTF8 | Where-Object { $_.Trim() } | ForEach-Object { Write-Log ("  backup: " + $_) }
+                Remove-Item $f -Force
+            }
+        }
+        Write-Log "backup step exit $($bproc.ExitCode)"
+    } catch {
+        Write-Log ("backup step ERROR: " + $_.Exception.Message)
+    }
 } catch {
     Write-Log ("ERROR: " + $_.Exception.Message)
     $exitCode = 12

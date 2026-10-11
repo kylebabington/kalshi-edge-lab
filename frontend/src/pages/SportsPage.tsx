@@ -100,6 +100,7 @@ export function EventsTab({ params, setParam }: { params: Params; setParam: SetP
     family: params.get('family') ?? '',
     cohort: params.get('cohort') ?? '',
     status: params.get('status') ?? '',
+    collection: params.get('collection') ?? '',
     q: params.get('q') ?? '',
     page: Number(params.get('page') ?? '1') || 1,
   }
@@ -127,6 +128,17 @@ export function EventsTab({ params, setParam }: { params: Params; setParam: SetP
                 value: v,
                 label: `${VIEW_LABELS[v]}${data ? ` (${data.views[v] ?? 0})` : ''}`,
               })),
+            ],
+          },
+          {
+            id: 'collection',
+            label: 'Collection mode',
+            value: filters.collection,
+            allLabel: 'All modes',
+            options: [
+              { value: 'automatic', label: 'Automatic (scheduled)' },
+              { value: 'manual_pilot', label: 'Manual pilot' },
+              { value: 'collector_manual', label: 'Collector started by hand' },
             ],
           },
         ]}

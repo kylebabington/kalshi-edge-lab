@@ -17,7 +17,9 @@ import { CANDIDATES, type CandidateView, type ContractRow, type SportsEventDetai
 
 function CandidateCell({ c, settled }: { c: CandidateView; settled: boolean }) {
   if (!c.available) {
-    return <span className="text-xs text-[var(--text-muted)]">Unavailable: {c.reason}</span>
+    return (
+      <span className="text-xs text-[var(--text-muted)]">Unavailable: {(c.reason ?? 'no reason recorded').replace(/^unavailable(:\s*|\s+)/i, '')}</span>
+    )
   }
   return (
     <div className="space-y-0.5">
@@ -136,12 +138,23 @@ export function SportsEventView({ data, loadedAt }: { data: SportsEventDetail; l
             <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
               {e.sport} · {e.competition_name ?? e.competition}
             </p>
-            <h2 className="text-xl font-semibold">{e.participants.length ? e.participants.join(' vs ') : e.title ?? e.cluster}</h2>
-            {e.title && e.participants.length ? <p className="text-sm text-[var(--text-muted)]">{e.title}</p> : null}
+            <h2 className="text-xl font-semibold">
+              {e.title ?? (e.participants.length ? e.participants.join(' · ') : e.cluster)}
+            </h2>
+            {e.title && e.participants.length ? (
+              <p className="text-sm text-[var(--text-muted)]">Outcomes: {e.participants.join(' · ')}</p>
+            ) : null}
           </div>
           <StatusBadge status={VIEW_LABELS[e.view]} />
         </div>
         <p className="text-xs mono text-[var(--text-muted)]">Event id: {e.event_id}</p>
+        {p.collection ? (
+          <p className="text-xs text-[var(--text-muted)]">
+            Collection: {p.collection.label}
+            {p.collection.cycle_started_at ? ` (cycle ${fmtTime(p.collection.cycle_started_at)})` : ''} · see{' '}
+            <span className="mono break-all">{p.collection.amendment_doc}</span>
+          </p>
+        ) : null}
         <DataStamp generatedAt={data.generated_at} lastCaptureAt={e.prediction_as_of} loadedAt={loadedAt} source={data.source} />
       </header>
 

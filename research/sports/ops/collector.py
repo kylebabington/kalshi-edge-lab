@@ -22,6 +22,7 @@ Every cycle appends to ``data/logs/sports/collector_cycles.jsonl`` and rewrites
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import statistics
@@ -249,6 +250,28 @@ def _cycle_body(log, now_fn, session, dry_run: bool, settle_mode: str, rec: dict
     return code
 
 
+BACKUP_WAIT_S = 60.0
+BACKUP_POLL_S = 2.0
+
+
+@contextlib.contextmanager
+def _acquire_waiting_for_backup(purpose: str, log, rec: dict):
+    """Take the sports lock; a backup holds it only for seconds, so wait for it rather than skip."""
+    t0 = time.monotonic()
+    with contextlib.ExitStack() as stack:
+        while True:
+            try:
+                stack.enter_context(sports_lock(purpose, log=log))
+                break
+            except LockBusy as exc:
+                holder = str((exc.owner or {}).get("purpose") or "")
+                if not holder.startswith("backup:") or time.monotonic() - t0 >= BACKUP_WAIT_S:
+                    raise
+                time.sleep(BACKUP_POLL_S)
+                rec["waited_for_backup_s"] = round(time.monotonic() - t0, 1)
+        yield
+
+
 def run_cycle(log=None, now_fn=None, session=None, dry_run: bool = False, settle_mode: str = "auto",
               purpose: str = "collector cycle") -> int:
     log = log or make_logger()
@@ -260,7 +283,7 @@ def run_cycle(log=None, now_fn=None, session=None, dry_run: bool = False, settle
            "purpose": purpose, "research_only": True, "no_bet": True}
     code = 0
     try:
-        with sports_lock(purpose + (" (dry run)" if dry_run else ""), log=log):
+        with _acquire_waiting_for_backup(purpose + (" (dry run)" if dry_run else ""), log, rec):
             log(f"sports collector cycle start ({'dry run' if dry_run else 'live'}; pid {os.getpid()})")
             code = _cycle_body(log, now_fn, sess, dry_run, settle_mode, rec)
             rec["result"] = "ok" if code == 0 else {2: "capture_problem", 3: "settlement_problem"}.get(code, "error")
@@ -343,6 +366,10 @@ def build_status(cycles_path: Path, state: dict) -> dict:
         "last_successful_capture_at": state.get("last_successful_capture_at"),
         "last_settlement_check_at": state.get("last_settlement_check_at"),
         "last_settlement_result": state.get("last_settlement_result"),
+        "settlement_deferred_since": (_iso(state["settlement_deferred_since_ts"])
+                                      if state.get("settlement_deferred_since_ts") else None),
+        "settlement_forced_by": (_iso(state["settlement_deferred_since_ts"] + SETTLE_MAX_DEFER_S)
+                                 if state.get("settlement_deferred_since_ts") else None),
         "consecutive_failures": consecutive,
         "cycles_24h": len(recent), "skipped_lock_busy_24h": len(recent) - len(worked),
         "failures_24h": len(failures), "recent_failures": failures[-RECENT_FAILURES:],

@@ -147,6 +147,31 @@ def test_manual_runs_share_the_collector_lock(ops, monkeypatch):
     assert _cycles(ops)[-1]["result"] == "skipped_lock_busy"
 
 
+def test_cycle_waits_briefly_for_a_backup_holding_the_lock(ops, monkeypatch):
+    import threading
+    monkeypatch.setattr(CO, "BACKUP_POLL_S", 0.05)
+    held, release = threading.Event(), threading.Event()
+
+    def backup():
+        with LK.sports_lock("backup:manual"):
+            held.set()
+            release.wait(5)
+
+    t = threading.Thread(target=backup)
+    t.start()
+    held.wait(5)
+    threading.Timer(0.3, release.set).start()
+    assert CO.run_cycle(log=_quiet, now_fn=lambda: T0) == 0
+    t.join()
+    last = _cycles(ops)[-1]
+    assert last["result"] == "ok" and last["waited_for_backup_s"] > 0
+
+    monkeypatch.setattr(CO, "BACKUP_WAIT_S", 0.2)
+    with LK.sports_lock("backup:manual"):
+        assert CO.run_cycle(log=_quiet, now_fn=lambda: T0) == 0
+    assert _cycles(ops)[-1]["result"] == "skipped_lock_busy"
+
+
 # ---------------------------------------------------------------- cycles
 
 def test_cycle_capture_only_when_due_and_settlement_hourly(ops):
@@ -342,3 +367,11 @@ def test_bottleneck_reported_when_capture_exceeds_headroom():
     msg = CO.bottleneck({"duration_s": CO.CAPTURE_HEADROOM_S + 1, "competitions": "all"},
                         {"h": {"requests": 400, "seconds": 250.0}})
     assert "400 serial requests" in msg and "not relaxed" in msg
+
+
+def test_status_reports_settlement_deferral_window(tmp_path):
+    t0 = datetime(2026, 10, 11, 14, 37, 11, tzinfo=timezone.utc).timestamp()
+    st = CO.build_status(tmp_path / "none.jsonl", {"settlement_deferred_since_ts": t0})
+    assert st["settlement_deferred_since"].startswith("2026-10-11T14:37:11")
+    assert st["settlement_forced_by"].startswith("2026-10-11T17:37:11")
+    assert CO.build_status(tmp_path / "none.jsonl", {})["settlement_deferred_since"] is None

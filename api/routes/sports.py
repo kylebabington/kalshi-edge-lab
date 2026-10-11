@@ -38,12 +38,13 @@ def sports_events(
     family: str | None = None,
     cohort: str | None = None,
     status: EventStatus | None = None,
+    collection: Literal["automatic", "collector_manual", "manual_pilot"] | None = None,
     q: str | None = Query(None, max_length=120),
     page: int = Query(1, ge=1),
     page_size: int = Query(24, ge=1, le=200),
 ) -> dict:
     filters = {"sport": sport, "competition": competition, "family": family, "cohort": cohort,
-               "status": status, "q": q}
+               "status": status, "collection": collection, "q": q}
     return service.list_events(filters, page, page_size)
 
 

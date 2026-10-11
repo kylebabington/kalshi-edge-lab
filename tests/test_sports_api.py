@@ -17,6 +17,7 @@ from research.sports import evaluate as EV
 from research.sports import service as S
 from research.sports.core import sha256_json
 from research.sports.live import config as LC
+from research.sports.ops import backup as BK
 from research.sports.ops import collector as CO
 from research.sports.ops import lock as LK
 from research.sports.ops import scheduler as SCH
@@ -83,6 +84,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(LC, "EVIDENCE_ROOT", ev)
     monkeypatch.setattr(SCC, "SCORE_DIR", sc)
     monkeypatch.setattr(CO, "STATUS_PATH", logs / "collector_status.json")
+    monkeypatch.setattr(CO, "CYCLES_PATH", logs / "collector_cycles.jsonl")
+    monkeypatch.setattr(BK, "STATUS_PATH", logs / "backup_status.json")
     monkeypatch.setattr(LK, "LOCK_PATH", logs / "cycle.lock")
     monkeypatch.setattr(SCH, "query_task", lambda name, **_: {**SCH.UNKNOWN, "reason": "test"})
     S._milestone_titles.cache_clear()
@@ -261,6 +264,54 @@ def test_get_requests_are_passive_and_hide_paths(populated, client, monkeypatch)
         assert '"_path"' not in text and ":\\\\" not in text
     assert _snapshot(populated["root"]) == before
     assert not LK.LOCK_PATH.exists()
+
+
+def test_collection_mode_from_cycle_log_without_touching_records(populated, client):
+    cap = populated["capture"]
+    rec_path = next(cap.rglob("espn_2.json"))
+    rec = json.loads(rec_path.read_text(encoding="utf-8"))
+    rec["run_id"] = "run-auto"
+    rec["record_sha256"] = sha256_json({k: v for k, v in rec.items() if k != "record_sha256"})
+    rec_path.write_text(json.dumps(rec), encoding="utf-8")
+    cycles = [{"started_at": _iso(NOW - 600), "purpose": "scheduled", "capture": {"run_id": "run-auto"}},
+              {"started_at": _iso(NOW - 300), "purpose": "scheduled", "dry_run": True, "capture": {"run_id": "run-test"}}]
+    CO.CYCLES_PATH.write_text("".join(json.dumps(c) + "\n" for c in cycles), encoding="utf-8")
+    before = _snapshot(cap)
+    items = {i["event_id"]: i["collection_mode"] for i in client.get("/api/sports/events").json()["items"]}
+    assert items == {"epl|espn:3": "manual_pilot", "nfl|espn:2": "automatic", "nfl|espn:1": "manual_pilot",
+                     "nfl|espn:4": "manual_pilot"}
+    only = client.get("/api/sports/events", params={"collection": "automatic"}).json()
+    assert [i["event_id"] for i in only["items"]] == ["nfl|espn:2"]
+    assert client.get("/api/sports/events", params={"collection": "bogus"}).status_code == 422
+    detail = client.get("/api/sports/events/" + quote("nfl|espn:2", safe="")).json()
+    assert detail["provenance"]["collection"]["mode"] == "automatic"
+    assert detail["provenance"]["collection"]["amendment"] == "sports_phase2_capture_v2_ops_amendment_1"
+    by = client.get("/api/sports/summary").json()["collection"]["by_mode"]
+    assert by["automatic"] == {"captured": 1, "missed": 0}
+    assert by["manual_pilot"] == {"captured": 2, "missed": 1}
+    assert _snapshot(cap) == before
+
+
+def test_collector_reports_backup_without_paths(populated, client):
+    assert client.get("/api/sports/collector").json()["backup"]["recorded"] is False
+    BK.STATUS_PATH.write_text(json.dumps({"backup": "pushed", "at": _iso(NOW), "files": 3, "missing_count": 0,
+                                          "backup_dir": "C:/secret/clone", "remote": "kel-state:x/y.git",
+                                          "ref": "refs/heads/sports-state"}), encoding="utf-8")
+    r = client.get("/api/sports/collector")
+    b = r.json()["backup"]
+    assert (b["recorded"], b["backup"], b["files"]) == (True, "pushed", 3)
+    assert "secret" not in r.text and "kel-state" not in r.text
+
+
+def test_scheduler_result_codes_are_decoded():
+    assert SCH.decode_result("267009")["name"] == "SCHED_S_TASK_RUNNING"
+    assert SCH.decode_result("267011")["name"] == "SCHED_S_TASK_HAS_NOT_RUN"
+    refused = SCH.decode_result("2147946720")
+    assert (refused["hex"], refused["name"]) == ("0x800710E0", "ERROR_REQUEST_REFUSED")
+    assert SCH.decode_result("-2147020576")["hex"] == "0x800710E0"
+    assert SCH.decode_result("0x2")["name"] == "EXIT_2"
+    assert SCH.decode_result("12345")["name"] == "UNRECOGNIZED"
+    assert SCH.decode_result("n/a")["name"] == "UNKNOWN"
 
 
 def test_coverage_inventory_and_reasons(client):

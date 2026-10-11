@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom'
 import { fetchSportsSummary } from '../../api/sports'
-import { CANDIDATES } from '../../types/sports'
+import { CANDIDATES, type CollectionMode } from '../../types/sports'
 import { ErrorState, LoadingState } from '../StatusBadge'
 import { DataStamp } from './DataStamp'
 import { CANDIDATE_LABELS, fmtTime, label } from './format'
 import { useAsync } from './useAsync'
+
+const COLLECTION_MODES: CollectionMode[] = ['automatic', 'collector_manual', 'manual_pilot']
 
 export function SportsSummaryPanel() {
   const state = useAsync(fetchSportsSummary, 'sports-summary')
@@ -13,6 +15,7 @@ export function SportsSummaryPanel() {
   const s = state.data
   if (!s) return null
   const c = s.counts
+  const coll = s.collection
   const rows: [string, number][] = [
     ['Captured events', c.captured_events],
     ['Scored events', c.scored_events],
@@ -52,6 +55,23 @@ export function SportsSummaryPanel() {
           ))}
         </ul>
       </div>
+      {coll ? (
+        <div className="text-xs text-[var(--text-muted)]">
+          <div className="mb-1">
+            Collection mode (automatic collection began {fmtTime(coll.amendment.first_scheduled_action_at)}, every{' '}
+            {coll.amendment.cadence_minutes} min; see <span className="mono break-all">{coll.amendment.doc}</span>)
+          </div>
+          <ul className="flex flex-wrap gap-3 mono">
+            {COLLECTION_MODES.filter((m) => m !== 'collector_manual' || coll.by_mode[m].captured + coll.by_mode[m].missed > 0).map(
+              (m) => (
+                <li key={m}>
+                  {coll.labels[m]}: {coll.by_mode[m].captured} captured / {coll.by_mode[m].missed} missed
+                </li>
+              ),
+            )}
+          </ul>
+        </div>
+      ) : null}
       <p className="text-xs text-[var(--text-muted)]">
         Last capture: {fmtTime(s.last_capture_at)} · Collector:{' '}
         {s.collector.recorded

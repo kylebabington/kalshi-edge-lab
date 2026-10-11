@@ -45,7 +45,22 @@ export type SportsSummary = {
   last_settlement_run: { run_id?: string; finished_at?: string; counts?: Record<string, number> } | null
   integrity: Record<string, number>
   collector: CollectorBrief
+  collection?: {
+    by_mode: Record<CollectionMode, { captured: number; missed: number }>
+    labels: Record<CollectionMode, string>
+    amendment: {
+      id: string
+      date: string
+      doc: string
+      cadence_minutes: number
+      collector_commit: string
+      first_scheduled_action_at: string
+      first_trigger_run_at: string
+    }
+  }
 }
+
+export type CollectionMode = 'automatic' | 'collector_manual' | 'manual_pilot'
 
 export type EventView = 'upcoming' | 'awaiting_settlement' | 'settled' | 'missed'
 
@@ -86,6 +101,7 @@ export type SportsEventItem = {
   candidate_available: Record<CandidateName, number>
   comparability: string | null
   integrity: Record<string, string>
+  collection_mode?: CollectionMode
 }
 
 export type SportsEventList = {
@@ -109,6 +125,7 @@ export type EventFilters = {
   family?: string
   cohort?: string
   status?: string
+  collection?: string
   q?: string
   page?: number
   page_size?: number
@@ -177,6 +194,14 @@ export type SportsEventDetail = {
     capture_started_at?: string | null
     comparability_note?: string | null
     timing_label?: string | null
+    collection?: {
+      mode: CollectionMode
+      label: string
+      cycle_started_at: string | null
+      amendment: string
+      amendment_doc: string
+      note: string
+    }
     integrity: Record<string, unknown>
     pins: Record<string, string>
     dependencies: Record<string, string>
@@ -353,6 +378,7 @@ export type SchedulerState = {
   next_run_time: string
   last_run_time: string
   last_result: string
+  last_result_decoded?: { code: number | null; hex: string | null; name: string; meaning: string }
   reason?: string
   logon_mode?: string
 }
@@ -386,8 +412,11 @@ export type SportsCollectorStatus = {
     last_capture_run_at?: string | null
     last_successful_capture_at?: string | null
     last_settlement_check_at?: string | null
+    settlement_deferred_since?: string | null
+    settlement_forced_by?: string | null
     consecutive_failures?: number
     cycles_24h?: number
+    skipped_lock_busy_24h?: number
     failures_24h?: number
     recent_failures?: { at: string; result: string; detail?: string | null }[]
     duration_s_24h?: { median: number; max: number } | null
@@ -405,6 +434,19 @@ export type SportsCollectorStatus = {
     minutes_since_last_score: number | null
     last_cycle_finished_at: string | null
     minutes_since_last_cycle: number | null
+  }
+  backup?: {
+    recorded: boolean
+    note?: string
+    backup?: string
+    at?: string
+    finished_at?: string
+    files?: number
+    bytes?: number
+    missing_count?: number
+    incomplete?: boolean
+    local_head?: string
+    ref?: string
   }
   limits: string
 }

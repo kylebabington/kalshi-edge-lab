@@ -164,6 +164,7 @@ class SportsEventItem(BaseModel):
     candidate_available: dict[str, int]
     comparability: str | None = None
     integrity: dict[str, str]
+    collection_mode: str | None = None
 
 
 class SportsEventListResponse(BaseModel):

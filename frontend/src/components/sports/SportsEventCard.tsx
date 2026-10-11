@@ -57,6 +57,11 @@ export function SportsEventCard({ event }: { event: SportsEventItem }) {
       ) : (
         <p className="mt-3 text-xs text-[var(--warning)]">{event.missed_reason ?? 'Window missed'}</p>
       )}
+      {event.collection_mode ? (
+        <p className="mt-2 text-xs text-[var(--text-muted)]">
+          Collection: {event.collection_mode === 'automatic' ? 'automatic (scheduled)' : label(event.collection_mode)}
+        </p>
+      ) : null}
       {event.integrity.record_checksum !== 'ok' ? (
         <p className="mt-2 text-xs text-[var(--negative)]">Integrity problem: record checksum mismatch</p>
       ) : null}

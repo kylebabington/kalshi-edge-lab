@@ -108,8 +108,44 @@ describe('Sports events', () => {
     const user = userEvent.setup()
     renderSports()
     await user.click(await screen.findByRole('link', { name: /Open Mock State at Example Tech/ }))
-    expect(await screen.findByRole('heading', { name: 'Example Tech vs Mock State' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Mock State at Example Tech' })).toBeInTheDocument()
     expect(m.fetchSportsEvent).toHaveBeenCalledWith('ncaaf|espn:mock-1')
+  })
+
+  it('decodes the scheduler result and shows settlement deferral, lock skips and backup', async () => {
+    m.fetchSportsCollector.mockResolvedValue({
+      ...mockSportsCollector,
+      scheduler: {
+        ...mockSportsCollector.scheduler,
+        observable: true,
+        configured: true,
+        enabled: true,
+        last_result: '2147946720',
+        last_result_decoded: { code: 2147946720, hex: '0x800710E0', name: 'ERROR_REQUEST_REFUSED', meaning: 'refused' },
+      },
+      status: {
+        ...mockSportsCollector.status,
+        settlement_deferred_since: '2026-10-11T14:37:11Z',
+        settlement_forced_by: '2026-10-11T17:37:11Z',
+        skipped_lock_busy_24h: 2,
+      },
+      backup: { recorded: true, backup: 'pushed', at: '2026-10-11T15:30:42Z', files: 4585, missing_count: 0 },
+    })
+    renderSports()
+    expect(await screen.findByText(/0x800710E0 ERROR_REQUEST_REFUSED/)).toBeInTheDocument()
+    expect(screen.getByText(/capture windows open\); runs by/)).toBeInTheDocument()
+    expect(screen.getByText('Lock-busy skips (24 h)').nextSibling).toHaveTextContent('2')
+    expect(screen.getByText(/4585 files/)).toBeInTheDocument()
+  })
+
+  it('filters events by collection mode via the URL', async () => {
+    const user = userEvent.setup()
+    renderSports()
+    await screen.findAllByRole('link', { name: /^Open / })
+    await user.selectOptions(screen.getByLabelText('Collection mode'), 'automatic')
+    await waitFor(() =>
+      expect(m.fetchSportsEvents).toHaveBeenLastCalledWith(expect.objectContaining({ collection: 'automatic' })),
+    )
   })
 
   it('shows collector scheduler state as unknown when unreadable', async () => {
@@ -166,16 +202,16 @@ describe('Sports tabs', () => {
 describe('Sports event detail', () => {
   it('shows actual unavailable reasons instead of zero', async () => {
     renderSports('/sports/events/ncaaf%7Cespn%3Amock-1')
-    await screen.findByRole('heading', { name: 'Example Tech vs Mock State' })
+    await screen.findByRole('heading', { name: 'Mock State at Example Tech' })
     expect(m.fetchSportsEvent).toHaveBeenCalledWith('ncaaf|espn:mock-1')
-    expect(screen.getByText('Unavailable: unavailable: no quote (candle older than 3 h)')).toBeInTheDocument()
-    expect(screen.getByText('Unavailable: unavailable: matched training support below threshold')).toBeInTheDocument()
+    expect(screen.getByText('Unavailable: no quote (candle older than 3 h)')).toBeInTheDocument()
+    expect(screen.getByText('Unavailable: matched training support below threshold')).toBeInTheDocument()
     expect(screen.queryByText('0.0%')).toBeNull()
   })
 
   it('explains binary contracts, market reference candles and shows scores after settlement', async () => {
     renderSports('/sports/events/ncaaf%7Cespn%3Amock-1')
-    await screen.findByRole('heading', { name: 'Example Tech vs Mock State' })
+    await screen.findByRole('heading', { name: 'Mock State at Example Tech' })
     expect(screen.getByText(/do not sum to one/i)).toBeInTheDocument()
     expect(screen.getByText(/latest hourly Kalshi candle/i)).toBeInTheDocument()
     expect(screen.getAllByText(/candle 2026-10-10 15:00 UTC · age 46 min/).length).toBeGreaterThan(0)

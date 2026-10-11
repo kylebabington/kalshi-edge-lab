@@ -77,23 +77,27 @@ export default function App() {
         if (!cancelled) setApiStatus(isMockMode() ? 'mock' : 'down')
       }
 
-      try {
-        const livePayload = await fetchLiveWeather()
-        if (!cancelled) setLive(livePayload)
-      } catch (err) {
-        if (!cancelled) setLiveError(err instanceof Error ? err.message : String(err))
-      } finally {
-        if (!cancelled) setLiveLoading(false)
+      const loadLive = async () => {
+        try {
+          const livePayload = await fetchLiveWeather()
+          if (!cancelled) setLive(livePayload)
+        } catch (err) {
+          if (!cancelled) setLiveError(err instanceof Error ? err.message : String(err))
+        } finally {
+          if (!cancelled) setLiveLoading(false)
+        }
       }
-
-      try {
-        const summaryPayload = await fetchModelSummary()
-        if (!cancelled) setSummary(summaryPayload)
-      } catch (err) {
-        if (!cancelled) setSummaryError(err instanceof Error ? err.message : String(err))
-      } finally {
-        if (!cancelled) setSummaryLoading(false)
+      const loadSummary = async () => {
+        try {
+          const summaryPayload = await fetchModelSummary()
+          if (!cancelled) setSummary(summaryPayload)
+        } catch (err) {
+          if (!cancelled) setSummaryError(err instanceof Error ? err.message : String(err))
+        } finally {
+          if (!cancelled) setSummaryLoading(false)
+        }
       }
+      await Promise.all([loadLive(), loadSummary()])
     }
     void boot()
     return () => {
@@ -102,7 +106,11 @@ export default function App() {
   }, [])
 
   const events = live?.events ?? []
-  const modelStatus = summary?.model_summary_available ? 'artifacts loaded' : 'unavailable'
+  const modelStatus = summaryLoading
+    ? 'loading…'
+    : summary?.model_summary_available
+      ? 'artifacts loaded'
+      : 'unavailable'
 
   return (
     <Routes>

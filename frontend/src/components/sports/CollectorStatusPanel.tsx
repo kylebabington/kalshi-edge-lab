@@ -46,7 +46,11 @@ export function CollectorStatusPanel({ loading, error, status }: Props) {
           {String(sched.configured)} / {String(sched.enabled)}
         </Row>
         <Row term="Next scheduled run (local)">{sched.next_run_time}</Row>
-        <Row term="Last task result">{sched.last_result}</Row>
+        <Row term="Last task result">
+          {sched.last_result_decoded?.hex
+            ? `${sched.last_result_decoded.hex} ${sched.last_result_decoded.name} — ${sched.last_result_decoded.meaning}`
+            : sched.last_result}
+        </Row>
         <Row term="Lock">
           {status.lock.held ? `held (${label(status.lock.state)})` : status.lock.state}
         </Row>
@@ -57,7 +61,15 @@ export function CollectorStatusPanel({ loading, error, status }: Props) {
         </Row>
         <Row term="Last cycle result">{last?.result ? label(last.result) : 'no cycle recorded'}</Row>
         <Row term="Last successful capture">{fmtTime(s.last_successful_capture_at)}</Row>
-        <Row term="Last settlement check">{fmtTime(s.last_settlement_check_at)}</Row>
+        <Row term="Last settlement check">
+          {s.last_settlement_check_at ? fmtTime(s.last_settlement_check_at) : 'none by the collector yet'}
+        </Row>
+        <Row term="Settlement deferred">
+          {s.settlement_deferred_since
+            ? `since ${fmtTime(s.settlement_deferred_since)} (capture windows open); runs by ${fmtTime(s.settlement_forced_by)} at the latest`
+            : 'no'}
+        </Row>
+        <Row term="Lock-busy skips (24 h)">{s.skipped_lock_busy_24h ?? '—'}</Row>
         <Row term="Failures (24 h) / consecutive">
           {s.failures_24h ?? '—'} / {s.consecutive_failures ?? '—'}
         </Row>
@@ -67,6 +79,13 @@ export function CollectorStatusPanel({ loading, error, status }: Props) {
         <Row term="Since last accepted capture">{fmtMinutes(status.freshness.minutes_since_last_capture)}</Row>
         <Row term="Since last score">{fmtMinutes(status.freshness.minutes_since_last_score)}</Row>
         <Row term="Weather task">{schedulerText(status.weather_task)}</Row>
+        <Row term="Private state backup">
+          {status.backup?.recorded
+            ? `${label(status.backup.backup ?? 'unknown')} · ${fmtTime(status.backup.finished_at ?? status.backup.at)} · ${
+                status.backup.files ?? '—'
+              } files${status.backup.missing_count ? ` · ${status.backup.missing_count} MISSING` : ''}`
+            : 'not recorded'}
+        </Row>
       </dl>
       {!sched.observable ? (
         <p className="text-xs text-[var(--warning)]">
