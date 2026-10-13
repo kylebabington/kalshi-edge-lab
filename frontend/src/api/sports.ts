@@ -1,4 +1,4 @@
-import { apiGet, isMockMode } from './client'
+import { NotFoundError, apiGet, isMockMode } from './client'
 import type {
   CoverageFilters,
   EventFilters,
@@ -44,7 +44,7 @@ export async function fetchSportsEvents(filters: EventFilters = {}): Promise<Spo
 export async function fetchSportsEvent(eventId: string): Promise<SportsEventDetail> {
   if (isMockMode()) {
     if (eventId === mockSportsEventDetail.event.event_id) return mockSportsEventDetail
-    throw new Error(`Mock sports event not found: ${eventId}`)
+    throw new NotFoundError(`Mock sports event not found: ${eventId}`)
   }
   return apiGet<SportsEventDetail>(`/api/sports/events/${encodeURIComponent(eventId)}`)
 }

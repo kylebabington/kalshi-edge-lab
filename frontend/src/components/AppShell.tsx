@@ -3,10 +3,11 @@ import { isMockMode } from '../api/client'
 
 const nav = [
   { to: '/', label: 'Dashboard' },
-  { to: '/markets', label: 'Markets' },
+  { to: '/markets', label: 'Weather' },
+  { to: '/sports', label: 'Sports' },
+  { to: '/watchlist', label: 'Watchlist' },
   { to: '/weather-model', label: 'Weather Model' },
   { to: '/research', label: 'Research' },
-  { to: '/sports', label: 'Sports' },
 ]
 
 type Props = {

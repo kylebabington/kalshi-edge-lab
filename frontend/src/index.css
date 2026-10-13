@@ -101,6 +101,89 @@ summary:focus-visible {
   background: color-mix(in oklab, var(--info) 12%, transparent);
 }
 
+.badge-positive {
+  border-color: color-mix(in oklab, var(--positive) 55%, var(--border));
+  color: var(--positive);
+  background: color-mix(in oklab, var(--positive) 12%, transparent);
+}
+
+.data-kind {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  border: 1px dashed var(--border);
+}
+
+.data-kind-saved {
+  color: var(--text-muted);
+}
+
+.data-kind-market {
+  color: var(--accent);
+  border-style: solid;
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+}
+
+.star-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.star-button[aria-pressed="true"] {
+  color: var(--warning);
+  border-color: color-mix(in oklab, var(--warning) 50%, var(--border));
+}
+
+.star-button-md {
+  padding: 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.metric-help {
+  display: inline;
+}
+
+.metric-help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-left: 0.3rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  vertical-align: middle;
+}
+
+.metric-help-text {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  color: var(--text-muted);
+  max-width: 28rem;
+}
+
 .badge-negative {
   border-color: color-mix(in oklab, var(--negative) 55%, var(--border));
   color: var(--negative);

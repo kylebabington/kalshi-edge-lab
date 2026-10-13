@@ -1,21 +1,24 @@
 import { useCallback, type ReactNode } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
-  eventPath,
   fetchSportsCollector,
   fetchSportsCoverage,
   fetchSportsEvents,
   fetchSportsHistorical,
   fetchSportsResults,
 } from '../api/sports'
+import { MetricHelp, ResultKindBadge, SampleNote } from '../components/MetricHelp'
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
+import { TimezoneNote } from '../components/TimezoneNote'
+import { SportsCard } from '../components/eventCards'
 import { CollectorStatusPanel } from '../components/sports/CollectorStatusPanel'
 import { DataStamp } from '../components/sports/DataStamp'
 import { FilterBar, Pager } from '../components/sports/FilterBar'
-import { SportsEventCard } from '../components/sports/SportsEventCard'
 import { Tabs } from '../components/sports/Tabs'
 import { CANDIDATE_LABELS, VIEW_LABELS, fmtNum, fmtSigned, label } from '../components/sports/format'
 import { useAsync } from '../components/sports/useAsync'
+import { cohortLabel, competitionLabel, familyLabel, sportLabel } from '../lib/labels'
+import { fmtLocal } from '../lib/time'
 import { CANDIDATES, type MetricBlock, type SportsResults } from '../types/sports'
 
 const TABS = [
@@ -93,6 +96,13 @@ function opts(values: string[] | undefined) {
 
 // ---------------------------------------------------------------- Events
 
+const EVENT_SORTS = [
+  { value: 'start_asc', label: 'Start time (earliest first)' },
+  { value: 'start_desc', label: 'Start time (latest first)' },
+  { value: 'capture_desc', label: 'Capture time (most recent)' },
+  { value: 'settlement_desc', label: 'Settlement time (most recent)' },
+]
+
 export function EventsTab({ params, setParam }: { params: Params; setParam: SetParam }) {
   const filters = {
     sport: params.get('sport') ?? '',
@@ -102,21 +112,46 @@ export function EventsTab({ params, setParam }: { params: Params; setParam: SetP
     status: params.get('status') ?? '',
     collection: params.get('collection') ?? '',
     q: params.get('q') ?? '',
+    sort: params.get('sort') ?? '',
     page: Number(params.get('page') ?? '1') || 1,
   }
   const key = JSON.stringify(filters)
   const state = useAsync(() => fetchSportsEvents({ ...filters, page_size: 24 }), key)
   const data = state.data
   const onSearch = useCallback((q: string) => setParam({ q }), [setParam])
+  const compNames = data?.facet_labels?.competition ?? {}
 
   return (
     <>
       <FilterBar
         selects={[
-          { id: 'sport', label: 'Sport', value: filters.sport, options: opts(data?.facets.sport) },
-          { id: 'competition', label: 'Competition', value: filters.competition, options: opts(data?.facets.competition) },
-          { id: 'family', label: 'Contract family', value: filters.family, options: opts(data?.facets.families) },
-          { id: 'cohort', label: 'Cohort', value: filters.cohort, options: opts(data?.facets.cohorts) },
+          {
+            id: 'sport',
+            label: 'Sport',
+            value: filters.sport,
+            options: (data?.facets.sport ?? []).map((v) => ({ value: v, label: sportLabel(v) })),
+          },
+          {
+            id: 'competition',
+            label: 'League / competition',
+            value: filters.competition,
+            options: (data?.facets.competition ?? [])
+              .map((v) => ({ value: v, label: competitionLabel(v, compNames[v]) }))
+              .sort((a, b) => a.label.localeCompare(b.label)),
+          },
+          {
+            id: 'family',
+            label: 'Contract family',
+            value: filters.family,
+            options: (data?.facets.families ?? []).map((v) => ({ value: v, label: familyLabel(v) })),
+          },
+          {
+            id: 'cohort',
+            label: 'Cohort',
+            value: filters.cohort,
+            options: (data?.facets.cohorts ?? []).map((v) => ({ value: v, label: cohortLabel(v) })),
+          },
+          { id: 'sort', label: 'Sort by', value: filters.sort, allLabel: 'Default (upcoming first)', options: EVENT_SORTS },
           {
             id: 'status',
             label: 'Capture / settlement',
@@ -148,11 +183,12 @@ export function EventsTab({ params, setParam }: { params: Params; setParam: SetP
       />
       {data ? <DataStamp generatedAt={data.generated_at} loadedAt={state.loadedAt} source={data.source} /> : null}
       <p className="text-xs text-[var(--text-muted)]">
-        Upcoming captured events are listed first, then events awaiting settlement, settled events and missed
-        windows. A missed window is never back-filled.
+        By default upcoming captured events are listed first, then events awaiting settlement, settled events and
+        missed windows. Every card is a saved forecast, not current market data. A missed window is never back-filled.
       </p>
+      <TimezoneNote />
       {state.loading ? <LoadingState label="Loading saved captures…" /> : null}
-      {state.error ? <ErrorState message={state.error} /> : null}
+      {state.error ? <ErrorState message={state.error} onRetry={state.reload} /> : null}
       {data && !state.loading ? (
         data.artifacts.capture_records === 'missing' ? (
           <EmptyState
@@ -166,9 +202,7 @@ export function EventsTab({ params, setParam }: { params: Params; setParam: SetP
             <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {data.items.map((event) => (
                 <li key={event.event_id}>
-                  <Link to={eventPath(event.event_id)} className="block h-full rounded-xl" aria-label={`Open ${event.title ?? event.event_id}`}>
-                    <SportsEventCard event={event} />
-                  </Link>
+                  <SportsCard event={event} />
                 </li>
               ))}
             </ul>
@@ -182,44 +216,33 @@ export function EventsTab({ params, setParam }: { params: Params; setParam: SetP
 
 // ---------------------------------------------------------------- Results
 
-function MetricTables({ block, caption }: { block: MetricBlock; caption: string }) {
+function MetricHeaders({ delta }: { delta?: boolean }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      <div className="overflow-x-auto">
+    <>
+      <th scope="col">
+        {delta ? 'Δ ' : ''}Brier <MetricHelp metric="brier" label="Brier" />
+      </th>
+      <th scope="col">
+        {delta ? 'Δ ' : ''}Log loss <MetricHelp metric="log_loss" label="log loss" />
+      </th>
+    </>
+  )
+}
+
+function MetricTables({ block, caption, period }: { block: MetricBlock; caption: string; period: string }) {
+  return (
+    <div className="grid gap-4 2xl:grid-cols-2">
+      <div className="overflow-x-auto space-y-1">
         <table className="data-table">
-          <caption>{caption}: standalone metrics (each candidate's own sample)</caption>
-          <thead>
-            <tr>
-              <th scope="col">Candidate</th>
-              <th scope="col">Contracts</th>
-              <th scope="col">Events</th>
-              <th scope="col">Brier</th>
-              <th scope="col">Log loss</th>
-            </tr>
-          </thead>
-          <tbody>
-            {block.candidates.map((c) => (
-              <tr key={c.candidate}>
-                <th scope="row">{CANDIDATE_LABELS[c.candidate]}</th>
-                <td className="mono">{c.contracts}</td>
-                <td className="mono">{c.events}</td>
-                <td className="mono">{c.contracts ? fmtNum(c.brier) : 'no sample'}</td>
-                <td className="mono">{c.contracts ? fmtNum(c.log_loss) : 'no sample'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="data-table">
-          <caption>{caption}: paired comparisons on common contracts</caption>
+          <caption>
+            {caption}: paired differences on common contracts <MetricHelp metric="paired" label="a paired difference" />
+          </caption>
           <thead>
             <tr>
               <th scope="col">Candidate − reference</th>
-              <th scope="col">Matched contracts</th>
+              <th scope="col">Matched contracts (n)</th>
               <th scope="col">Unique events</th>
-              <th scope="col">Δ Brier</th>
-              <th scope="col">Δ Log loss</th>
+              <MetricHeaders delta />
             </tr>
           </thead>
           <tbody>
@@ -236,9 +259,44 @@ function MetricTables({ block, caption }: { block: MetricBlock; caption: string 
             ))}
           </tbody>
         </table>
+        <p className="text-xs text-[var(--text-muted)]">Data period: <span className="mono">{period}</span></p>
+      </div>
+      <div className="overflow-x-auto space-y-1">
+        <table className="data-table">
+          <caption>{caption}: standalone metrics (each candidate's own sample)</caption>
+          <thead>
+            <tr>
+              <th scope="col">Candidate</th>
+              <th scope="col">Contracts (n)</th>
+              <th scope="col">Events</th>
+              <MetricHeaders />
+            </tr>
+          </thead>
+          <tbody>
+            {block.candidates.map((c) => (
+              <tr key={c.candidate}>
+                <th scope="row">{CANDIDATE_LABELS[c.candidate]}</th>
+                <td className="mono">{c.contracts}</td>
+                <td className="mono">{c.events}</td>
+                <td className="mono">{c.contracts ? fmtNum(c.brier) : 'no sample'}</td>
+                <td className="mono">{c.contracts ? fmtNum(c.log_loss) : 'no sample'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-xs text-[var(--text-muted)]">
+          Each row uses that candidate's own sample, so rows are not comparable with each other. Use the paired
+          differences to compare candidates. Data period: <span className="mono">{period}</span>
+        </p>
       </div>
     </div>
   )
+}
+
+function periodText(p: SportsResults['period']) {
+  if (!p || (!p.first_prediction_as_of && !p.first_settled_at)) return 'unknown'
+  const captured = `captured ${fmtLocal(p.first_prediction_as_of)} – ${fmtLocal(p.last_prediction_as_of)}`
+  return p.first_settled_at ? `${captured}; settled ${fmtLocal(p.first_settled_at)} – ${fmtLocal(p.last_settled_at)}` : captured
 }
 
 const GROUPS = [
@@ -258,24 +316,37 @@ export function ResultsView({
   onGroupBy: (g: string) => void
 }) {
   const rows = data.breakdown[groupBy] ?? []
+  const period = periodText(data.period)
   return (
     <div className="space-y-4">
       <div className="warning-banner text-sm space-y-1">
-        <div className="font-semibold text-[var(--warning)]">{data.label}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-[var(--warning)]">{data.label}</span>
+          <ResultKindBadge kind="prospective" />
+        </div>
         <p>{data.pilot_note}</p>
         <p>{data.sign_note}</p>
         <p className="text-[var(--text-muted)]">
           {data.paired_note} {data.metrics_note} No ranking of bets, no executable edge and no profitability claims.
         </p>
       </div>
-      <p className="text-sm text-[var(--text-muted)]">
-        {data.counts.labelled_contracts} labelled contracts in {data.counts.labelled_events} events ·{' '}
-        {data.counts.final_scores} final scores · weighting: {data.weighting === 'event' ? 'event-equal' : 'contract-weighted'} ({data.weighting_note})
-      </p>
+      <div className="text-sm text-[var(--text-muted)] space-y-1">
+        <SampleNote
+          n={`${data.counts.labelled_contracts} contracts in ${data.counts.labelled_events}`}
+          unit={`events (${data.counts.final_scores} final scores)`}
+          period={period}
+        />
+        <p>
+          Weighting: {data.weighting === 'event' ? 'event-equal' : 'contract-weighted'}{' '}
+          {data.weighting === 'event' ? <MetricHelp metric="event_equal" label="event-equal weighting" /> : null} (
+          {data.weighting_note})
+        </p>
+        <TimezoneNote />
+      </div>
       {data.counts.labelled_contracts === 0 ? (
         <EmptyState title="No settled, labelled contracts for these filters" detail="Results appear after captured contracts settle YES or NO." />
       ) : (
-        <MetricTables block={data.overall} caption="All selected" />
+        <MetricTables block={data.overall} caption="All selected" period={period} />
       )}
       <section className="space-y-3">
         <fieldset className="flex flex-wrap items-center gap-3 text-sm">
@@ -300,7 +371,7 @@ export function ResultsView({
                 </span>
               </summary>
               <div className="mt-3">
-                <MetricTables block={r} caption={r.group} />
+                <MetricTables block={r} caption={r.group} period={`${period} (all selected; this group lies within it)`} />
               </div>
             </details>
           ))
@@ -348,7 +419,7 @@ export function ResultsTab({ params, setParam }: { params: Params; setParam: Set
       </FilterBar>
       {data ? <DataStamp generatedAt={data.generated_at} loadedAt={state.loadedAt} source={data.source} /> : null}
       {state.loading ? <LoadingState label="Loading pilot results…" /> : null}
-      {state.error ? <ErrorState message={state.error} /> : null}
+      {state.error ? <ErrorState message={state.error} onRetry={state.reload} /> : null}
       {data && !state.loading ? (
         data.artifacts.settlement_scores === 'missing' ? (
           <EmptyState title="No settlement scores on this machine" detail="Scores appear after the settlement check finalizes captured contracts." />
@@ -389,7 +460,7 @@ export function CoverageTab({ params, setParam }: { params: Params; setParam: Se
       />
       {data ? <DataStamp generatedAt={data.generated_at} loadedAt={state.loadedAt} source={data.source.series} /> : null}
       {state.loading ? <LoadingState label="Loading coverage…" /> : null}
-      {state.error ? <ErrorState message={state.error} /> : null}
+      {state.error ? <ErrorState message={state.error} onRetry={state.reload} /> : null}
       {data && !state.loading ? (
         !data.available ? (
           <EmptyState title="Coverage matrix unavailable" detail={data.missing ?? 'missing'} />
@@ -569,12 +640,15 @@ export function HistoricalTab({ params, setParam }: { params: Params; setParam: 
         onChange={(id, value) => setParam({ [id]: value })}
       />
       {state.loading ? <LoadingState label="Loading historical research…" /> : null}
-      {state.error ? <ErrorState message={state.error} /> : null}
+      {state.error ? <ErrorState message={state.error} onRetry={state.reload} /> : null}
       {data && !state.loading ? (
         <div className="space-y-4">
           <DataStamp generatedAt={data.generated_at} loadedAt={state.loadedAt} />
           <div className="warning-banner text-sm space-y-1">
-            <div className="font-semibold text-[var(--warning)]">{data.label}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-[var(--warning)]">{data.label}</span>
+              <ResultKindBadge kind="historical" />
+            </div>
             <p>{data.separation_note}</p>
             <p className="text-[var(--text-muted)]">{data.interpretation}</p>
           </div>
@@ -599,6 +673,11 @@ export function HistoricalTab({ params, setParam }: { params: Params; setParam: 
               <p className="text-xs mono">
                 Source: {p.source.label} · tracked CSV: {p.source.tracked_csv}
               </p>
+              <SampleNote
+                n={p.available ? p.total : null}
+                unit="result rows (each row states its own sample size)"
+                period={p.period ? `${p.period.label} ${p.period.start} – ${p.period.end}` : 'not stated in the protocol'}
+              />
               {!p.available || !p.rows ? (
                 <EmptyState title="Results file missing" detail={p.missing ?? 'unavailable'} />
               ) : p.rows.length === 0 ? (

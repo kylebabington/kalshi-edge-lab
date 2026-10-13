@@ -377,6 +377,21 @@ API base: `http://localhost:8000`
 - `GET /api/weather/live` — may fetch current open markets / GFS / GEFS / observations
 - `GET /api/weather/events/{event_ticker}`
 - `GET /api/weather/model/summary` — read-only artifacts (`model_summary_available`)
+- `GET /api/weather/saved-events?status=&q=&sort=&page=&page_size=` — one item per event from saved
+  snapshots and score files. `status` is `all|upcoming|awaiting_settlement|settled`; `sort` is
+  `default|target_asc|target_desc|capture_desc|settlement_desc`. Settlement has two separate levels:
+  `event_settlement` (confirmed by any valid score, `conflict` when scores disagree) and
+  `displayed_snapshot_score` for the latest snapshot only (`scored|not_scored|unavailable|invalid`). An
+  older scored snapshot never marks the latest one as scored.
+- `GET /api/weather/saved-events/{event_ticker}` — every saved snapshot for one event with its own score
+  state; 404 when nothing is saved
+- `GET /api/weather/collector` — prospective task health from cycle end lines in the task log (last
+  successful cycle, failures) kept separate from forecast freshness (latest saved snapshot, latest score,
+  missed checkpoints) and a passive scheduler query
+- `GET /api/weather/metrics-context` — sample sizes and data periods: prospective snapshot scores vs the
+  historical operational replay
+
+The saved-weather endpoints only read files; they never fetch upstream data or create directories.
 
 CORS allows only `http://localhost:5173`.
 
@@ -385,8 +400,10 @@ writes reports or starts the collector):
 
 - `GET /api/sports/summary` — counts, candidate availability, last capture, collector brief, counts by
   collection mode
-- `GET /api/sports/events?sport=&competition=&family=&cohort=&status=&collection=&q=&page=&page_size=` —
-  `status` is `all|captured|upcoming|awaiting_settlement|settled|missed`; `collection` is
+- `GET /api/sports/events?sport=&competition=&family=&cohort=&status=&collection=&q=&sort=&page=&page_size=` —
+  `sort` is `default|start_asc|start_desc|capture_desc|settlement_desc` (presentation order only; items
+  without the timestamp go last); each item's `settlement.last_settled_at` is the latest Kalshi
+  settlement time recorded in its scores; `status` is `all|captured|upcoming|awaiting_settlement|settled|missed`; `collection` is
   `automatic|collector_manual|manual_pilot` (see
   [operational amendment 1](docs/research/sports_phase2_capture_v2_ops_amendment_1.md))
 - `GET /api/sports/events/{event_id}` — `event_id` is `competition|cluster` (URL-encode it), one event with
@@ -400,6 +417,38 @@ writes reports or starts the collector):
 UI routes: `/sports` (tabs Events, Results, Coverage, Historical Research; filters live in the URL) and
 `/sports/events/:eventId`. Which local artifacts populate each view, and how the 5-minute sports collector
 is operated, is in [docs/research/sports_collector_v1.md](docs/research/sports_collector_v1.md).
+`/api/sports/results` includes a `period` (capture and settlement time range), historical protocols
+include their test or evaluation `period`, and `/api/sports/collector` adds `history` from the full cycle
+log.
+
+### UI routes
+
+| Route | What it shows |
+| --- | --- |
+| `/` | Overview: separate Weather and Sports sections, each with collector health, saved-forecast freshness, and upcoming / pending settlement / recently settled cards. Every list loads on its own, so a slow or failed request never blocks another. |
+| `/markets` | Weather events: **Saved forecasts** tab (search, status, sort, pagination in the URL) and **Open markets** tab (current market data from the slow live endpoint). |
+| `/markets/:eventTicker` | Open-market detail when the event is still open; otherwise the saved-forecast view with event settlement and per-snapshot scores. |
+| `/sports`, `/sports/events/:eventId` | Sports browsing with plain-language labels and sort by start, capture or settlement time. |
+| `/watchlist` | Starred events, filterable by `?category=weather` or `?category=sports`. |
+
+Collector health uses successful cycle times only (stale after 2 × cadence + 5 minutes; a missing
+timestamp is "unknown", never healthy). Forecast age is shown separately and never affects health. Times
+are shown in the browser's time zone with its abbreviation; weather target dates are New York dates.
+Detail pages return to the list with its filters, sort and page.
+
+Results views explain Brier, log loss, event-equal weighting and paired differences inline, show sample
+size and data period beside each metric, and badge each result as prospective (saved before the outcome)
+or historical research (backtest / replay). Standalone per-candidate tables are labelled as not
+comparable across rows; there are no rankings.
+
+**Watchlist storage.** Stars live only in this browser under the localStorage key
+`kalshi-edge-lab.watchlist.v1` as `{version: 1, entries: [{id, category, key, label, added_at}]}`. IDs are
+`weather:<event_ticker>` or `sports:<event_id>`, so identical keys in the two categories never collide.
+Invalid entries are dropped; unreadable data is copied to `kalshi-edge-lab.watchlist.v1.unreadable-backup`
+before it is replaced. If storage is blocked or full, the list is kept in memory for the tab and the page
+says "Changes won't persist". Changes sync across tabs. Each entry is looked up again through the
+read-only API; an entry whose event is no longer found stays on the list with an explanation until you
+remove it.
 
 ### Frontend
 

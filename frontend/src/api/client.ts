@@ -23,3 +23,12 @@ export async function apiGet<T>(path: string): Promise<T> {
 export function isMockMode(): boolean {
   return import.meta.env.VITE_USE_MOCK === 'true'
 }
+
+/** A 404 from the API means the record does not exist on this machine; anything else is a request failure. */
+export function isNotFound(err: unknown): boolean {
+  if (err instanceof ApiError) return err.status === 404
+  return err instanceof NotFoundError
+}
+
+/** Raised by mock fixtures so mock mode distinguishes not-found from failures the same way the API does. */
+export class NotFoundError extends Error {}

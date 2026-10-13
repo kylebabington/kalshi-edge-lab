@@ -293,6 +293,7 @@ def _settlement(s: dict, ev_scores: dict, pending_states: dict) -> dict:
         if t not in ev_scores:
             states[(pending_states.get(t) or {}).get("state", "NOT_YET_CHECKED")] += 1
     labelled = sum(1 for t in final if ev_scores[t].get("y") is not None)
+    last_settled = max((_settled_at(ev_scores[t]) for t in final if _settled_at(ev_scores[t])), default=None)
     if not ok:
         state = "no_scorable_contracts"
     elif len(final) == len(ok):
@@ -302,7 +303,12 @@ def _settlement(s: dict, ev_scores: dict, pending_states: dict) -> dict:
     else:
         state = "pending"
     return {"state": state, "contracts": len(ok), "final": len(final), "labelled": labelled,
-            "pending": len(ok) - len(final), "states": dict(states)}
+            "pending": len(ok) - len(final), "states": dict(states), "last_settled_at": last_settled}
+
+
+def _settled_at(sc: dict) -> str | None:
+    """Kalshi settlement time recorded in the finalized score (None when the score does not record it)."""
+    return ((sc.get("settlement") or {}).get("market") or {}).get("settlement_ts")
 
 
 def _view(s: dict, settle: dict, now: float) -> str:
@@ -387,20 +393,41 @@ def all_events(now: float | None = None) -> list[dict]:
     return sorted(out, key=_sort_key)
 
 
-def list_events(filters: dict, page: int = 1, page_size: int = 24) -> dict:
+SORTS = ("default", "start_asc", "start_desc", "capture_desc", "settlement_desc")
+
+
+def _sorted(items: list[dict], sort: str) -> list[dict]:
+    """Presentation order only. Items missing the sort timestamp go last."""
+    field = {"start_asc": "event_start", "start_desc": "event_start", "capture_desc": "prediction_as_of",
+             "settlement_desc": None}.get(sort)
+    if sort not in SORTS or sort == "default":
+        return items
+
+    def value(i):
+        return i["settlement"].get("last_settled_at") if field is None else i[field]
+
+    have = [i for i in items if value(i)]
+    missing = [i for i in items if not value(i)]
+    have.sort(key=lambda i: (_ts(value(i)), i["event_id"]), reverse=sort != "start_asc")
+    return have + missing
+
+
+def list_events(filters: dict, page: int = 1, page_size: int = 24, sort: str = "default") -> dict:
     loaded = _now()
     items = all_events(loaded)
     facets = {k: sorted({str(x) for i in items for x in (i[k] if isinstance(i[k], list) else [i[k]]) if x})
               for k in ("sport", "competition", "families", "cohorts")}
     views = Counter(i["view"] for i in items)
-    sel = [i for i in items if _matches(i, filters)]
+    sel = _sorted([i for i in items if _matches(i, filters)], sort)
     page_size = max(1, min(page_size, 200))
     pages = max(1, -(-len(sel) // page_size))
     page = max(1, min(page, pages))
     return {"generated_at": _iso(loaded), "label": "Saved captures", "source": SOURCE_SAVED,
-            "artifacts": artifacts(), "filters": {k: v for k, v in filters.items() if v}, "total": len(sel),
+            "artifacts": artifacts(), "filters": {k: v for k, v in filters.items() if v},
+            "sort": sort if sort in SORTS else "default", "total": len(sel),
             "page": page, "page_size": page_size, "pages": pages,
             "views": {v: views.get(v, 0) for v in VIEWS}, "facets": facets,
+            "facet_labels": {"competition": {c: _comp_info().get(c, {}).get("name") or c for c in facets["competition"]}},
             "items": sel[(page - 1) * page_size: page * page_size]}
 
 
@@ -594,6 +621,13 @@ def _metric_block(ss: list[dict], weighting: str) -> dict:
     return {"candidates": cands, "comparisons": pairs}
 
 
+def _period(ss: list[dict]) -> dict:
+    preds = sorted(s["prediction_as_of"] for s in ss if s.get("prediction_as_of"))
+    settled = sorted(t for t in (_settled_at(s) for s in ss) if t)
+    return {"first_prediction_as_of": preds[0] if preds else None, "last_prediction_as_of": preds[-1] if preds else None,
+            "first_settled_at": settled[0] if settled else None, "last_settled_at": settled[-1] if settled else None}
+
+
 def get_results(filters: dict, weighting: str = "event") -> dict:
     weighting = "contract" if weighting == "contract" else "event"
     now = _now()
@@ -619,6 +653,7 @@ def get_results(filters: dict, weighting: str = "event") -> dict:
                        "labelled_events": len({s["event_key"] for s in labelled}),
                        "settlement_states": dict(states),
                        "excluded_score_checksum_problems": sum(1 for s in scores() if not s["checksum_ok"])},
+            "period": _period(labelled),
             "facets": {g: sorted({str(s.get(g)) for s in all_sc if s.get(g) is not None}) for g in SCC.GROUP_KEYS},
             "overall": _metric_block(labelled, weighting), "breakdown": breakdown,
             "artifacts": artifacts()}
@@ -752,6 +787,17 @@ def _historical_source(h: dict) -> dict:
     return {"label": label, "tracked_csv": csv_status, "local_artifacts": local_status}
 
 
+def _test_period(proto: dict) -> dict | None:
+    """Held-out period the frozen protocol reports results on (Phase 1 test split, Phase 2 EVAL period)."""
+    splits = proto.get("splits") or {}
+    if splits.get("test_start") and splits.get("test_end"):
+        return {"label": "test period", "start": splits["test_start"], "end": splits["test_end"]}
+    ev = (proto.get("periods") or {}).get("EVAL")
+    if isinstance(ev, list) and len(ev) == 2:
+        return {"label": "evaluation period", "start": ev[0], "end": ev[1]}
+    return None
+
+
 def get_historical(filters: dict, page: int = 1, page_size: int = 100) -> dict:
     now = _now()
     supersedes = {v: k for k, v in EV.PARENT.items()}
@@ -763,7 +809,8 @@ def get_historical(filters: dict, page: int = 1, page_size: int = 100) -> dict:
         proto = _read_json(PROTOCOLS / f"{h['protocol']}.json") or {}
         entry = {"protocol": h["protocol"], "phase": h["phase"], "comparison": h["comparison"],
                  "status": (f"superseded by {supersedes[h['protocol']]}" if h["protocol"] in supersedes else "current"),
-                 "frozen_at": proto.get("frozen_at"), "report": h["report"], "addenda": h.get("addenda", []),
+                 "frozen_at": proto.get("frozen_at"), "period": _test_period(proto),
+                 "report": h["report"], "addenda": h.get("addenda", []),
                  "source": _historical_source(h), "available": rows is not None}
         if rows is None:
             out.append({**entry, "missing": f"{h['results_csv']} not found", "rows": None})
@@ -871,6 +918,28 @@ def _backup_brief() -> dict:
                                                           "missing_count", "incomplete", "local_head", "ref")}}
 
 
+def _cycle_history(cycles_path: Path) -> dict:
+    """Latest cycle and latest successful cycle over the whole cycle log (the status file covers 24 h only)."""
+    last = last_ok = None
+    try:
+        with open(cycles_path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(r, dict) or r.get("result") == "skipped_lock_busy":
+                    continue
+                last = r
+                if r.get("result") == "ok":
+                    last_ok = r
+    except OSError:
+        return {"recorded": False}
+    return {"recorded": last is not None,
+            "last_cycle_finished_at": (last or {}).get("finished_at"), "last_cycle_result": (last or {}).get("result"),
+            "last_successful_cycle_at": (last_ok or {}).get("finished_at")}
+
+
 def get_collector_status(task_query=None) -> dict:
     from .ops import collector as CO
     from .ops import lock as LK
@@ -905,6 +974,7 @@ def get_collector_status(task_query=None) -> dict:
                       "last_score_written_at": last_score, "minutes_since_last_score": age(last_score),
                       "last_cycle_finished_at": ((st or {}).get("last_cycle") or {}).get("finished_at"),
                       "minutes_since_last_cycle": age(((st or {}).get("last_cycle") or {}).get("finished_at"))},
+        "history": _cycle_history(CO.CYCLES_PATH),
         "backup": _backup_brief(),
         "limits": "Captures need the machine awake, logged in and online during each event's 20-minute window. "
                   "Sleep, shutdown, logoff or an internet failure produce MISSED records; missed forecasts are "

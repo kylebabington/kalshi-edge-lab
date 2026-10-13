@@ -2,12 +2,10 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { DashboardPage } from '../pages/DashboardPage'
 import { MarketDetailPage } from '../pages/MarketDetailPage'
 import { ResearchPage } from '../pages/ResearchPage'
 import { WeatherModelPage } from '../pages/WeatherModelPage'
 import {
-  mockLiveWeather,
   mockModelSummary,
   mockSnapshot,
   mockSnapshotList,
@@ -16,34 +14,20 @@ import {
 import { SourceMismatchBanner } from '../components/EventCard'
 import { ErrorState } from '../components/StatusBadge'
 
-vi.mock('../api/weather', () => ({
-  fetchEventSnapshots: vi.fn(async () => mockSnapshotList),
-  fetchSnapshot: vi.fn(async () => mockSnapshot),
-}))
-
-vi.mock('../api/sports', async () => {
-  const mocks = await import('../mocks/sports')
-  return { fetchSportsSummary: vi.fn(async () => mocks.mockSportsSummary) }
+vi.mock('../api/weather', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/weather')>()
+  const saved = await import('../mocks/weatherSaved')
+  return {
+    ...actual,
+    fetchEventSnapshots: vi.fn(async () => mockSnapshotList),
+    fetchSnapshot: vi.fn(async () => mockSnapshot),
+    fetchWeatherMetricsContext: vi.fn(async () => saved.mockWeatherMetricsContext),
+  }
 })
 
 describe('UI foundation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  it('dashboard renders events', () => {
-    render(
-      <MemoryRouter>
-        <DashboardPage
-          loading={false}
-          error={null}
-          events={mockLiveWeather.events}
-          summary={mockModelSummary}
-        />
-      </MemoryRouter>,
-    )
-    expect(screen.getByText('KXHIGHNY-26SEP26')).toBeInTheDocument()
-    expect(screen.getByText(/Current Weather Markets/i)).toBeInTheDocument()
   })
 
   it('market detail renders probabilities and research-only badge', () => {
@@ -175,6 +159,27 @@ describe('UI foundation', () => {
     expect(screen.getAllByText(/SHADOW ONLY/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/d0_1200/i)).toBeInTheDocument()
     expect(screen.getByText(/1\s*\/\s*1/)).toBeInTheDocument()
+  })
+
+  it('research page separates prospective snapshot scores from the historical shadow replay', async () => {
+    render(
+      <MemoryRouter>
+        <ResearchPage loading={false} error={null} summary={mockModelSummary} />
+      </MemoryRouter>,
+    )
+    expect(screen.getAllByText(/Prospective · saved before outcome/).length).toBeGreaterThan(0)
+    expect(await screen.findByText(/1 scored snapshots in 1/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Data period:/).length).toBeGreaterThan(0)
+  })
+
+  it('weather model page labels backtest metrics as historical with their period', () => {
+    render(
+      <MemoryRouter>
+        <WeatherModelPage loading={false} error={null} summary={mockModelSummary} />
+      </MemoryRouter>,
+    )
+    expect(screen.getAllByText(/Historical research · backtest \/ replay/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/calibration dataset/).length).toBeGreaterThan(0)
   })
 
   it('market detail shows shadow labeled and keeps incumbent probabilities', () => {

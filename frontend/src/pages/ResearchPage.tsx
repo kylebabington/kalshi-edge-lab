@@ -1,5 +1,9 @@
 import type { ModelSummary } from '../types/weather'
 import { ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
+import { MetricHelp, ResultKindBadge, SampleNote } from '../components/MetricHelp'
+import { useAsync } from '../components/sports/useAsync'
+import { fetchWeatherMetricsContext } from '../api/weather'
+import { fmtTargetDate } from '../lib/time'
 
 type Props = {
   loading: boolean
@@ -7,9 +11,33 @@ type Props = {
   summary: ModelSummary | null
 }
 
+function metric(v: unknown) {
+  if (v == null || v === '') return 'unavailable'
+  const n = Number(v)
+  return Number.isFinite(n) ? (Number.isInteger(n) ? String(n) : n.toFixed(4)) : String(v)
+}
+
+function range(first: string | null | undefined, last: string | null | undefined) {
+  return first ? `${fmtTargetDate(first)} – ${fmtTargetDate(last ?? first)}` : 'unknown'
+}
+
 export function ResearchPage({ loading, error, summary }: Props) {
+  const context = useAsync(fetchWeatherMetricsContext, 'weather-metrics-context')
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
+
+  const replay = context.data?.operational_replay
+  const replayPeriod = context.loading
+    ? 'loading…'
+    : replay?.available
+      ? `${range(replay.first_target_date, replay.last_target_date)} (historical replay)`
+      : 'unknown'
+  const prospectiveScores = context.data?.prospective_snapshot_scores
+  const prospectivePeriod = context.loading
+    ? 'loading…'
+    : prospectiveScores
+      ? `${range(prospectiveScores.first_target_date, prospectiveScores.last_target_date)} (target dates)`
+      : 'unknown'
 
   const constants = summary?.methodology_constants ?? {}
   const status = summary?.research_status ?? {}
@@ -63,7 +91,15 @@ export function ResearchPage({ loading, error, summary }: Props) {
       </section>
 
       <section className="panel space-y-3">
-        <h3 className="font-semibold">PROSPECTIVE JOURNAL</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-semibold">PROSPECTIVE JOURNAL</h3>
+          <ResultKindBadge kind="prospective" />
+        </div>
+        <SampleNote
+          n={prospectiveScores ? `${prospectiveScores.scored_snapshots} scored snapshots in ${prospectiveScores.events}` : null}
+          unit="events"
+          period={prospectivePeriod}
+        />
         <dl className="grid gap-2 sm:grid-cols-3 text-sm mono">
           <div>
             snapshots <span className="font-semibold">{String(journal.snapshots ?? 0)}</span>
@@ -115,24 +151,38 @@ export function ResearchPage({ loading, error, summary }: Props) {
             missed{' '}
             <span className="font-semibold">{String(prospective?.missed_checkpoints ?? 0)}</span>
           </div>
-          {incumbent ? (
-            <div>
-              incumbent GFS Brier={String(incumbent.brier ?? '—')} log_loss=
-              {String(incumbent.log_loss ?? '—')}
-            </div>
-          ) : null}
-          {shadowMetrics ? (
-            <div>
-              GFS+HRRR Equal Brier={String(shadowMetrics.brier ?? '—')} log_loss=
-              {String(shadowMetrics.log_loss ?? '—')}
-            </div>
-          ) : null}
-          {delta ? (
-            <div>
-              paired Δ Brier mean={String(delta.mean ?? '—')}
-              {Array.isArray(delta.ci95)
-                ? ` ci95=[${String(delta.ci95[0])}, ${String(delta.ci95[1])}]`
-                : ''}
+          {incumbent || shadowMetrics || delta ? (
+            <div className="space-y-1 rounded-lg border border-[var(--border)] p-2 font-sans">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">Shadow evaluation metrics</span>
+                <ResultKindBadge kind="historical" />
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">
+                These come from the shadow evaluation replay over past operational forecasts, not from the saved
+                prospective snapshots above.
+              </p>
+              {incumbent ? (
+                <div className="mono">
+                  incumbent GFS Brier <MetricHelp metric="brier" label="Brier" /> = {metric(incumbent.brier)} · log loss{' '}
+                  <MetricHelp metric="log_loss" label="log loss" /> = {metric(incumbent.log_loss)} · n ={' '}
+                  {metric((incumbent as { n?: unknown }).n)}
+                </div>
+              ) : null}
+              {shadowMetrics ? (
+                <div className="mono">
+                  GFS+HRRR equal Brier = {metric(shadowMetrics.brier)} · log loss = {metric(shadowMetrics.log_loss)} · n ={' '}
+                  {metric((shadowMetrics as { n?: unknown }).n)}
+                </div>
+              ) : null}
+              {delta ? (
+                <div className="mono">
+                  paired Δ Brier (shadow − GFS) <MetricHelp metric="paired" label="a paired difference" /> mean ={' '}
+                  {metric(delta.mean)}
+                  {Array.isArray(delta.ci95) ? ` · 95% CI [${metric(delta.ci95[0])}, ${metric(delta.ci95[1])}]` : ''}
+                  {(delta as { n?: unknown }).n != null ? ` · n = ${metric((delta as { n?: unknown }).n)}` : ''}
+                </div>
+              ) : null}
+              <SampleNote n={replay ? replay.target_dates : null} unit="replay target dates available" period={replayPeriod} />
             </div>
           ) : null}
           <div>

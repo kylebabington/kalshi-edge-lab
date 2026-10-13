@@ -126,6 +126,10 @@ export function mockSportsEvents(filters: EventFilters = {}): SportsEventList {
       families: ['game_winner', 'spread'],
       cohorts: ['strict'],
     },
+    facet_labels: {
+      competition: { epl: 'Premier League (mock)', ncaaf: 'NCAA Football (mock)', nfl: 'NFL (mock)' },
+    },
+    sort: filters.sort || 'default',
     items,
   }
 }
@@ -323,6 +327,12 @@ export const mockSportsResults: SportsResults = {
     ],
   },
   breakdown: { sport: [], competition: [], family: [], cohort: [] },
+  period: {
+    first_prediction_as_of: '2026-10-10T15:46:00Z',
+    last_prediction_as_of: '2026-10-10T15:46:00Z',
+    first_settled_at: '2026-10-11T03:10:00Z',
+    last_settled_at: '2026-10-11T03:10:00Z',
+  },
   artifacts,
 }
 

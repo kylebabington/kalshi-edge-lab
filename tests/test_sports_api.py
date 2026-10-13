@@ -63,11 +63,15 @@ def _write_record(root: Path, comp, cluster, sport, status, start, contracts, ti
     return rec
 
 
-def _write_score(root: Path, comp, cluster, sport, contract, y):
+def _write_score(root: Path, comp, cluster, sport, contract, y, settled_at=None, prediction_as_of=None):
+    settlement = {"state": "SETTLED_YES" if y else "SETTLED_NO", "detail": "test"}
+    if settled_at:
+        settlement["market"] = {"settlement_ts": settled_at}
     sc = {"ticker": contract["ticker"], "competition": comp, "sport": sport, "family": contract["family"],
+          "prediction_as_of": prediction_as_of,
           "cohort": contract["cohort"], "event_key": f"{comp}|{cluster}", "y": y,
           "candidates": contract["candidates"], "scored_at": _iso(NOW - 60),
-          "settlement": {"state": "SETTLED_YES" if y else "SETTLED_NO", "detail": "test"},
+          "settlement": settlement,
           "settlement_evidence": [{"url": "https://example.invalid/secret-payload"}]}
     sc["score_sha256"] = sha256_json(sc)
     p = root / "finalized" / comp / cluster.replace(":", "_") / f"{contract['ticker']}.json"
@@ -332,6 +336,67 @@ def test_historical_separated_and_labelled(client):
     assert protos["sports_phase1_v1"]["status"].startswith("superseded by")
     assert all(p["source"]["label"].startswith("tracked summary") for p in protos.values())
     assert "never merged" in r["separation_note"]
+    periods = [p["period"] for p in protos.values()]
+    assert any(periods)
+    assert all(p is None or (p["label"] in ("test period", "evaluation period") and p["start"] <= p["end"])
+               for p in periods)
+
+
+@pytest.fixture
+def settled_times(env):
+    cap, sc = env["capture"], env["scores"]
+    a = _contract("KXNFLGAME-A-HOME", "game_winner", FULL)
+    _write_record(cap, "nfl", "espn:1", "Football", "WINDOW_CAPTURE", NOW - 86400, [a], ["KXNFLGAME-A"])
+    _write_score(sc, "nfl", "espn:1", "Football", a, 1, settled_at=_iso(NOW - 3600),
+                 prediction_as_of=_iso(NOW - 86400 - 4200))
+    b = _contract("KXNFLGAME-B-HOME", "game_winner", FULL)
+    _write_record(cap, "nfl", "espn:2", "Football", "WINDOW_CAPTURE", NOW - 2 * 86400, [b], ["KXNFLGAME-B"])
+    _write_score(sc, "nfl", "espn:2", "Football", b, 0, settled_at=_iso(NOW - 600),
+                 prediction_as_of=_iso(NOW - 2 * 86400 - 4200))
+    c = _contract("KXEPLGAME-C-HOME", "game_winner", FROZEN_ONLY)
+    _write_record(cap, "epl", "espn:3", "Soccer", "WINDOW_CAPTURE", NOW + 4000, [c], ["KXEPLGAME-C"])
+    return env
+
+
+@pytest.mark.parametrize("sort,expected", [
+    ("start_asc", ["nfl|espn:2", "nfl|espn:1", "epl|espn:3"]),
+    ("start_desc", ["epl|espn:3", "nfl|espn:1", "nfl|espn:2"]),
+    ("capture_desc", ["epl|espn:3", "nfl|espn:1", "nfl|espn:2"]),
+    ("settlement_desc", ["nfl|espn:2", "nfl|espn:1", "epl|espn:3"]),
+])
+def test_event_sort_orders(settled_times, client, sort, expected):
+    r = client.get("/api/sports/events", params={"sort": sort}).json()
+    assert [i["event_id"] for i in r["items"]] == expected
+    assert r["sort"] == sort
+
+
+def test_event_sort_validation_settlement_time_and_labels(settled_times, client):
+    assert client.get("/api/sports/events", params={"sort": "best_bet"}).status_code == 422
+    r = client.get("/api/sports/events").json()
+    by = {i["event_id"]: i for i in r["items"]}
+    assert by["nfl|espn:2"]["settlement"]["last_settled_at"] == _iso(NOW - 600)
+    assert by["epl|espn:3"]["settlement"]["last_settled_at"] is None
+    assert set(r["facet_labels"]["competition"]) == set(r["facets"]["competition"])
+    assert all(isinstance(v, str) and v for v in r["facet_labels"]["competition"].values())
+
+
+def test_results_report_their_data_period(settled_times, client):
+    period = client.get("/api/sports/results").json()["period"]
+    assert (period["first_settled_at"], period["last_settled_at"]) == (_iso(NOW - 3600), _iso(NOW - 600))
+    assert (period["first_prediction_as_of"], period["last_prediction_as_of"]) == (
+        _iso(NOW - 2 * 86400 - 4200), _iso(NOW - 86400 - 4200))
+
+
+def test_collector_history_reads_the_full_cycle_log(populated, client):
+    cycles = [{"finished_at": _iso(NOW - 5 * 86400), "result": "ok"},
+              {"finished_at": _iso(NOW - 4 * 86400), "result": "error"},
+              {"finished_at": _iso(NOW - 3 * 86400), "result": "skipped_lock_busy"}]
+    CO.CYCLES_PATH.write_text("".join(json.dumps(c) + "\n" for c in cycles) + "not json\n", encoding="utf-8")
+    h = client.get("/api/sports/collector").json()["history"]
+    assert h == {"recorded": True, "last_cycle_finished_at": _iso(NOW - 4 * 86400), "last_cycle_result": "error",
+                 "last_successful_cycle_at": _iso(NOW - 5 * 86400)}
+    CO.CYCLES_PATH.unlink()
+    assert client.get("/api/sports/collector").json()["history"] == {"recorded": False}
 
 
 def test_scheduler_query_parsing():

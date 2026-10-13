@@ -1,15 +1,6 @@
-export function fmtTime(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZoneName: 'short',
-  })
-}
+import { fmtLocal } from '../../lib/time'
+
+export const fmtTime = fmtLocal
 
 export function fmtUtc(iso: string | null | undefined): string {
   if (!iso) return '—'
@@ -18,8 +9,9 @@ export function fmtUtc(iso: string | null | undefined): string {
   return `${d.toISOString().slice(0, 16).replace('T', ' ')} UTC`
 }
 
+/** A missing probability is unavailable, never zero. */
 export function fmtProb(p: number | null | undefined): string {
-  if (p == null || Number.isNaN(p)) return '—'
+  if (p == null || !Number.isFinite(p)) return 'unavailable'
   return `${(p * 100).toFixed(1)}%`
 }
 

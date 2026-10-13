@@ -4,7 +4,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '../api/sports'
 import { AppShell } from '../components/AppShell'
-import { SportsSummaryPanel } from '../components/sports/SportsSummaryPanel'
+import { NotFoundError } from '../api/client'
+import { watchlistStore } from '../watchlist/store'
 import {
   MOCK_SOURCE,
   mockSportsCollector,
@@ -47,6 +48,8 @@ function renderSports(path = '/sports') {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.clear()
+  watchlistStore.reload()
   m.fetchSportsSummary.mockResolvedValue(mockSportsSummary)
   m.fetchSportsEvents.mockImplementation(async (f) => mockSportsEvents(f))
   m.fetchSportsEvent.mockResolvedValue(mockSportsEventDetail)
@@ -148,6 +151,43 @@ describe('Sports events', () => {
     )
   })
 
+  it('sorts via the URL and shows plain-language filter labels', async () => {
+    const user = userEvent.setup()
+    renderSports()
+    await screen.findAllByRole('link', { name: /^Open / })
+    expect(within(screen.getByLabelText('Contract family')).getByRole('option', { name: 'Game winner' })).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Contract family')).getByRole('option', { name: 'Point spread' })).toBeInTheDocument()
+    expect(within(screen.getByLabelText('League / competition')).getByRole('option', { name: /^Premier League/ })).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'settlement_desc')
+    await waitFor(() =>
+      expect(m.fetchSportsEvents).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'settlement_desc' })),
+    )
+  })
+
+  it('restores filters, sort and page when returning from a detail page', async () => {
+    const user = userEvent.setup()
+    renderSports('/sports?sport=Football&sort=start_desc')
+    await user.click(await screen.findByRole('link', { name: /Open Mock State at Example Tech/ }))
+    await screen.findByRole('heading', { name: 'Mock State at Example Tech' })
+    await user.click(screen.getByRole('link', { name: /Back to list/ }))
+    await screen.findAllByRole('link', { name: /^Open / })
+    expect(screen.getByLabelText('Sport')).toHaveValue('Football')
+    expect(screen.getByLabelText('Sort by')).toHaveValue('start_desc')
+    expect(m.fetchSportsEvents).toHaveBeenLastCalledWith(expect.objectContaining({ sport: 'Football', sort: 'start_desc' }))
+  })
+
+  it('stars an event from the list without navigating', async () => {
+    const user = userEvent.setup()
+    renderSports()
+    const star = await screen.findByRole('button', { name: /Add to watchlist: Mock United vs Fixture City/ })
+    await user.click(star)
+    expect(screen.getByRole('button', { name: /Remove from watchlist: Mock United vs Fixture City/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByRole('tab', { name: 'Events' })).toBeInTheDocument()
+  })
+
   it('shows collector scheduler state as unknown when unreadable', async () => {
     renderSports()
     expect(await screen.findByText('Scheduler: unknown')).toBeInTheDocument()
@@ -174,8 +214,8 @@ describe('Sports tabs', () => {
   it('results show matched-contract and unique-event counts and switch weighting', async () => {
     const user = userEvent.setup()
     renderSports('/sports?tab=results')
-    const paired = await screen.findByRole('table', { name: /paired comparisons on common contracts/i })
-    expect(within(paired).getByRole('columnheader', { name: 'Matched contracts' })).toBeInTheDocument()
+    const paired = await screen.findByRole('table', { name: /paired differences on common contracts/i })
+    expect(within(paired).getByRole('columnheader', { name: 'Matched contracts (n)' })).toBeInTheDocument()
     expect(within(paired).getByRole('columnheader', { name: 'Unique events' })).toBeInTheDocument()
     expect(within(paired).getByText('-0.0280')).toBeInTheDocument()
     const standalone = screen.getByRole('table', { name: /standalone metrics/i })
@@ -183,6 +223,28 @@ describe('Sports tabs', () => {
     expect(screen.getByText(/No ranking of bets, no executable edge/i)).toBeInTheDocument()
     await user.click(screen.getByLabelText('Contract-weighted'))
     await waitFor(() => expect(m.fetchSportsResults).toHaveBeenLastCalledWith(expect.objectContaining({ weighting: 'contract' })))
+  })
+
+  it('results explain metrics, label the pilot prospective and show sample size and period', async () => {
+    const user = userEvent.setup()
+    renderSports('/sports?tab=results')
+    await screen.findByRole('table', { name: /paired differences/i })
+    expect(screen.getAllByText(/Prospective · saved before outcome/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Data period:/).length).toBeGreaterThan(1)
+    expect(screen.getByText(/3 contracts in 1/)).toBeInTheDocument()
+    expect(screen.getByText(/rows are not comparable with each other/i)).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'What is Brier?' })[0])
+    expect(screen.getByRole('note')).toHaveTextContent(/mean squared gap/i)
+    await user.click(screen.getByRole('button', { name: 'What is event-equal weighting?' }))
+    expect(screen.getAllByRole('note').some((n) => /every event counts once/i.test(n.textContent ?? ''))).toBe(true)
+    expect(screen.queryByText(/best bet|top pick|\bBUY\b/i)).toBeNull()
+  })
+
+  it('historical research carries the historical badge and its period', async () => {
+    renderSports('/sports?tab=historical')
+    await screen.findByText(/shown separately from the prospective pilot/i)
+    expect(screen.getAllByText(/Historical research · backtest \/ replay/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Data period:/).length).toBeGreaterThan(0)
   })
 
   it('coverage shows statuses with exact reasons', async () => {
@@ -221,9 +283,19 @@ describe('Sports event detail', () => {
   })
 
   it('shows not-found for an unknown event id', async () => {
-    m.fetchSportsEvent.mockRejectedValue(new Error('404 Not Found'))
+    m.fetchSportsEvent.mockRejectedValue(new NotFoundError('404 Not Found'))
     renderSports('/sports/events/nope')
     expect(await screen.findByText('Event not found')).toBeInTheDocument()
+  })
+
+  it('treats a server failure on detail as an error with retry, not as not-found', async () => {
+    m.fetchSportsEvent.mockRejectedValueOnce(new Error('503 Service Unavailable'))
+    const user = userEvent.setup()
+    renderSports('/sports/events/ncaaf%7Cespn%3Amock-1')
+    expect(await screen.findByText('503 Service Unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('Event not found')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('heading', { name: 'Mock State at Example Tech' })).toBeInTheDocument()
   })
 })
 
@@ -237,17 +309,6 @@ describe('Sports navigation and dashboard', () => {
     const nav = screen.getByRole('navigation', { name: 'Main' })
     expect(within(nav).getByRole('link', { name: 'Sports' })).toHaveAttribute('href', '/sports')
     expect(screen.getByText(/Weather model: artifacts loaded/)).toBeInTheDocument()
-  })
-
-  it('dashboard sports summary shows counts and last capture', async () => {
-    render(
-      <MemoryRouter>
-        <SportsSummaryPanel />
-      </MemoryRouter>,
-    )
-    expect(await screen.findByText('Sports — saved captures')).toBeInTheDocument()
-    expect(screen.getByText('Pending settlement').nextSibling).toHaveTextContent('1')
-    expect(screen.getByText(/Last capture:/)).toBeInTheDocument()
   })
 
   it('every mock payload is labeled as a mock fixture', () => {

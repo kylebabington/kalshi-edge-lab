@@ -15,6 +15,7 @@ import type { PredictionSnapshotMeta, WeatherEvent } from '../types/weather'
 import { fetchEventSnapshots, fetchSnapshot } from '../api/weather'
 import { SourceMismatchBanner } from '../components/EventCard'
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
+import { DataKindTag } from '../components/UnifiedEventCard'
 
 function cents(value: number | null | undefined) {
   if (value == null) return '—'
@@ -22,7 +23,7 @@ function cents(value: number | null | undefined) {
 }
 
 function pct(value: number | null | undefined) {
-  if (value == null) return '—'
+  if (value == null || !Number.isFinite(value)) return 'unavailable'
   return `${(value * 100).toFixed(0)}%`
 }
 
@@ -316,6 +317,7 @@ export function MarketDetailPage({ loading, error, event }: Props) {
           <span className="badge badge-warning">Research Only</span>
           <span className="badge">{display.resolution.station_id}</span>
           <StatusBadge status={pred.prediction_status} />
+          <DataKindTag kind={asOfMode === 'NOW' ? 'market' : 'saved'} />
         </div>
         {asOfMode !== 'NOW' ? (
           <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm space-y-1">

@@ -40,12 +40,13 @@ def sports_events(
     status: EventStatus | None = None,
     collection: Literal["automatic", "collector_manual", "manual_pilot"] | None = None,
     q: str | None = Query(None, max_length=120),
+    sort: Literal["default", "start_asc", "start_desc", "capture_desc", "settlement_desc"] = "default",
     page: int = Query(1, ge=1),
     page_size: int = Query(24, ge=1, le=200),
 ) -> dict:
     filters = {"sport": sport, "competition": competition, "family": family, "cohort": cohort,
                "status": status, "collection": collection, "q": q}
-    return service.list_events(filters, page, page_size)
+    return service.list_events(filters, page, page_size, sort)
 
 
 @router.get("/events/{event_id:path}", response_model=SportsEventDetailResponse)

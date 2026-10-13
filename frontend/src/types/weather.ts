@@ -1,3 +1,5 @@
+import type { SchedulerState } from './sports'
+
 export type WeatherPrediction = {
   event_ticker: string
   target_date: string
@@ -111,6 +113,142 @@ export type LiveWeatherResponse = {
   mode: string
   calibration_csv_loaded?: boolean
   events: WeatherEvent[]
+}
+
+export type WeatherView = 'upcoming' | 'awaiting_settlement' | 'settled'
+
+export type SavedSnapshotSummary = {
+  snapshot_id: string
+  event_ticker: string
+  target_date: string | null
+  prediction_as_of: string | null
+  created_at: string | null
+  checkpoint_id: string | null
+  prediction_status: string | null
+  confidence_label: string | null
+  expected_high: number | null
+  resolution_regime?: string | null
+  transfer_status?: string | null
+  bucket_probabilities: Record<string, number>
+  invalid_probabilities: number
+}
+
+/** Score of one snapshot. Only `scored` carries metrics; every other state is explicitly unavailable. */
+export type SnapshotScoreState = {
+  state: 'scored' | 'not_scored' | 'unavailable' | 'invalid'
+  reason?: string
+  brier?: number | null
+  log_loss?: number | null
+  scored_at?: string | null
+  probability_on_winner?: number | null
+  winning_bucket?: string | null
+}
+
+/** Event-level settlement, confirmed by any valid score of any snapshot of the event. */
+export type EventSettlementState = {
+  state: 'confirmed' | 'not_confirmed' | 'conflict'
+  reason?: string
+  winning_bucket?: string | null
+  actual_high_f?: number | null
+  source?: string | null
+  regime?: string | null
+  confirmed_at?: string | null
+  confirmed_by_snapshot_id?: string | null
+  confirming_scores?: number
+}
+
+export type SavedWeatherEvent = {
+  category: 'weather'
+  event_ticker: string
+  target_date: string | null
+  view: WeatherView
+  snapshot_count: number
+  scored_snapshot_count: number
+  first_prediction_as_of: string | null
+  displayed_snapshot: SavedSnapshotSummary
+  displayed_snapshot_score: SnapshotScoreState
+  event_settlement: EventSettlementState
+  receipts: { captured: number; missed: number }
+}
+
+export type SavedWeatherEventList = {
+  generated_at: string
+  label: string
+  source: string
+  artifacts: { snapshots: string; scores: string }
+  filters: Record<string, string>
+  sort: string
+  total: number
+  page: number
+  page_size: number
+  pages: number
+  views: Record<WeatherView, number>
+  items: SavedWeatherEvent[]
+}
+
+export type SavedWeatherEventDetail = {
+  generated_at: string
+  label: string
+  source: string
+  event: SavedWeatherEvent
+  snapshots: (Pick<
+    SavedSnapshotSummary,
+    'snapshot_id' | 'prediction_as_of' | 'created_at' | 'checkpoint_id' | 'prediction_status' | 'confidence_label' | 'expected_high'
+  > & { score: SnapshotScoreState })[]
+}
+
+export type SavedWeatherFilters = {
+  status?: string
+  q?: string
+  sort?: string
+  page?: number
+  page_size?: number
+}
+
+export type WeatherCollectorStatus = {
+  generated_at: string
+  task_name: string
+  cadence_minutes: number
+  scheduler: SchedulerState
+  lock: { held: boolean; state: string; acquired_at?: string | null }
+  log_observed: boolean
+  cycles: {
+    last_cycle_finished_at: string | null
+    last_cycle_exit_code: number | null
+    last_successful_cycle_at: string | null
+    minutes_since_last_successful_cycle: number | null
+    cycles_24h: number
+    failures_24h: number
+    consecutive_failures: number
+  }
+  forecast_freshness: {
+    last_snapshot_prediction_as_of: string | null
+    minutes_since_last_snapshot: number | null
+    last_captured_checkpoint_at: string | null
+    last_score_written_at: string | null
+    minutes_since_last_score: number | null
+    missed_checkpoints_24h: number
+  }
+  limits: string
+}
+
+export type WeatherMetricsContext = {
+  generated_at: string
+  prospective_snapshot_scores: {
+    kind: 'prospective'
+    scored_snapshots: number
+    events: number
+    first_target_date: string | null
+    last_target_date: string | null
+  }
+  operational_replay: {
+    kind: 'historical'
+    available: boolean
+    missing?: string
+    first_target_date?: string | null
+    last_target_date?: string | null
+    target_dates?: number
+  }
 }
 
 export type PredictionSnapshotMeta = {

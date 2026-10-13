@@ -71,6 +71,7 @@ export type SettlementSummary = {
   labelled: number
   pending: number
   states: Record<string, number>
+  last_settled_at?: string | null
 }
 
 export type SportsEventItem = {
@@ -110,12 +111,14 @@ export type SportsEventList = {
   source: string
   artifacts: SportsArtifacts
   filters: Record<string, string>
+  sort?: string
   total: number
   page: number
   page_size: number
   pages: number
   views: Record<EventView, number>
   facets: { sport: string[]; competition: string[]; families: string[]; cohorts: string[] }
+  facet_labels?: { competition?: Record<string, string> }
   items: SportsEventItem[]
 }
 
@@ -127,6 +130,7 @@ export type EventFilters = {
   status?: string
   collection?: string
   q?: string
+  sort?: string
   page?: number
   page_size?: number
 }
@@ -257,6 +261,12 @@ export type SportsResults = {
     settlement_states: Record<string, number>
     excluded_score_checksum_problems: number
   }
+  period?: {
+    first_prediction_as_of: string | null
+    last_prediction_as_of: string | null
+    first_settled_at: string | null
+    last_settled_at: string | null
+  }
   facets: Record<string, string[]>
   overall: MetricBlock
   breakdown: Record<string, ({ group: string } & MetricBlock)[]>
@@ -347,6 +357,7 @@ export type HistoricalProtocol = {
   comparison: string
   status: string
   frozen_at?: string | null
+  period?: { label: string; start: string; end: string } | null
   report: string
   addenda: string[]
   source: { label: string; tracked_csv: string; local_artifacts: string }
@@ -434,6 +445,12 @@ export type SportsCollectorStatus = {
     minutes_since_last_score: number | null
     last_cycle_finished_at: string | null
     minutes_since_last_cycle: number | null
+  }
+  history?: {
+    recorded: boolean
+    last_cycle_finished_at?: string | null
+    last_cycle_result?: string | null
+    last_successful_cycle_at?: string | null
   }
   backup?: {
     recorded: boolean

@@ -1,6 +1,12 @@
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
+import { isNotFound } from '../api/client'
 import { fetchSportsEvent } from '../api/sports'
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
+import { TimezoneNote } from '../components/TimezoneNote'
+import { DataKindTag } from '../components/UnifiedEventCard'
+import { competitionLabel, familyLabel, sportLabel, sportsEventTitle } from '../lib/labels'
+import { StarButton } from '../watchlist/StarButton'
+import { BackLink } from './BackLink'
 import { DataStamp } from '../components/sports/DataStamp'
 import {
   CANDIDATE_LABELS,
@@ -48,7 +54,7 @@ function ContractTable({ family, contracts }: { family: string; contracts: Contr
   return (
     <section className="panel space-y-2" aria-labelledby={`family-${family}`}>
       <h3 id={`family-${family}`} className="font-semibold">
-        {label(family)} <span className="text-xs text-[var(--text-muted)]">({contracts.length} binary contracts)</span>
+        {familyLabel(family)} <span className="text-xs text-[var(--text-muted)]">({contracts.length} binary contracts)</span>
       </h3>
       <div className="overflow-x-auto">
         <table className="data-table">
@@ -127,26 +133,30 @@ function KeyValues({ data }: { data: Record<string, unknown> }) {
 export function SportsEventView({ data, loadedAt }: { data: SportsEventDetail; loadedAt: Date | null }) {
   const e = data.event
   const p = data.provenance
+  const title = sportsEventTitle(e)
   return (
     <div className="space-y-5">
       <header className="space-y-2">
-        <Link to="/sports" className="text-sm text-[var(--accent)] hover:underline">
-          ← Sports events
-        </Link>
+        <BackLink fallback="/sports" label="Sports events" />
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
-              {e.sport} · {e.competition_name ?? e.competition}
+              {sportLabel(e.sport)} · {competitionLabel(e.competition, e.competition_name)}
             </p>
-            <h2 className="text-xl font-semibold">
-              {e.title ?? (e.participants.length ? e.participants.join(' · ') : e.cluster)}
-            </h2>
+            <h2 className="text-xl font-semibold">{title}</h2>
             {e.title && e.participants.length ? (
-              <p className="text-sm text-[var(--text-muted)]">Outcomes: {e.participants.join(' · ')}</p>
+              <p className="text-sm text-[var(--text-muted)]">Participants: {e.participants.join(' vs ')}</p>
             ) : null}
           </div>
-          <StatusBadge status={VIEW_LABELS[e.view]} />
+          <div className="flex items-center gap-2">
+            <StatusBadge status={VIEW_LABELS[e.view]} />
+            <StarButton category="sports" eventKey={e.event_id} label={title} size="md" />
+          </div>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <DataKindTag kind="saved" />
+        </div>
+        <TimezoneNote />
         <p className="text-xs mono text-[var(--text-muted)]">Event id: {e.event_id}</p>
         {p.collection ? (
           <p className="text-xs text-[var(--text-muted)]">
@@ -267,13 +277,11 @@ export function SportsEventPage() {
   if (state.error) {
     return (
       <div className="space-y-3">
-        <Link to="/sports" className="text-sm text-[var(--accent)] hover:underline">
-          ← Sports events
-        </Link>
-        {/no saved capture|not found|404/i.test(state.error) ? (
+        <BackLink fallback="/sports" label="Sports events" />
+        {isNotFound(state.errorValue) ? (
           <EmptyState title="Event not found" detail={`No saved capture has id ${eventId}.`} />
         ) : (
-          <ErrorState message={state.error} />
+          <ErrorState message={state.error} onRetry={state.reload} />
         )}
       </div>
     )

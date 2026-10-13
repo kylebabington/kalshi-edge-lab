@@ -97,6 +97,55 @@ class LiveWeatherResponse(BaseModel):
     events: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class WeatherSavedEventListResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    label: str
+    source: str
+    artifacts: dict[str, str]
+    filters: dict[str, Any] = Field(default_factory=dict)
+    sort: str
+    total: int
+    page: int
+    page_size: int
+    pages: int
+    views: dict[str, int]
+    items: list[dict[str, Any]]
+
+
+class WeatherSavedEventDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    label: str
+    source: str
+    event: dict[str, Any]
+    snapshots: list[dict[str, Any]]
+
+
+class WeatherCollectorResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    task_name: str
+    cadence_minutes: int
+    scheduler: dict[str, Any]
+    lock: dict[str, Any]
+    log_observed: bool
+    cycles: dict[str, Any]
+    forecast_freshness: dict[str, Any]
+    limits: str
+
+
+class WeatherMetricsContextResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    prospective_snapshot_scores: dict[str, Any]
+    operational_replay: dict[str, Any]
+
+
 class SportsArtifacts(BaseModel):
     capture_records: str
     settlement_scores: str
@@ -132,6 +181,7 @@ class SportsSettlementSummary(BaseModel):
     labelled: int
     pending: int
     states: dict[str, int] = Field(default_factory=dict)
+    last_settled_at: str | None = None
 
 
 class SportsEventItem(BaseModel):

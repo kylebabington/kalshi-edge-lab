@@ -1,111 +1,48 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useParams } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
-import { fetchHealth, fetchLiveWeather, fetchModelSummary, fetchWeatherEvent } from './api/weather'
+import { fetchHealth, fetchModelSummary } from './api/weather'
 import { isMockMode } from './api/client'
-import type { LiveWeatherResponse, ModelSummary, WeatherEvent } from './types/weather'
+import type { ModelSummary } from './types/weather'
 import { DashboardPage } from './pages/DashboardPage'
 import { MarketsPage } from './pages/MarketsPage'
-import { MarketDetailPage } from './pages/MarketDetailPage'
+import { WeatherEventRoute } from './pages/WeatherEventRoute'
 import { WeatherModelPage } from './pages/WeatherModelPage'
 import { ResearchPage } from './pages/ResearchPage'
 import { SportsPage } from './pages/SportsPage'
 import { SportsEventPage } from './pages/SportsEventPage'
-
-function MarketDetailRoute({
-  live,
-  liveError,
-}: {
-  live: LiveWeatherResponse | null
-  liveError: string | null
-}) {
-  const { eventTicker = '' } = useParams()
-  const [event, setEvent] = useState<WeatherEvent | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const fromLive = live?.events.find((e) => e.event_ticker === eventTicker) ?? null
-        if (fromLive) {
-          if (!cancelled) setEvent(fromLive)
-        } else {
-          const detail = await fetchWeatherEvent(eventTicker)
-          if (!cancelled) setEvent(detail)
-        }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [eventTicker, live])
-
-  return (
-    <MarketDetailPage
-      loading={loading}
-      error={error ?? liveError}
-      event={event}
-    />
-  )
-}
+import { WatchlistPage } from './pages/WatchlistPage'
 
 export default function App() {
-  const [live, setLive] = useState<LiveWeatherResponse | null>(null)
   const [summary, setSummary] = useState<ModelSummary | null>(null)
-  const [liveLoading, setLiveLoading] = useState(true)
   const [summaryLoading, setSummaryLoading] = useState(true)
-  const [liveError, setLiveError] = useState<string | null>(null)
   const [summaryError, setSummaryError] = useState<string | null>(null)
   const [apiStatus, setApiStatus] = useState('unknown')
 
   useEffect(() => {
     let cancelled = false
-    async function boot() {
-      try {
-        const health = await fetchHealth()
+    fetchHealth()
+      .then((health) => {
         if (!cancelled) setApiStatus(health.status)
-      } catch {
+      })
+      .catch(() => {
         if (!cancelled) setApiStatus(isMockMode() ? 'mock' : 'down')
-      }
-
-      const loadLive = async () => {
-        try {
-          const livePayload = await fetchLiveWeather()
-          if (!cancelled) setLive(livePayload)
-        } catch (err) {
-          if (!cancelled) setLiveError(err instanceof Error ? err.message : String(err))
-        } finally {
-          if (!cancelled) setLiveLoading(false)
-        }
-      }
-      const loadSummary = async () => {
-        try {
-          const summaryPayload = await fetchModelSummary()
-          if (!cancelled) setSummary(summaryPayload)
-        } catch (err) {
-          if (!cancelled) setSummaryError(err instanceof Error ? err.message : String(err))
-        } finally {
-          if (!cancelled) setSummaryLoading(false)
-        }
-      }
-      await Promise.all([loadLive(), loadSummary()])
-    }
-    void boot()
+      })
+    fetchModelSummary()
+      .then((payload) => {
+        if (!cancelled) setSummary(payload)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setSummaryError(err instanceof Error ? err.message : String(err))
+      })
+      .finally(() => {
+        if (!cancelled) setSummaryLoading(false)
+      })
     return () => {
       cancelled = true
     }
   }, [])
 
-  const events = live?.events ?? []
   const modelStatus = summaryLoading
     ? 'loading…'
     : summary?.model_summary_available
@@ -117,45 +54,21 @@ export default function App() {
       <Route element={<AppShell apiStatus={apiStatus} modelStatus={modelStatus} />}>
         <Route
           path="/"
-          element={
-            <DashboardPage
-              loading={liveLoading || summaryLoading}
-              error={liveError}
-              events={events}
-              summary={summary}
-            />
-          }
+          element={<DashboardPage summary={summary} summaryLoading={summaryLoading} summaryError={summaryError} />}
         />
-        <Route
-          path="/markets"
-          element={<MarketsPage loading={liveLoading} error={liveError} events={events} />}
-        />
-        <Route
-          path="/markets/:eventTicker"
-          element={<MarketDetailRoute live={live} liveError={liveError} />}
-        />
+        <Route path="/markets" element={<MarketsPage />} />
+        <Route path="/markets/:eventTicker" element={<WeatherEventRoute />} />
         <Route
           path="/weather-model"
-          element={
-            <WeatherModelPage
-              loading={summaryLoading}
-              error={summaryError}
-              summary={summary}
-            />
-          }
+          element={<WeatherModelPage loading={summaryLoading} error={summaryError} summary={summary} />}
         />
         <Route
           path="/research"
-          element={
-            <ResearchPage
-              loading={summaryLoading}
-              error={summaryError}
-              summary={summary}
-            />
-          }
+          element={<ResearchPage loading={summaryLoading} error={summaryError} summary={summary} />}
         />
         <Route path="/sports" element={<SportsPage />} />
         <Route path="/sports/events/:eventId" element={<SportsEventPage />} />
+        <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
