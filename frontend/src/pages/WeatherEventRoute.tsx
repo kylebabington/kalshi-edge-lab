@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { isNotFound } from '../api/client'
 import { fetchLiveWeather, fetchSavedWeatherEvent } from '../api/weather'
+import { PredictionHistory } from '../components/PredictionHistory'
 import { EmptyState, ErrorState, LoadingState } from '../components/StatusBadge'
 import { weatherTitle } from '../lib/weatherText'
 import { useAsync } from '../components/sports/useAsync'
@@ -34,6 +35,7 @@ export function WeatherEventRoute() {
           <StarButton category="weather" eventKey={open.event_ticker} label={title} size="md" />
         </div>
         <MarketDetailPage loading={false} error={null} event={open} />
+        {saved.data ? <PredictionHistory data={saved.data} /> : null}
       </div>
     )
   }

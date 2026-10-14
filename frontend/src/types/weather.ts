@@ -186,15 +186,63 @@ export type SavedWeatherEventList = {
   items: SavedWeatherEvent[]
 }
 
+/** Saved definition of one bucket. Same label with a different definition is a separate series. */
+export type WeatherBucketDefinition = {
+  id: string
+  label: string
+  lower_f: number | null
+  upper_f: number | null
+  ticker: string | null
+  bounds_parsed: boolean
+  snapshots: number
+  valid_points: number
+  definition_variants: number
+}
+
+export type ObservationPosition = 'in_day' | 'before_day' | 'after_day' | 'unknown'
+
+export type SnapshotObservation = {
+  present: boolean
+  used_by_prediction: boolean | null
+  station_id?: string | null
+  high_so_far_f?: number | null
+  latest_temperature_f?: number | null
+  latest_timestamp?: string | null
+  quality_status?: string | null
+  freshness_status?: string | null
+  climate_day_bounds_utc?: [string, string] | null
+  latest_position?: ObservationPosition
+  trajectory_points?: Record<ObservationPosition, number>
+}
+
+export type SnapshotRun = {
+  run_id: string | null
+  forecast_run: string | null
+  gfs_model_run_at: string | null
+  hrrr_model_run_at: string | null
+  gefs_member_count: number | null
+  calibration_artifact_id: string | null
+  schema_version: string | null
+}
+
+export type SavedSnapshotHistoryRow = Pick<
+  SavedSnapshotSummary,
+  'snapshot_id' | 'prediction_as_of' | 'created_at' | 'checkpoint_id' | 'prediction_status' | 'confidence_label' | 'expected_high'
+> & {
+  score: SnapshotScoreState
+  probabilities?: Record<string, { p: number | null; invalid: boolean }>
+  run?: SnapshotRun
+  observation?: SnapshotObservation
+}
+
 export type SavedWeatherEventDetail = {
   generated_at: string
   label: string
   source: string
   event: SavedWeatherEvent
-  snapshots: (Pick<
-    SavedSnapshotSummary,
-    'snapshot_id' | 'prediction_as_of' | 'created_at' | 'checkpoint_id' | 'prediction_status' | 'confidence_label' | 'expected_high'
-  > & { score: SnapshotScoreState })[]
+  snapshots: SavedSnapshotHistoryRow[]
+  buckets?: WeatherBucketDefinition[]
+  history_note?: string
 }
 
 export type SavedWeatherFilters = {

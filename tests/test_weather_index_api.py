@@ -237,3 +237,84 @@ def test_get_requests_are_passive(populated, client, monkeypatch):
                  "/api/weather/collector", "/api/weather/metrics-context"):
         assert client.get(path).status_code == 200
     assert _files(populated["root"]) == before
+
+
+# ---------------------------------------------------------------- prediction history
+
+def _history_snap(root: Path, ticker: str, target: str, as_of: str, *, probs: dict, tickers: dict | None = None,
+                  obs: dict | None = None, checkpoint: str | None = "d0_0900") -> str:
+    sid = f"{ticker}__{as_of.replace('-', '').replace(':', '')}"
+    p = root / ticker / f"{sid}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    body = {"snapshot_id": sid, "event_ticker": ticker, "target_date": target, "prediction_as_of": as_of,
+            "created_at": as_of, "prediction_status": "OK", "schema_version": "5.0.0",
+            "prediction": {"run_id": "day_06z", "forecast_run": "event-day 06Z", "provenance": {"live_has_observations": obs is not None}},
+            "evidence": {"gfs": {"model_run_at": "2026-07-15T06:00:00+00:00"}, "observations": obs},
+            "external_probability_distribution": probs,
+            "kalshi_quote_sidecar": {"markets": [{"label": k, "ticker": v} for k, v in (tickers or {}).items()]}}
+    if checkpoint:
+        body["checkpoint_id"] = checkpoint
+    p.write_text(json.dumps(body), encoding="utf-8")
+    return sid
+
+
+def test_observation_day_uses_fixed_est_bounds_not_new_york_calendar_date():
+    start, end = WI.climate_day_bounds_utc("2026-07-15")
+    assert (start.isoformat(), end.isoformat()) == ("2026-07-15T05:00:00+00:00", "2026-07-16T05:00:00+00:00")
+    # 00:30 EDT on Jul 15 (New York calendar date = target) is 23:30 EST on Jul 14: previous climate day.
+    assert WI._classify_obs_time("2026-07-15T04:30:00Z", start, end) == "before_day"
+    # 00:30 EDT on Jul 16 (New York calendar date = next day) is 23:30 EST on Jul 15: still the target day.
+    assert WI._classify_obs_time("2026-07-16T04:30:00+00:00", start, end) == "in_day"
+    assert WI._classify_obs_time("2026-07-16T05:00:00Z", start, end) == "after_day"
+    assert WI._classify_obs_time("2026-07-15T05:00:00Z", start, end) == "in_day"
+    for unknown in (None, "", "garbage", "2026-07-15T12:00:00"):
+        assert WI._classify_obs_time(unknown, start, end) == "unknown"
+
+
+def test_history_rows_report_run_observations_and_unknown_times(env):
+    obs = {"station_id": "KNYC", "high_so_far_f": 80.1, "latest_timestamp": "2026-07-16T04:30:00+00:00",
+           "trajectory": [{"timestamp": "2026-07-15T04:51:00+00:00", "temperature_f": 79.0},
+                          {"timestamp": "2026-07-15T12:51:00+00:00", "temperature_f": 80.1},
+                          {"timestamp": None, "temperature_f": 78.0}, {"temperature_f": 77.0}]}
+    _history_snap(env["snapshots"], "KXHIGHNY-26JUL15", "2026-07-15", "2026-07-15T13:00:00Z",
+                  probs={"80° to 81°": 0.5, "82° to 83°": 0.5}, obs=obs)
+    _history_snap(env["snapshots"], "KXHIGHNY-26JUL15", "2026-07-15", "2026-07-14T22:00:00Z",
+                  probs={"80° to 81°": 0.4, "82° to 83°": 0.6}, obs=None, checkpoint=None)
+    d = WI.saved_event("KXHIGHNY-26JUL15")
+    first, last = d["snapshots"]
+    assert first["prediction_as_of"] < last["prediction_as_of"]
+    assert first["checkpoint_id"] is None and first["observation"] == {"present": False, "used_by_prediction": False}
+    o = last["observation"]
+    assert o["latest_position"] == "in_day" and o["used_by_prediction"] is True
+    assert o["trajectory_points"] == {"in_day": 1, "before_day": 1, "after_day": 0, "unknown": 2}
+    assert o["climate_day_bounds_utc"] == ["2026-07-15T05:00:00Z", "2026-07-16T05:00:00Z"]
+    assert last["run"]["forecast_run"] == "event-day 06Z"
+    assert last["run"]["gfs_model_run_at"] == "2026-07-15T06:00:00+00:00"
+
+
+def test_bucket_identity_is_label_plus_saved_definition(env):
+    t = "KXHIGHNY-26JUL15"
+    _history_snap(env["snapshots"], t, "2026-07-15", "2026-07-14T22:00:00Z",
+                  probs={"80° to 81°": 0.4, "82° or above": "0.6"}, tickers={"80° to 81°": f"{t}-B80.5"})
+    _history_snap(env["snapshots"], t, "2026-07-15", "2026-07-15T13:00:00Z",
+                  probs={"80° to 81°": 0.7, "82° or above": float("nan")}, tickers={"80° to 81°": f"{t}-B80.6"})
+    d = WI.saved_event(t)
+    same = [b for b in d["buckets"] if b["label"] == "80° to 81°"]
+    assert len(same) == 2 and {b["ticker"] for b in same} == {f"{t}-B80.5", f"{t}-B80.6"}
+    assert all(b["definition_variants"] == 2 and (b["lower_f"], b["upper_f"]) == (80, 81) for b in same)
+    a, b = (x["id"] for x in sorted(same, key=lambda x: x["ticker"]))
+    first, last = d["snapshots"]
+    assert first["probabilities"][a] == {"p": 0.4, "invalid": False} and b not in first["probabilities"]
+    assert last["probabilities"][b] == {"p": 0.7, "invalid": False} and a not in last["probabilities"]
+    above = next(x for x in d["buckets"] if x["label"] == "82° or above")
+    assert (above["lower_f"], above["upper_f"], above["valid_points"], above["snapshots"]) == (82, None, 0, 2)
+    assert first["probabilities"][above["id"]] == {"p": None, "invalid": True}
+    assert last["probabilities"][above["id"]] == {"p": None, "invalid": True}
+
+
+def test_history_is_served_by_the_existing_saved_event_route(env, client):
+    _history_snap(env["snapshots"], "KXHIGHNY-26JUL15", "2026-07-15", "2026-07-15T13:00:00Z",
+                  probs={"80° to 81°": 0.5})
+    r = client.get("/api/weather/saved-events/KXHIGHNY-26JUL15").json()
+    assert r["buckets"][0]["label"] == "80° to 81°" and "not interpolated" in r["history_note"]
+    assert r["snapshots"][0]["probabilities"][r["buckets"][0]["id"]]["p"] == 0.5

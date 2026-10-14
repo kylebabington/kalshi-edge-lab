@@ -44,11 +44,11 @@ FROZEN_ONLY = {"frozen": {"p": 0.3, "model": "score"},
                "blend": {"unavailable": "market candidate unavailable"}}
 
 
-def _write_record(root: Path, comp, cluster, sport, status, start, contracts, tickers):
+def _write_record(root: Path, comp, cluster, sport, status, start, contracts, tickers, run_id="run-test"):
     cutoff = start - 3600
     rec = {"protocol": LC.PROTOCOL, "schema": "test", "competition": comp, "cluster": cluster, "sport": sport,
            "source": "espn_team", "status": status, "start": _iso(start), "window_open": _iso(cutoff - 1200),
-           "scheduled_cutoff": _iso(cutoff), "run_id": "run-test", "kalshi_event_tickers": tickers,
+           "scheduled_cutoff": _iso(cutoff), "run_id": run_id, "kalshi_event_tickers": tickers,
            "contracts": contracts, "evidence": [], "comparability": "exact"}
     if status == "WINDOW_CAPTURE":
         rec.update({"prediction_as_of": _iso(cutoff - 600), "prediction_as_of_ts": cutoff - 600,
@@ -63,12 +63,13 @@ def _write_record(root: Path, comp, cluster, sport, status, start, contracts, ti
     return rec
 
 
-def _write_score(root: Path, comp, cluster, sport, contract, y, settled_at=None, prediction_as_of=None):
-    settlement = {"state": "SETTLED_YES" if y else "SETTLED_NO", "detail": "test"}
+def _write_score(root: Path, comp, cluster, sport, contract, y, settled_at=None, prediction_as_of=None,
+                 source_run_id="run-test"):
+    settlement = {"state": "NONBINARY" if y is None else "SETTLED_YES" if y else "SETTLED_NO", "detail": "test"}
     if settled_at:
         settlement["market"] = {"settlement_ts": settled_at}
     sc = {"ticker": contract["ticker"], "competition": comp, "sport": sport, "family": contract["family"],
-          "prediction_as_of": prediction_as_of,
+          "prediction_as_of": prediction_as_of, "source_run_id": source_run_id,
           "cohort": contract["cohort"], "event_key": f"{comp}|{cluster}", "y": y,
           "candidates": contract["candidates"], "scored_at": _iso(NOW - 60),
           "settlement": settlement,
@@ -90,6 +91,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(CO, "STATUS_PATH", logs / "collector_status.json")
     monkeypatch.setattr(CO, "CYCLES_PATH", logs / "collector_cycles.jsonl")
     monkeypatch.setattr(BK, "STATUS_PATH", logs / "backup_status.json")
+    monkeypatch.setattr(BK, "PAUSE_PATH", logs / "backup_paused.json")
     monkeypatch.setattr(LK, "LOCK_PATH", logs / "cycle.lock")
     monkeypatch.setattr(SCH, "query_task", lambda name, **_: {**SCH.UNKNOWN, "reason": "test"})
     S.clear_caches()
@@ -304,6 +306,10 @@ def test_collector_reports_backup_without_paths(populated, client):
     b = r.json()["backup"]
     assert (b["recorded"], b["backup"], b["files"]) == (True, "pushed", 3)
     assert "secret" not in r.text and "kel-state" not in r.text
+    assert b["paused"] is None
+    BK.set_pause("repairing")
+    S.clear_caches()
+    assert client.get("/api/sports/collector").json()["backup"]["paused"]["reason"] == "repairing"
 
 
 def test_scheduler_result_codes_are_decoded():
@@ -420,3 +426,116 @@ def test_scheduler_query_parsing():
     ok = SCH.query_task("t-ok", runner=lambda a: P(0, out=csv_out))
     assert ok["enabled"] is True and ok["last_result"] == "0" and ok["status"] == "Ready"
     SCH._cache.clear()
+
+
+# ---------------------------------------------------------------- results over time
+
+MARKETLESS = {"frozen": {"p": 0.7, "model": "elo"}, "calibrated": {"p": 0.65, "map": {"form": "identity"}},
+              "market": {"unavailable": "unavailable: no two-sided candle within 3 h"},
+              "blend": {"unavailable": "market candidate unavailable"}}
+WIN, LOSS = (0.6 - 1) ** 2 - (0.55 - 1) ** 2, 0.6 ** 2 - 0.55 ** 2  # frozen minus market Brier on FULL
+
+
+@pytest.fixture
+def timeline(env):
+    cap, sc = env["capture"], env["scores"]
+    (env["root"] / "logs" / "collector_cycles.jsonl").write_text(
+        json.dumps({"purpose": "scheduled", "capture": {"run_id": "run-auto"}}) + "\n", encoding="utf-8")
+    t0 = NOW - 10 * 86400
+
+    def event(cluster, contracts, run_id="run-test"):
+        _write_record(cap, "nfl", cluster, "Football", "WINDOW_CAPTURE", t0, contracts, ["KX"], run_id=run_id)
+
+    def score(cluster, c, y, settled, run_id="run-test"):
+        _write_score(sc, "nfl", cluster, "Football", c, y, settled_at=_iso(settled) if settled else None,
+                     source_run_id=run_id)
+
+    # E1 (automatic): two FULL contracts settle at t0+200 and t0+300; a marketless contract is still pending.
+    e1 = [_contract("KX-E1-A", "game_winner", FULL), _contract("KX-E1-B", "game_winner", FULL),
+          _contract("KX-E1-C", "game_winner", MARKETLESS)]
+    event("espn:e1", e1, "run-auto")
+    score("espn:e1", e1[0], 1, t0 + 200, "run-auto")
+    score("espn:e1", e1[1], 0, t0 + 300, "run-auto")
+    # E2 (manual): completes first.
+    e2 = [_contract("KX-E2-A", "game_winner", FULL)]
+    event("espn:e2", e2)
+    score("espn:e2", e2[0], 1, t0 + 100)
+    # E3: partially settled.
+    e3 = [_contract("KX-E3-A", "game_winner", FULL), _contract("KX-E3-B", "spread", FULL)]
+    event("espn:e3", e3)
+    score("espn:e3", e3[0], 1, t0 + 50)
+    # E4: completed but the score records no settlement time.
+    e4 = [_contract("KX-E4-A", "game_winner", FULL)]
+    event("espn:e4", e4)
+    score("espn:e4", e4[0], 1, None)
+    # E5: settled without a YES/NO outcome.
+    e5 = [_contract("KX-E5-A", "game_winner", FULL)]
+    event("espn:e5", e5)
+    score("espn:e5", e5[0], None, t0 + 400)
+    # E6: no market reference at all, so never selected for frozen:market.
+    e6 = [_contract("KX-E6-A", "game_winner", FROZEN_ONLY)]
+    event("espn:e6", e6)
+    score("espn:e6", e6[0], 1, t0 + 10)
+    S.clear_caches()
+    return env
+
+
+def test_timeline_points_are_completed_events_in_completion_order(timeline):
+    from research.sports.scoring import report as RE
+    r = S.get_results_timeline({}, ("frozen", "market"))
+    assert [p["event_id"].split("|")[1] for p in r["points"]] == ["espn:e2", "espn:e1"]
+    assert r["points"][0]["event_d_brier"] == pytest.approx(WIN)
+    assert r["points"][1]["event_d_brier"] == pytest.approx((WIN + LOSS) / 2)
+    assert [p["cumulative_d_brier_event"] for p in r["points"]] == pytest.approx([WIN, (WIN + (WIN + LOSS) / 2) / 2])
+    assert [p["collection_mode"] for p in r["points"]] == ["manual_pilot", "automatic"]
+    cohort = [s for s in S.scores() if s["event_key"] in ("nfl|espn:e1", "nfl|espn:e2")]
+    assert r["final"]["equal"] is True
+    assert r["final"]["cumulative_d_brier_event"] == pytest.approx(RE.paired(cohort, "frozen", "market")["brier_event"],
+                                                                   abs=1e-12)
+    assert r["cohort"]["events"] == 2 and r["cohort"]["contracts"] == 3
+    assert r["cohort"]["by_collection"] == {"manual_pilot": 1, "automatic": 1}
+    assert r["points"][-1]["completed_at"] == r["cohort"]["last_completed_at"]
+
+
+def test_timeline_reports_partial_undated_and_nonbinary_events_separately(timeline):
+    r = S.get_results_timeline({}, ("frozen", "market"))
+    nic = r["not_in_chart"]
+    assert nic["partially_settled"] == {"events": 1, "selected_contracts": 2}
+    assert nic["nonbinary"] == {"events": 1, "selected_contracts": 1}
+    assert nic["undated_completed"]["events"] == 1
+    assert nic["undated_completed"]["d_brier_event"] == pytest.approx(WIN)
+    basis = r["results_table_basis"]
+    # E1 (2) + E2 (1) + settled half of E3 (1) + undated E4 (1); E5 has no label; E6 has no market reference.
+    assert (basis["contracts"], basis["events"]) == (5, 4)
+    assert basis["d_brier_event"] != pytest.approx(r["final"]["cumulative_d_brier_event"])
+
+
+def test_timeline_selection_is_candidate_specific(timeline):
+    fm = S.get_results_timeline({}, ("frozen", "market"))
+    cf = S.get_results_timeline({}, ("calibrated", "frozen"))
+    assert "nfl|espn:e1" in {p["event_id"] for p in fm["points"]}
+    # For calibrated:frozen E1 also selects its marketless contract, which has not settled.
+    assert "nfl|espn:e1" not in {p["event_id"] for p in cf["points"]}
+    assert cf["not_in_chart"]["partially_settled"]["events"] == 2
+    # E6 (frozen only) is selected by neither pair.
+    assert all("espn:e6" not in p["event_id"] for p in fm["points"] + cf["points"])
+
+
+def test_timeline_filters_and_collection(timeline):
+    auto = S.get_results_timeline({}, ("frozen", "market"), "automatic")
+    assert [p["event_id"] for p in auto["points"]] == ["nfl|espn:e1"]
+    assert auto["collection"] == "automatic" and auto["results_table_basis"]["events"] == 1
+    gw = S.get_results_timeline({"family": "game_winner"}, ("frozen", "market"))
+    # Only E3's game_winner contract is selected under this filter, and it is settled: E3 completes.
+    assert "nfl|espn:e3" in {p["event_id"] for p in gw["points"]}
+    assert gw["not_in_chart"]["partially_settled"]["events"] == 0
+    assert S.get_results_timeline({"sport": "Soccer"}, ("frozen", "market"))["points"] == []
+
+
+def test_timeline_route_validates_pair_and_is_empty_without_data(env, client):
+    assert client.get("/api/sports/results/timeline?pair=frozen:blend").status_code == 400
+    assert client.get("/api/sports/results/timeline?pair=market:frozen").status_code == 400
+    assert client.get("/api/sports/results/timeline?collection=bogus").status_code == 422
+    r = client.get("/api/sports/results/timeline").json()
+    assert r["points"] == [] and r["final"]["cumulative_d_brier_event"] is None and r["kind"] == "prospective"
+    assert r["pair"] == {"candidate": "frozen", "reference": "market"}

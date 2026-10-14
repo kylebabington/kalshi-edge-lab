@@ -273,6 +273,62 @@ export type SportsResults = {
   artifacts: SportsArtifacts
 }
 
+export type TimelineFilters = {
+  pair?: string
+  sport?: string
+  competition?: string
+  family?: string
+  cohort?: string
+  collection?: string
+}
+
+export type TimelinePoint = {
+  event_id: string
+  completed_at: string
+  contracts: number
+  collection_mode: CollectionMode
+  event_d_brier: number
+  events: number
+  cumulative_d_brier_event: number
+}
+
+type GroupCount = { events: number; selected_contracts: number }
+
+export type SportsResultsTimeline = {
+  generated_at: string
+  label: string
+  kind: 'prospective'
+  pilot_note: string
+  sign_note: string
+  note: string
+  pair: { candidate: CandidateName; reference: CandidateName }
+  pairs: { candidate: CandidateName; reference: CandidateName }[]
+  filters: Record<string, string>
+  collection: string
+  collection_modes: CollectionMode[]
+  collection_labels: Record<string, string>
+  points: TimelinePoint[]
+  cohort: {
+    events: number
+    contracts: number
+    first_completed_at: string | null
+    last_completed_at: string | null
+    first_prediction_as_of: string | null
+    last_prediction_as_of: string | null
+    by_collection: Record<string, number>
+  }
+  final: { cumulative_d_brier_event: number | null; paired_d_brier_event_on_cohort: number | null; equal: boolean }
+  not_in_chart: {
+    partially_settled: GroupCount
+    pending: GroupCount
+    nonbinary: GroupCount
+    inconsistent: GroupCount
+    undated_completed: GroupCount & { d_brier_event: number | null }
+  }
+  results_table_basis: { note: string; contracts: number; events: number; d_brier_event: number | null; d_brier: number | null }
+  artifacts: SportsArtifacts
+}
+
 export type CoverageFilters = {
   sport?: string
   competition?: string
@@ -464,6 +520,7 @@ export type SportsCollectorStatus = {
     incomplete?: boolean
     local_head?: string
     ref?: string
+    paused?: { paused_at?: string; reason?: string } | null
   }
   limits: string
 }

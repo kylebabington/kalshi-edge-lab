@@ -17,6 +17,7 @@ from api.schemas import (
     SportsEventListResponse,
     SportsHistoricalResponse,
     SportsResultsResponse,
+    SportsResultsTimelineResponse,
     SportsSummaryResponse,
 )
 from research.sports import service
@@ -67,6 +68,22 @@ def sports_results(
 ) -> dict:
     filters = {"sport": sport, "competition": competition, "family": family, "cohort": cohort}
     return service.get_results(filters, weighting)
+
+
+@router.get("/results/timeline", response_model=SportsResultsTimelineResponse)
+def sports_results_timeline(
+    pair: str = Query("frozen:market", max_length=40),
+    sport: str | None = None,
+    competition: str | None = None,
+    family: str | None = None,
+    cohort: str | None = None,
+    collection: Literal["automatic", "collector_manual", "manual_pilot"] | None = None,
+) -> dict:
+    parsed = service.parse_pair(pair)
+    if parsed is None:
+        raise HTTPException(status_code=400, detail=f"Unknown pair {pair!r}; expected candidate:reference")
+    filters = {"sport": sport, "competition": competition, "family": family, "cohort": cohort}
+    return service.get_results_timeline(filters, parsed, collection)
 
 
 @router.get("/coverage", response_model=SportsCoverageResponse)

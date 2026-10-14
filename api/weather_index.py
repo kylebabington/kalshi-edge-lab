@@ -23,7 +23,9 @@ from zoneinfo import ZoneInfo
 
 from kalshi import cache
 from research.weather import checkpoints as CK
+from research.weather import resolution as RES
 from research.weather import snapshots as SN
+from research.weather.asof_observations import climate_day_bounds_utc
 
 ET = ZoneInfo("America/New_York")
 VIEWS = ("upcoming", "awaiting_settlement", "settled")
@@ -276,6 +278,111 @@ def saved_events(filters: dict, sort: str = "default", page: int = 1, page_size:
             "items": sel[(page - 1) * page_size: page * page_size]}
 
 
+# ---------------------------------------------------------------- prediction history (one event)
+
+def bucket_definition(label: str, ticker: str | None) -> dict:
+    """Saved definition of one bucket: its label, the integer bounds the label states (via the repo's bucket
+    parser) and the market ticker the snapshot's quote sidecar saved for that label (if any)."""
+    b = RES.parse_temperature_bucket({"yes_sub_title": label, "ticker": ticker})
+    lo, hi = (b.lower_bound, b.upper_bound) if b else (None, None)
+    parsed = b is not None
+    key = f"{label}|{lo if lo is not None else '-'}|{hi if hi is not None else '-'}|{ticker or '-'}"
+    return {"id": key, "label": label, "lower_f": lo, "upper_f": hi, "ticker": ticker, "bounds_parsed": parsed}
+
+
+def _sidecar_tickers(snap: dict) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for m in (snap.get("kalshi_quote_sidecar") or {}).get("markets") or []:
+        if isinstance(m, dict) and isinstance(m.get("label"), str) and isinstance(m.get("ticker"), str):
+            out[m["label"]] = m["ticker"]
+    return out
+
+
+def _raw_probabilities(snap: dict) -> dict[str, Any]:
+    raw = snap.get("external_probability_distribution")
+    if not isinstance(raw, dict) or not raw:
+        raw = (snap.get("prediction") or {}).get("bucket_probabilities")
+    return raw if isinstance(raw, dict) else {}
+
+
+def _classify_obs_time(ts: Any, start: datetime, end: datetime) -> str:
+    """Position of one observation time relative to the target's fixed-EST climate day. Missing or unparseable
+    times, and times without a UTC offset, are ``unknown`` (never assumed to be on either side)."""
+    if not isinstance(ts, str) or not ts:
+        return "unknown"
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return "unknown"
+    if dt.tzinfo is None:
+        return "unknown"
+    if dt < start:
+        return "before_day"
+    if dt >= end:
+        return "after_day"
+    return "in_day"
+
+
+def observation_summary(snap: dict, target_date: str | None) -> dict:
+    ob = (snap.get("evidence") or {}).get("observations")
+    prov = ((snap.get("prediction") or {}).get("provenance") or {})
+    used = prov.get("live_has_observations")
+    if not isinstance(ob, dict):
+        return {"present": False, "used_by_prediction": used if isinstance(used, bool) else None}
+    out: dict[str, Any] = {"present": True, "used_by_prediction": used if isinstance(used, bool) else None,
+                           "station_id": ob.get("station_id"), "high_so_far_f": _finite(ob.get("high_so_far_f")),
+                           "latest_temperature_f": _finite(ob.get("latest_temperature_f")),
+                           "latest_timestamp": ob.get("latest_timestamp"),
+                           "quality_status": ob.get("quality_status"), "freshness_status": ob.get("freshness_status")}
+    try:
+        start, end = climate_day_bounds_utc(str(target_date)) if target_date else (None, None)
+    except ValueError:
+        start, end = None, None
+    if start is None:
+        out.update(climate_day_bounds_utc=None, latest_position="unknown",
+                   trajectory_points={"in_day": 0, "before_day": 0, "after_day": 0, "unknown": 0})
+        return out
+    traj = ob.get("trajectory") if isinstance(ob.get("trajectory"), list) else []
+    counts = {"in_day": 0, "before_day": 0, "after_day": 0, "unknown": 0}
+    for pt in traj:
+        counts[_classify_obs_time(pt.get("timestamp") if isinstance(pt, dict) else None, start, end)] += 1
+    out.update(climate_day_bounds_utc=[_iso(start), _iso(end)],
+               latest_position=_classify_obs_time(ob.get("latest_timestamp"), start, end),
+               trajectory_points=counts)
+    return out
+
+
+def run_summary(snap: dict) -> dict:
+    pred = snap.get("prediction") or {}
+    ev = snap.get("evidence") or {}
+    gefs_meta = (ev.get("gefs") or {}).get("metadata") or {}
+    return {"run_id": pred.get("run_id"), "forecast_run": pred.get("forecast_run"),
+            "gfs_model_run_at": (ev.get("gfs") or {}).get("model_run_at"),
+            "hrrr_model_run_at": (ev.get("hrrr") or {}).get("model_run_at"),
+            "gefs_member_count": gefs_meta.get("member_count") if isinstance(gefs_meta.get("member_count"), int)
+            else None,
+            "calibration_artifact_id": snap.get("calibration_artifact_id"), "schema_version": snap.get("schema_version")}
+
+
+def history_row(snap: dict, target_date: str | None) -> tuple[dict, list[dict]]:
+    """Per-snapshot history fields plus the bucket definitions it saved. Probabilities that are missing, not
+    finite or outside [0, 1] stay ``None`` with ``invalid`` set; nothing is interpolated."""
+    tickers = _sidecar_tickers(snap)
+    defs, probs = [], {}
+    for label, v in _raw_probabilities(snap).items():
+        d = bucket_definition(str(label), tickers.get(str(label)))
+        f = _finite(v)
+        ok = f is not None and 0.0 <= f <= 1.0
+        probs[d["id"]] = {"p": f if ok else None, "invalid": not ok}
+        defs.append(d)
+    return {"probabilities": probs, "run": run_summary(snap), "observation": observation_summary(snap, target_date)}, defs
+
+
+def _bucket_order(d: dict) -> tuple:
+    lo, hi = d["lower_f"], d["upper_f"]
+    return (lo if lo is not None else -10_000, hi if hi is not None else 10_000, d["label"], d["ticker"] or "")
+
+
 def saved_event(ticker: str) -> dict | None:
     if not TICKER_RE.match(ticker or ""):
         return None
@@ -283,19 +390,42 @@ def saved_event(ticker: str) -> dict | None:
     event_dir = SN.SNAPSHOT_ROOT / ticker
     if not event_dir.is_dir():
         return None
-    snaps = [s for p in sorted(event_dir.glob("*.json")) if p.name != "latest.json"
-             for s in [_snapshot_summary(p, _read_json(p))] if s and s["event_ticker"] == ticker]
+    raws, snaps = {}, []
+    for p in sorted(event_dir.glob("*.json")):
+        if p.name == "latest.json":
+            continue
+        raw = _read_json(p)
+        s = _snapshot_summary(p, raw)
+        if s and s["event_ticker"] == ticker:
+            snaps.append(s)
+            raws[s["snapshot_id"]] = raw
     if not snaps:
         return None
     scores, receipts = _scores(), _receipts()
     today = now.astimezone(ET).date().isoformat()
     item = _event_item(ticker, snaps, scores, receipts, today)
-    rows = [{**{k: s[k] for k in ("snapshot_id", "prediction_as_of", "created_at", "checkpoint_id",
-                                  "prediction_status", "confidence_label", "expected_high")},
-             "score": snapshot_score(s, scores.get(s["snapshot_id"]))}
-            for s in sorted(snaps, key=lambda s: s["prediction_as_of"] or "")]
+    buckets: dict[str, dict] = {}
+    rows = []
+    for s in sorted(snaps, key=lambda s: (s["prediction_as_of"] or "", s["snapshot_id"])):
+        hist, defs = history_row(raws[s["snapshot_id"]], s["target_date"] or item["target_date"])
+        for d in defs:
+            b = buckets.setdefault(d["id"], {**d, "snapshots": 0, "valid_points": 0})
+            b["snapshots"] += 1
+            b["valid_points"] += 0 if hist["probabilities"][d["id"]]["invalid"] else 1
+        rows.append({**{k: s[k] for k in ("snapshot_id", "prediction_as_of", "created_at", "checkpoint_id",
+                                          "prediction_status", "confidence_label", "expected_high")},
+                     "score": snapshot_score(s, scores.get(s["snapshot_id"])), **hist})
+    ordered = sorted(buckets.values(), key=_bucket_order)
+    labels: dict[str, int] = {}
+    for b in ordered:
+        labels[b["label"]] = labels.get(b["label"], 0) + 1
+    for b in ordered:
+        b["definition_variants"] = labels[b["label"]]
     return {"generated_at": _iso(now), "label": "Saved weather forecasts", "source": SOURCE_SAVED,
-            "event": item, "snapshots": rows}
+            "event": item, "snapshots": rows, "buckets": ordered,
+            "history_note": "Saved model probabilities at each capture time. Points are not interpolated and are "
+                            "not market prices. Buckets with the same label but different saved definitions are "
+                            "separate series."}
 
 
 # ---------------------------------------------------------------- collector health and forecast freshness

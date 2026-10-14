@@ -15,6 +15,7 @@ import { CollectorStatusPanel } from '../components/sports/CollectorStatusPanel'
 import { DataStamp } from '../components/sports/DataStamp'
 import { FilterBar, Pager } from '../components/sports/FilterBar'
 import { Tabs } from '../components/sports/Tabs'
+import { TimelinePanel } from '../components/sports/TimelinePanel'
 import { CANDIDATE_LABELS, VIEW_LABELS, fmtNum, fmtSigned, label } from '../components/sports/format'
 import { useAsync } from '../components/sports/useAsync'
 import { cohortLabel, competitionLabel, familyLabel, sportLabel } from '../lib/labels'
@@ -427,6 +428,11 @@ export function ResultsTab({ params, setParam }: { params: Params; setParam: Set
           <ResultsView data={data} groupBy={groupBy} onGroupBy={(g) => setParam({ group: g })} />
         )
       ) : null}
+      <TimelinePanel
+        filters={{ sport: filters.sport, competition: filters.competition, family: filters.family, cohort: filters.cohort }}
+        params={params}
+        setParam={setParam}
+      />
     </>
   )
 }

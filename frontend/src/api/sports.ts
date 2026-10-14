@@ -10,7 +10,9 @@ import type {
   SportsEventList,
   SportsHistorical,
   SportsResults,
+  SportsResultsTimeline,
   SportsSummary,
+  TimelineFilters,
 } from '../types/sports'
 import {
   mockSportsCollector,
@@ -19,6 +21,7 @@ import {
   mockSportsEvents,
   mockSportsHistorical,
   mockSportsResults,
+  mockSportsResultsTimeline,
   mockSportsSummary,
 } from '../mocks/sports'
 
@@ -52,6 +55,11 @@ export async function fetchSportsEvent(eventId: string): Promise<SportsEventDeta
 export async function fetchSportsResults(filters: ResultFilters = {}): Promise<SportsResults> {
   if (isMockMode()) return { ...mockSportsResults, weighting: filters.weighting ?? 'event' }
   return apiGet<SportsResults>(`/api/sports/results${query(filters)}`)
+}
+
+export async function fetchSportsResultsTimeline(filters: TimelineFilters = {}): Promise<SportsResultsTimeline> {
+  if (isMockMode()) return mockSportsResultsTimeline
+  return apiGet<SportsResultsTimeline>(`/api/sports/results/timeline${query(filters)}`)
 }
 
 export async function fetchSportsCoverage(filters: CoverageFilters = {}): Promise<SportsCoverage> {

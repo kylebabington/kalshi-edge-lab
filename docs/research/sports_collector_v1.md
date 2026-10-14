@@ -100,7 +100,10 @@ the wrapper's start/end lines instead.
 weather backup, whose allowlist, ref (`refs/heads/state`), clone and ownership marker are unchanged.
 
 - Destination: the private state remote and SSH command already in `collector.local.json` (read only),
-  separate ref `refs/heads/sports-state`, separate clone `%USERPROFILE%\.kel\sports-state-backup`.
+  separate ref `refs/heads/sports-state-v2`, separate clone `%USERPROFILE%\.kel\sports-state-backup-v2`.
+  The v2 branch was started from the last pushed `refs/heads/sports-state` commit (`init --create
+  --base-ref refs/heads/sports-state`) because the old clone's unpushed history embeds a 112 MB blob that
+  GitHub rejects. The old ref and old clone are kept as they are and are never written by v2.
 - Allowlist (`plan` lists it): capture records (`capture_v2/{accepted,attempts,runs}`), scores
   (`capture_v2_scores/{finalized,runs}`), `research/sports/protocols/*`, every dependency file named by a
   record (checked against the record's sha256), exactly the raw evidence bodies and `.meta.json` files
@@ -110,6 +113,14 @@ weather backup, whose allowlist, ref (`refs/heads/state`), clone and ownership m
   unreferenced cache bodies.
 - Storage: `* -text`, `MANIFEST.json` with sha256, size and class per file. Write-once files that change
   locally, append-only logs that shrink, or files that vanish stop the backup instead of being mirrored.
+  Files of 32 MiB or more are stored as gzip pieces (`kel_gzip_chunks_v1`: 16 MiB of raw data per piece,
+  level 6, no timestamp) at `state/<path>.kelchunks/00000.gz`, …; the manifest entry keeps the original
+  sha256 and size plus each piece's raw and stored sha256 and size. Unchanged pieces are reused, so an
+  appended file uploads only its changed tail pieces. Restore decompresses each piece, checks every hash,
+  and recreates the original path and bytes. Version 1 manifests stay readable.
+- Push guard: before pushing, every blob that would be sent (`rev-list --objects` over the commits the
+  remote does not have) is checked; any blob over 50 MiB stops the run with `blocked_oversized` and the
+  offending paths instead of attempting the push.
 - Coordination: an unlocked warm-up pass copies and hashes everything first; the final pass, which
   defines the snapshot and manifest, holds the sports lock (no capture or settlement writes mid-copy; a busy
   lock skips) and only handles files whose size or modification time changed, so the lock is held for a
@@ -117,8 +128,12 @@ weather backup, whose allowlist, ref (`refs/heads/state`), clone and ownership m
   directory; `verify-restore` rehashes everything. The push waits while the weather cycle lock is held (the weather backup
   runs inside it), is never forced, and a remote with unknown commits is reported as `conflict`.
 - Schedule: the task wrapper runs `backup run --if-due` after each cycle, at below-normal priority with
-  single-threaded packing; it pushes at most hourly (or retries sooner after a failure). Its result goes to
-  the task log and `data\logs\sports\backup_status.json` and never changes the cycle's exit code.
+  single-threaded packing; it pushes at most hourly, and waits 30 minutes after a failure (a deferred or
+  busy run is retried at the next cycle). Its result goes to the task log and
+  `data\logs\sports\backup_status.json` and never changes the cycle's exit code. Backup failures are
+  reported separately from capture health. `backup pause --reason …` writes
+  `data\logs\sports\backup_paused.json`, which makes only the scheduled `run --if-due` skip (collection is
+  unaffected and nothing local is touched); `backup resume` removes it.
 - Restore check: `verify-restore` clones the ref fresh with `autocrlf=true`/`eol=crlf`, verifies the
   manifest, restores into an empty temporary tree next to a copy of the tracked code, compares every file
   byte-for-byte with this repo, and runs `replay --all` and `verify-scores` inside the isolated tree with
@@ -126,7 +141,10 @@ weather backup, whose allowlist, ref (`refs/heads/state`), clone and ownership m
 
 Size: about 440 MB at the first backup (4,585 files; the largest is an 85 MB normalized-history
 dependency, under GitHub's 100 MB per-file limit). It grows with evidence, roughly 1–2 MB per captured
-event.
+event. At the v2 repair (2026-10-14) it was 38,007 files and 2.77 GB; four normalized-history files
+(the largest 112 MB) are chunked, and the largest stored blob is about 10 MB. The first v2 push sent
+1.07 GB of new blobs; the isolated restore matched every file byte for byte, replayed 1,681 records
+and verified 7,296 scores.
 
 ### Commands
 
@@ -160,9 +178,11 @@ Start-ScheduledTask -TaskName KalshiEdgeLab-SportsProspective
 
 # Sports-state backup
 .\.venv\Scripts\python.exe -m research.sports.ops.backup plan             # what would be backed up
-.\.venv\Scripts\python.exe -m research.sports.ops.backup init [--create]  # once per machine
+.\.venv\Scripts\python.exe -m research.sports.ops.backup init [--create] [--base-ref refs/heads/sports-state]
 .\.venv\Scripts\python.exe -m research.sports.ops.backup run              # snapshot, commit, push
-.\.venv\Scripts\python.exe -m research.sports.ops.backup status
+.\.venv\Scripts\python.exe -m research.sports.ops.backup status           # last run + pause marker
+.\.venv\Scripts\python.exe -m research.sports.ops.backup pause --reason "..."   # skip scheduled backups only
+.\.venv\Scripts\python.exe -m research.sports.ops.backup resume
 .\.venv\Scripts\python.exe -m research.sports.ops.backup verify-restore   # isolated restore + offline replay
 ```
 

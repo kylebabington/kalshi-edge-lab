@@ -14,6 +14,7 @@ import {
   mockSportsEvents,
   mockSportsHistorical,
   mockSportsResults,
+  mockSportsResultsTimeline,
   mockSportsSummary,
 } from '../mocks/sports'
 import { SportsEventPage } from '../pages/SportsEventPage'
@@ -27,6 +28,7 @@ vi.mock('../api/sports', async (importOriginal) => {
     fetchSportsEvents: vi.fn(),
     fetchSportsEvent: vi.fn(),
     fetchSportsResults: vi.fn(),
+    fetchSportsResultsTimeline: vi.fn(),
     fetchSportsCoverage: vi.fn(),
     fetchSportsHistorical: vi.fn(),
     fetchSportsCollector: vi.fn(),
@@ -54,6 +56,7 @@ beforeEach(() => {
   m.fetchSportsEvents.mockImplementation(async (f) => mockSportsEvents(f))
   m.fetchSportsEvent.mockResolvedValue(mockSportsEventDetail)
   m.fetchSportsResults.mockResolvedValue(mockSportsResults)
+  m.fetchSportsResultsTimeline.mockResolvedValue(mockSportsResultsTimeline)
   m.fetchSportsCoverage.mockResolvedValue(mockSportsCoverage)
   m.fetchSportsHistorical.mockResolvedValue(mockSportsHistorical)
   m.fetchSportsCollector.mockResolvedValue(mockSportsCollector)
@@ -240,6 +243,31 @@ describe('Sports tabs', () => {
     expect(screen.queryByText(/best bet|top pick|\bBUY\b/i)).toBeNull()
   })
 
+  it('results over time chart completed events and report other cohorts separately', async () => {
+    const user = userEvent.setup()
+    renderSports('/sports?tab=results&sport=football')
+    const panel = (await screen.findByRole('heading', { name: /Results over time/ })).closest('section')!
+    expect(panel).toHaveTextContent('(prospective pilot only)')
+    expect(await within(panel).findByText(/2 completed events, 5 matched contracts/)).toBeInTheDocument()
+    expect(panel).toHaveTextContent(/partially settled 1 events \(4 contracts\)/)
+    expect(panel).toHaveTextContent(/completed without a settlement time 1/)
+    expect(panel).toHaveTextContent(/Results table basis \(different cohort\)/)
+    const table = within(panel).getByRole('table', { name: /Completed events, most recent first/ })
+    const rows = within(table).getAllByRole('row')
+    expect(rows[1]).toHaveTextContent('nfl|espn:mock-2')
+    expect(rows[1]).toHaveTextContent('-0.0100 (2)')
+    expect(m.fetchSportsResultsTimeline).toHaveBeenCalledWith(expect.objectContaining({ pair: 'frozen:market', sport: 'football' }))
+    await user.selectOptions(within(panel).getByLabelText('Pair'), 'blend:market')
+    await waitFor(() =>
+      expect(m.fetchSportsResultsTimeline).toHaveBeenLastCalledWith(expect.objectContaining({ pair: 'blend:market' })),
+    )
+    await user.selectOptions(within(panel).getByLabelText('Collection'), 'automatic')
+    await waitFor(() =>
+      expect(m.fetchSportsResultsTimeline).toHaveBeenLastCalledWith(expect.objectContaining({ collection: 'automatic' })),
+    )
+    expect(panel.textContent).not.toMatch(/winner|better model|profit/i)
+  })
+
   it('historical research carries the historical badge and its period', async () => {
     renderSports('/sports?tab=historical')
     await screen.findByText(/shown separately from the prospective pilot/i)
@@ -263,7 +291,7 @@ describe('Sports tabs', () => {
 
 describe('Sports event detail', () => {
   it('shows actual unavailable reasons instead of zero', async () => {
-    renderSports('/sports/events/ncaaf%7Cespn%3Amock-1')
+    renderSports('/sports/events/ncaaf%7Cespn%3Amock-1?family=spread')
     await screen.findByRole('heading', { name: 'Mock State at Example Tech' })
     expect(m.fetchSportsEvent).toHaveBeenCalledWith('ncaaf|espn:mock-1')
     expect(screen.getByText('Unavailable: no quote (candle older than 3 h)')).toBeInTheDocument()
@@ -278,8 +306,44 @@ describe('Sports event detail', () => {
     expect(screen.getByText(/latest hourly Kalshi candle/i)).toBeInTheDocument()
     expect(screen.getAllByText(/candle 2026-10-10 15:00 UTC · age 46 min/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Brier 0\.1444/)).toBeInTheDocument()
-    expect(screen.getAllByRole('columnheader', { name: /Listing bid \/ ask \(diagnostic\)/ })).toHaveLength(2)
+    expect(screen.getAllByRole('columnheader', { name: /Listing bid \/ ask \(diagnostic\)/ })).toHaveLength(1)
     expect(screen.getByText('Provenance').closest('details')).not.toHaveAttribute('open')
+  })
+
+  it('compares candidates side by side with market differences only on matched contracts', async () => {
+    const user = userEvent.setup()
+    renderSports('/sports/events/ncaaf%7Cespn%3Amock-1')
+    await screen.findByRole('heading', { name: 'Mock State at Example Tech' })
+    expect(screen.getByRole('note')).toHaveTextContent(/One saved prediction checkpoint/)
+    expect(screen.getByRole('note')).toHaveTextContent(/no time series/i)
+    await user.selectOptions(screen.getByLabelText('Contract family'), 'spread')
+    const summary = await screen.findByRole('table', { name: /Candidates side by side/ })
+    expect(summary).toHaveAccessibleName(/probability differences, not executable edge/)
+    const market = within(summary).getByRole('rowheader', { name: 'Market reference' }).parentElement!
+    expect(market).toHaveTextContent('1 / 2')
+    expect(market).toHaveTextContent('no quote (candle older than 3 h) (1)')
+    const frozen = within(summary).getByRole('rowheader', { name: 'Frozen' }).parentElement!
+    expect(frozen).toHaveTextContent('0.020')
+    const ext7 = screen.getByRole('rowheader', { name: /KXNCAAFSPREAD-MOCK1-EXT7/ }).parentElement!
+    expect(within(ext7).getAllByText('not matched')).toHaveLength(3)
+    const ext3 = screen.getByRole('rowheader', { name: /KXNCAAFSPREAD-MOCK1-EXT3/ }).parentElement!
+    expect(ext3).toHaveTextContent('+0.020')
+    expect(ext3).toHaveTextContent('+0.050')
+    expect(screen.queryByText(/edge:|\bBUY\b|profit/i)).toBeNull()
+  })
+
+  it('paginates large contract families instead of rendering every strike', async () => {
+    const base = mockSportsEventDetail.families[1].contracts[1]
+    const many = Array.from({ length: 60 }, (_, i) => ({ ...base, ticker: `KXMANY-${String(i).padStart(2, '0')}` }))
+    m.fetchSportsEvent.mockResolvedValue({ ...mockSportsEventDetail, families: [{ family: 'spread', contracts: many }] })
+    const user = userEvent.setup()
+    renderSports('/sports/events/ncaaf%7Cespn%3Amock-1')
+    await screen.findByText(/Contracts 1–25 of 60/)
+    expect(screen.getAllByRole('rowheader', { name: /KXMANY-/ })).toHaveLength(25)
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText(/Contracts 26–50 of 60/)).toBeInTheDocument()
+    expect(screen.getByRole('rowheader', { name: /KXMANY-25/ }).closest('tr')?.firstElementChild).toHaveTextContent('26')
+    expect(screen.queryByRole('rowheader', { name: /KXMANY-00/ })).toBeNull()
   })
 
   it('shows not-found for an unknown event id', async () => {

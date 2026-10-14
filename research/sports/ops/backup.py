@@ -16,8 +16,17 @@ Never included: credentials and config (``collector.local.json``, ``.env``), loc
 dry runs, unreferenced cache bodies.
 
 Destination: the private state remote and SSH command already configured in ``collector.local.json``
-(read only), but a separate ref (``refs/heads/sports-state``) and a separate local clone. The weather
-backup's ref, clone, allowlist and ownership marker are not touched.
+(read only), but a separate ref (``refs/heads/sports-state-v2``) and a separate local clone. The weather
+backup's ref, clone, allowlist and ownership marker are not touched. ``sports-state-v2`` starts from the last
+pushed ``sports-state`` (v1) commit; the v1 clone and its unpushed commits are preserved but no longer written.
+
+Storage (manifest ``kel_sports_state_backup_v2``): files under 32 MiB are stored byte-for-byte at
+``state/<rel>``; larger files as gzip pieces of 16 MiB raw bytes at ``state/<rel>.kelchunks/<index>.gz``, with
+the sha256 of every stored piece, every raw piece and the whole file in the manifest. Restore reassembles and
+verifies all three. Before pushing, every blob the push would upload is checked against a 50 MiB limit.
+
+Scheduled runs (``run --if-due``) skip while ``data/logs/sports/backup_paused.json`` exists (``pause`` /
+``resume``), and wait 30 minutes after a failed run before retrying.
 
 Coordination: the snapshot is copied while holding the sports lock (no capture or settlement can write
 mid-copy). Pushes wait for the weather cycle lock to be free (the weather backup runs inside that lock),
@@ -27,6 +36,7 @@ are never forced, and a remote that has commits this host does not know is repor
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import os
 import shutil
@@ -34,6 +44,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -45,13 +57,28 @@ from ..live import config as LC
 from ..scoring import config as SCC
 from . import lock as LK
 
-SCHEMA = "kel_sports_state_backup_v1"
+SCHEMA = "kel_sports_state_backup_v2"
+READABLE_SCHEMAS = ("kel_sports_state_backup_v1", SCHEMA)
 PROFILE = "sports"
-SPORTS_REF = "refs/heads/sports-state"
-DEFAULT_DIR = Path.home() / ".kel" / "sports-state-backup"
+SPORTS_REF = "refs/heads/sports-state-v2"
+DEFAULT_DIR = Path.home() / ".kel" / "sports-state-backup-v2"
+# v1 history: its unpushed local commits embed a >100 MB blob, so v2 starts from the last pushed v1 commit.
+LEGACY_REF = "refs/heads/sports-state"
+LEGACY_DIR = Path.home() / ".kel" / "sports-state-backup"
 STATE_DIR = "state"
 MANIFEST = "MANIFEST.json"
 INTERVAL = timedelta(hours=1)
+FAILURE_BACKOFF = timedelta(minutes=30)
+
+# Files at or above CHUNK_THRESHOLD are stored as gzip-compressed pieces of CHUNK_RAW_BYTES raw bytes under
+# ``state/<rel>.kelchunks/<index>.gz``; the manifest pins the sha256 of every piece and of the whole file.
+CHUNK_FORMAT = "kel_gzip_chunks_v1"
+CHUNK_SUFFIX = ".kelchunks"
+CHUNK_THRESHOLD = 32 * 1024 * 1024
+CHUNK_RAW_BYTES = 16 * 1024 * 1024
+# Refuse to push any pending blob above this (GitHub rejects blobs over 100 MB).
+MAX_BLOB_BYTES = 50 * 1024 * 1024
+GIT_ADD_TIMEOUT_S = 3600
 
 WRITE_ONCE = CO.WRITE_ONCE
 APPEND_ONLY = CO.APPEND_ONLY
@@ -82,6 +109,42 @@ STATUS_PATH = REPO_ROOT / LOG_REL / "backup_status.json"
 
 def status_path(repo_root: Path | None = None) -> Path:
     return STATUS_PATH if repo_root is None else repo_root / LOG_REL / "backup_status.json"
+
+
+PAUSE_PATH = REPO_ROOT / LOG_REL / "backup_paused.json"
+
+
+def pause_path(repo_root: Path | None = None) -> Path:
+    return PAUSE_PATH if repo_root is None else repo_root / LOG_REL / "backup_paused.json"
+
+
+def read_pause(repo_root: Path | None = None) -> dict | None:
+    """Operator marker that makes scheduled (``--if-due``) backups skip; manual runs are unaffected."""
+    try:
+        body = json.loads(pause_path(repo_root).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return {"reason": "unreadable pause marker"}
+    return body if isinstance(body, dict) else {"reason": "malformed pause marker"}
+
+
+def set_pause(reason: str, repo_root: Path | None = None, now: datetime | None = None) -> dict:
+    body = {"paused_at": _iso(now or datetime.now(timezone.utc)), "reason": reason}
+    path = pause_path(repo_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(json.dumps(body, indent=1) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+    return body
+
+
+def clear_pause(repo_root: Path | None = None) -> bool:
+    try:
+        pause_path(repo_root).unlink()
+        return True
+    except FileNotFoundError:
+        return False
 
 
 def backup_lock_path(repo_root: Path = REPO_ROOT) -> Path:
@@ -117,6 +180,8 @@ def load_config(path: Path | None = None, backup_dir: Path | None = None) -> Spo
         raise CO.ConfigError(f"sports backup ref {out.ref} collides with a weather ref")
     if cfg.backup_dir and Path(cfg.backup_dir).resolve() == out.backup_dir.resolve():
         raise CO.ConfigError("sports backup clone must not share the weather backup clone")
+    if out.backup_dir.resolve() == LEGACY_DIR.resolve():
+        raise CO.ConfigError(f"{LEGACY_DIR} holds the preserved v1 history and is not written to")
     return out
 
 
@@ -243,7 +308,8 @@ def collect_state(root: Path = REPO_ROOT, hasher: Hasher | None = None) -> Colle
     missing = sorted(r for r in referenced if not (root / r).is_file())
     rels.update(r for r in referenced if (root / r).is_file())
     rels.update(r for r in optional if (root / r).is_file())
-    bad = sorted(r for r in rels if any(is_excluded(part) for part in r.split("/")) or r.startswith("/") or ".." in r.split("/"))
+    bad = sorted(r for r in rels if any(is_excluded(part) or part.endswith(CHUNK_SUFFIX) for part in r.split("/"))
+                 or r.startswith("/") or ".." in r.split("/"))
     if bad:
         raise CO.OpsError(f"refusing excluded or unsafe paths in sports backup: {bad[:10]}")
     return Collected(files={r: root / r for r in sorted(rels)}, missing=missing,
@@ -258,15 +324,26 @@ def _bgit(cfg: SportsBackupConfig, args: list[str], **kw) -> subprocess.Complete
     return CO._git(args, cwd=cfg.backup_dir, ssh_command=cfg.ssh_command, timeout=cfg.git_timeout_s, **kw)
 
 
-def backup_init(cfg: SportsBackupConfig, *, create_if_missing: bool = False) -> dict:
-    """Clone the sports ref, or explicitly start it. Never adopts a divergent history."""
+def backup_init(cfg: SportsBackupConfig, *, create_if_missing: bool = False, base_ref: str | None = None) -> dict:
+    """Clone the sports ref, or explicitly start it (optionally on top of ``base_ref``'s pushed tip, so only
+    new content is uploaded). Never adopts a divergent history."""
     if (cfg.backup_dir / ".git").exists():
         raise CO.OpsError(f"{cfg.backup_dir} is already initialized")
     remote_sha = CO.remote_ref_sha(cfg.remote, cfg.ref, ssh_command=cfg.ssh_command, timeout=cfg.git_timeout_s)
     cfg.backup_dir.parent.mkdir(parents=True, exist_ok=True)
+    base_sha = None
     if remote_sha is not None:
         CO._git(["clone", "-q", "--branch", CO._branch(cfg.ref), "--single-branch", cfg.remote, str(cfg.backup_dir)],
                 ssh_command=cfg.ssh_command, timeout=cfg.git_timeout_s * 10)
+    elif base_ref and create_if_missing:
+        if base_ref in (cfg.ref,):
+            raise CO.OpsError("base ref must differ from the backup ref")
+        base_sha = CO.remote_ref_sha(cfg.remote, base_ref, ssh_command=cfg.ssh_command, timeout=cfg.git_timeout_s)
+        if base_sha is None:
+            raise CO.OpsError(f"base ref {base_ref} does not exist on the backup remote")
+        CO._git(["clone", "-q", "--branch", CO._branch(base_ref), "--single-branch", cfg.remote, str(cfg.backup_dir)],
+                ssh_command=cfg.ssh_command, timeout=cfg.git_timeout_s * 30)
+        _bgit(cfg, ["checkout", "-q", "-b", CO._branch(cfg.ref)])
     elif create_if_missing:
         CO._git(["init", "-q", "-b", CO._branch(cfg.ref), str(cfg.backup_dir)])
         _bgit(cfg, ["remote", "add", "origin", cfg.remote])
@@ -277,7 +354,8 @@ def backup_init(cfg: SportsBackupConfig, *, create_if_missing: bool = False) -> 
         raise CO.OpsError(f"{cfg.ref} does not exist on the backup remote; pass --create to start it")
     configure_clone(cfg)
     _check_attributes(cfg)
-    return {"backup_dir": str(cfg.backup_dir), "ref": cfg.ref, "remote_sha": remote_sha}
+    return {"backup_dir": str(cfg.backup_dir), "ref": cfg.ref, "remote_sha": remote_sha,
+            "base_ref": base_ref if base_sha else None, "base_sha": base_sha}
 
 
 CLONE_CONFIG = (("core.autocrlf", "false"), ("core.safecrlf", "false"),
@@ -296,10 +374,56 @@ def _check_attributes(cfg: SportsBackupConfig) -> None:
         raise CO.OpsError("sports backup clone lacks the '* -text' attributes; refusing to use it")
 
 
+def chunk_name(rel: str, index: int) -> str:
+    return f"{rel}{CHUNK_SUFFIX}/{index:05d}.gz"
+
+
+def stored_paths(rel: str, meta: dict) -> list[str]:
+    """Paths under ``state/`` that hold ``rel`` (one plain file, or its chunk files)."""
+    storage = meta.get("storage")
+    if not storage:
+        return [rel]
+    return [chunk_name(rel, i) for i in range(len(storage["chunks"]))]
+
+
+def _chunks_intact(state_dir: Path, rel: str, storage: dict, hasher: Hasher) -> bool:
+    for i, c in enumerate(storage["chunks"]):
+        p = state_dir / chunk_name(rel, i)
+        if not p.is_file() or p.stat().st_size != c["stored_size"] or hasher.sha(p, f"dst:{chunk_name(rel, i)}") != c["stored_sha256"]:
+            return False
+    return True
+
+
+def _write_chunked(state_dir: Path, rel: str, data: bytes, old: dict | None, hasher: Hasher) -> dict:
+    """Store ``data`` as gzip pieces; pieces whose raw bytes are unchanged since ``old`` are kept as they are."""
+    prior = (old or {}).get("chunks") or []
+    chunks = []
+    for i, offset in enumerate(range(0, len(data), CHUNK_RAW_BYTES)):
+        piece = data[offset:offset + CHUNK_RAW_BYTES]
+        sha = CO.sha256_bytes(piece)
+        name = chunk_name(rel, i)
+        dest = state_dir / name
+        prev = prior[i] if i < len(prior) else None
+        if (prev and prev["sha256"] == sha and dest.is_file() and dest.stat().st_size == prev["stored_size"]
+                and hasher.sha(dest, f"dst:{name}") == prev["stored_sha256"]):
+            chunks.append(prev)
+            continue
+        blob = gzip.compress(piece, compresslevel=6, mtime=0)
+        if len(blob) > MAX_BLOB_BYTES:
+            raise CO.OpsError(f"{rel}: chunk {i} is {len(blob)} bytes after compression (limit {MAX_BLOB_BYTES})")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(blob)
+        hasher.sha(dest, f"dst:{name}")
+        chunks.append({"sha256": sha, "size": len(piece), "stored_sha256": CO.sha256_bytes(blob),
+                       "stored_size": len(blob)})
+    return {"format": CHUNK_FORMAT, "raw_chunk_bytes": CHUNK_RAW_BYTES, "chunks": chunks}
+
+
 def _mirror(cfg: SportsBackupConfig, files: dict[str, Path], previous: dict, hasher: Hasher,
-            final: bool = True) -> dict:
+            final: bool = True, hints: dict | None = None) -> dict:
     """Copy changed files into the clone. ``final=False`` is the unlocked warm-up pass: it copies and caches
-    hashes but neither deletes nor writes the manifest; the locked final pass then handles only deltas."""
+    hashes but neither deletes nor writes the manifest; the locked final pass then handles only deltas
+    (``hints`` carries the warm-up pass's chunk layout so large files are not recompressed)."""
     state_dir = cfg.backup_dir / STATE_DIR
     manifest: dict[str, dict] = {}
     changed_once = []
@@ -313,6 +437,19 @@ def _mirror(cfg: SportsBackupConfig, files: dict[str, Path], previous: dict, has
     if changed_once:
         raise CO.OpsError(f"write-once files changed or append-only files shrank locally: {changed_once[:20]}")
     for rel, meta in manifest.items():
+        if meta["size"] >= CHUNK_THRESHOLD:
+            known = [m for m in ((hints or {}).get(rel), previous.get(rel))
+                     if m and (m.get("storage") or {}).get("format") == CHUNK_FORMAT]
+            same = next((m["storage"] for m in known if m["sha256"] == meta["sha256"]
+                         and _chunks_intact(state_dir, rel, m["storage"], hasher)), None)
+            if same is not None:
+                meta["storage"] = same
+                continue
+            data = files[rel].read_bytes()
+            if CO.sha256_bytes(data) != meta["sha256"]:
+                raise CO.OpsError(f"{rel} changed during the snapshot")
+            meta["storage"] = _write_chunked(state_dir, rel, data, known[0]["storage"] if known else None, hasher)
+            continue
         dest = state_dir / rel
         if dest.exists() and dest.stat().st_size == meta["size"] and hasher.sha(dest, f"dst:{rel}") == meta["sha256"]:
             continue
@@ -324,10 +461,11 @@ def _mirror(cfg: SportsBackupConfig, files: dict[str, Path], previous: dict, has
         hasher.sha(dest, f"dst:{rel}")
     if not final:
         return manifest
+    keep = {p for rel, meta in manifest.items() for p in stored_paths(rel, meta)}
     if state_dir.is_dir():
         for path in sorted(state_dir.rglob("*"), reverse=True):
             rel = path.relative_to(state_dir).as_posix()
-            if path.is_file() and rel not in manifest:
+            if path.is_file() and rel not in keep:
                 path.unlink()
             elif path.is_dir() and not any(path.iterdir()):
                 path.rmdir()
@@ -355,12 +493,39 @@ def read_status(repo_root: Path | None = None) -> dict | None:
         return None
 
 
-def is_due(repo_root: Path | None = None, now: datetime | None = None, interval: timedelta = INTERVAL) -> bool:
+def is_due(repo_root: Path | None = None, now: datetime | None = None, interval: timedelta = INTERVAL,
+           backoff: timedelta = FAILURE_BACKOFF) -> bool:
+    """Hourly after a successful push; retried next cycle after a deferral or busy lock; after a failure,
+    retried only once ``backoff`` has passed so a failing backup cannot occupy every 5-minute task run."""
     st = read_status(repo_root)
-    if not st or st.get("backup") not in ("pushed", "up_to_date") or not st.get("at"):
+    if not st or not st.get("at") or st.get("backup") in ("push_deferred", "skipped_busy"):
         return True
     last = datetime.fromisoformat(st["at"].replace("Z", "+00:00"))
-    return (now or datetime.now(timezone.utc)) - last >= interval
+    wait = interval if st.get("backup") in ("pushed", "up_to_date") else backoff
+    return (now or datetime.now(timezone.utc)) - last >= wait
+
+
+def pending_blobs(cfg: SportsBackupConfig, remote_sha: str | None) -> list[dict]:
+    """Every blob a push of HEAD would have to upload (not reachable from the remote ref or any
+    remote-tracking ref), with its size and a path naming it."""
+    args = ["rev-list", "--objects", "HEAD", "--not", "--remotes=origin"] + ([remote_sha] if remote_sha else [])
+    listing = CO._git(args, cwd=cfg.backup_dir, timeout=GIT_ADD_TIMEOUT_S).stdout
+    names: dict[str, str] = {}
+    for line in listing.splitlines():
+        sha, _, name = line.partition(" ")
+        if sha:
+            names.setdefault(sha, name)
+    if not names:
+        return []
+    proc = subprocess.run(["git", *CO.GIT_SAFE_CONFIG, "cat-file", "--batch-check=%(objecttype) %(objectname) %(objectsize)"],
+                          cwd=cfg.backup_dir, input="\n".join(names) + "\n", capture_output=True, text=True,
+                          encoding="utf-8", timeout=GIT_ADD_TIMEOUT_S, check=True)
+    out = []
+    for line in proc.stdout.splitlines():
+        kind, sha, size = line.split(" ")
+        if kind == "blob":
+            out.append({"sha": sha, "size": int(size), "path": names.get(sha, "")})
+    return out
 
 
 def run_backup(cfg: SportsBackupConfig, *, repo_root: Path = REPO_ROOT, now: datetime | None = None,
@@ -389,8 +554,9 @@ def run_backup(cfg: SportsBackupConfig, *, repo_root: Path = REPO_ROOT, now: dat
     manifest_path = cfg.backup_dir / MANIFEST
     previous = json.loads(manifest_path.read_text(encoding="utf-8"))["files"] if manifest_path.exists() else {}
     hasher = Hasher(cfg.backup_dir / ".git" / "kel_sports_hash_cache.json")
+    hints: dict = {}
     try:
-        _mirror(cfg, collect_state(repo_root, hasher).files, previous, hasher, final=False)
+        hints = _mirror(cfg, collect_state(repo_root, hasher).files, previous, hasher, final=False)
     except (CO.OpsError, OSError, ValueError, KeyError):
         pass  # warm-up only (files may be mid-write); the locked pass below decides
     t0 = time.monotonic()
@@ -401,7 +567,7 @@ def run_backup(cfg: SportsBackupConfig, *, repo_root: Path = REPO_ROOT, now: dat
             if vanished:
                 return finish("failed", error="write-once/append-only files vanished locally; refusing to mirror",
                               vanished=vanished[:50])
-            manifest = _mirror(cfg, col.files, previous, hasher)
+            manifest = _mirror(cfg, col.files, previous, hasher, hints=hints)
     except LK.LockBusy as busy:
         return finish("skipped_busy", error=str(busy))
     except (CO.OpsError, OSError, ValueError, KeyError) as error:
@@ -410,13 +576,14 @@ def run_backup(cfg: SportsBackupConfig, *, repo_root: Path = REPO_ROOT, now: dat
         hasher.save()
     result["sports_lock_held_s"] = round(time.monotonic() - t0, 1)
     result.update(files=len(manifest), bytes=sum(m["size"] for m in manifest.values()), counts=col.counts,
+                  chunked_files=sum(1 for m in manifest.values() if m.get("storage")),
                   missing=col.missing[:50], missing_count=len(col.missing),
                   dependency_drift=col.dependency_drift)
     try:
-        _bgit(cfg, ["add", "-A"])
+        CO._git(["add", "-A"], cwd=cfg.backup_dir, timeout=GIT_ADD_TIMEOUT_S)
         if CO._git_rc(cfg.backup_dir, ["diff", "--cached", "--quiet"]) != 0:
-            _bgit(cfg, ["commit", "-q", "-m", f"sports state backup {cfg.collector_id} {_iso(now)}"],
-                  identity=cfg.collector_id)
+            CO._git(["commit", "-q", "-m", f"sports state backup {cfg.collector_id} {_iso(now)}"],
+                    cwd=cfg.backup_dir, timeout=GIT_ADD_TIMEOUT_S, identity=cfg.collector_id)
         head = _bgit(cfg, ["rev-parse", "HEAD"]).stdout.strip()
     except (CO.OpsError, OSError) as error:
         return finish("failed", error=f"local commit failed: {error}")
@@ -442,8 +609,18 @@ def run_backup(cfg: SportsBackupConfig, *, repo_root: Path = REPO_ROOT, now: dat
             return finish("conflict", remote_sha=remote_sha, incomplete=problem,
                           error="remote sports backup has commits not in this host's history; not merging, not forcing")
     try:
+        pending = pending_blobs(cfg, remote_sha)
+    except (CO.OpsError, OSError, subprocess.SubprocessError, ValueError) as error:
+        return finish("push_failed", error=f"could not list pending blobs: {error}", incomplete=problem)
+    oversized = sorted((b for b in pending if b["size"] > MAX_BLOB_BYTES), key=lambda b: -b["size"])
+    result.update(pending_blobs=len(pending), pending_blob_bytes=sum(b["size"] for b in pending),
+                  largest_pending_blob=max((b["size"] for b in pending), default=0))
+    if oversized:
+        return finish("blocked_oversized", oversized=oversized[:20], incomplete=problem,
+                      error=f"{len(oversized)} pending blob(s) exceed {MAX_BLOB_BYTES} bytes; not pushing")
+    try:
         CO._git(["push", "-q", "origin", f"HEAD:{cfg.ref}"], cwd=cfg.backup_dir, ssh_command=cfg.ssh_command,
-                timeout=cfg.git_timeout_s * 10)
+                timeout=GIT_ADD_TIMEOUT_S)
     except CO.GitError as error:
         status = "conflict" if "rejected" in str(error) or "non-fast-forward" in str(error) else "push_failed"
         return finish(status, error=str(error), incomplete=problem)
@@ -474,16 +651,64 @@ def _run_in(target: Path, args: list[str], timeout: int = 3600) -> dict:
     return {"command": " ".join(args), "exit": proc.returncode, "tail": lines[-3:]}
 
 
-def clone_and_verify(cfg: SportsBackupConfig, dest: Path) -> CO.Source:
-    """Fresh clone with autocrlf=true / eol=crlf (stored bytes must not depend on the restoring host's
-    Git settings), verified file-by-file against the manifest."""
+def _hostile_clone(cfg: SportsBackupConfig, dest: Path) -> None:
+    """Fresh clone with autocrlf=true / eol=crlf: stored bytes must not depend on the restoring host's Git settings."""
     CO._git(["clone", "-q", "--branch", CO._branch(cfg.ref), "--single-branch", cfg.remote, str(dest)],
-            ssh_command=cfg.ssh_command, timeout=cfg.git_timeout_s * 10,
+            ssh_command=cfg.ssh_command, timeout=GIT_ADD_TIMEOUT_S,
             extra_config=("-c", "core.autocrlf=true", "-c", "core.eol=crlf"))
-    body = json.loads((dest / MANIFEST).read_text(encoding="utf-8"))
-    if body.get("schema") != SCHEMA:
-        raise CO.OpsError(f"{dest / MANIFEST} is not a {SCHEMA} manifest")
-    return CO._source_from_dir(dest / STATE_DIR, body["files"], origin=f"{cfg.remote}@{cfg.ref}")
+
+
+def load_manifest(clone: Path) -> dict[str, dict]:
+    body = json.loads((clone / MANIFEST).read_text(encoding="utf-8"))
+    if body.get("schema") not in READABLE_SCHEMAS:
+        raise CO.OpsError(f"{clone / MANIFEST} is not a sports state backup manifest ({body.get('schema')!r})")
+    return body["files"]
+
+
+def read_stored(state_dir: Path, rel: str, meta: dict) -> bytes:
+    """Original bytes of ``rel``: plain, or reassembled from verified gzip chunks; checked against the manifest."""
+    storage = meta.get("storage")
+    if not storage:
+        data = (state_dir / rel).read_bytes()
+    else:
+        if storage.get("format") != CHUNK_FORMAT:
+            raise CO.OpsError(f"{rel}: unknown storage format {storage.get('format')!r}")
+        parts = []
+        for i, c in enumerate(storage["chunks"]):
+            blob = (state_dir / chunk_name(rel, i)).read_bytes()
+            if CO.sha256_bytes(blob) != c["stored_sha256"]:
+                raise CO.OpsError(f"{rel}: stored chunk {i} hash mismatch")
+            piece = gzip.decompress(blob)
+            if len(piece) != c["size"] or CO.sha256_bytes(piece) != c["sha256"]:
+                raise CO.OpsError(f"{rel}: chunk {i} content hash mismatch")
+            parts.append(piece)
+        data = b"".join(parts)
+    if len(data) != meta["size"] or CO.sha256_bytes(data) != meta["sha256"]:
+        raise CO.OpsError(f"hash mismatch {rel}")
+    return data
+
+
+def iter_backup(clone: Path) -> Iterator[tuple[str, bytes, dict]]:
+    """(rel, original bytes, manifest entry) for every file in a backup checkout, one at a time. Refuses
+    unlisted or missing stored files before yielding anything."""
+    manifest = load_manifest(clone)
+    state_dir = clone / STATE_DIR
+    expected = {p for rel, meta in manifest.items() for p in stored_paths(rel, meta)}
+    on_disk = ({p.relative_to(state_dir).as_posix() for p in state_dir.rglob("*") if p.is_file()}
+               if state_dir.is_dir() else set())
+    problems = ([f"unlisted {p}" for p in sorted(on_disk - expected)][:20]
+                + [f"missing {p}" for p in sorted(expected - on_disk)][:20])
+    if problems:
+        raise CO.OpsError(f"{clone}: manifest verification failed: {problems}")
+    for rel in sorted(manifest):
+        yield CO._safe_rel(rel), read_stored(state_dir, rel, manifest[rel]), manifest[rel]
+
+
+def clone_and_verify(cfg: SportsBackupConfig, dest: Path) -> CO.Source:
+    """Hostile fresh clone, verified file-by-file against the manifest (loads every file into memory)."""
+    _hostile_clone(cfg, dest)
+    files = {rel: data for rel, data, _ in iter_backup(dest)}
+    return CO.Source(files=files, origin=f"{cfg.remote}@{cfg.ref}", manifest=load_manifest(dest))
 
 
 def verify_restore(cfg: SportsBackupConfig, *, repo_root: Path = REPO_ROOT, work: Path | None = None,
@@ -491,43 +716,52 @@ def verify_restore(cfg: SportsBackupConfig, *, repo_root: Path = REPO_ROOT, work
     """Hostile fresh clone -> manifest check -> restore into an empty isolated tree -> byte comparison
     with this repo -> offline replay and score verification inside the isolated tree."""
     tmp = Path(tempfile.mkdtemp(prefix="kel-sports-restore-", dir=work))
-    out: dict = {"ok": False, "work_dir": str(tmp)}
+    out: dict = {"ok": False, "work_dir": str(tmp), "ref": cfg.ref}
     try:
         clone = tmp / "clone"
-        source = clone_and_verify(cfg, clone)
+        try:
+            _hostile_clone(cfg, clone)
+            manifest = load_manifest(clone)
+        except (CO.OpsError, OSError, ValueError, KeyError) as error:
+            out["error"] = str(error)
+            return out
         out["head"] = CO._git(["rev-parse", "HEAD"], cwd=clone).stdout.strip()
-        out["files"] = len(source.files)
+        out["files"] = len(manifest)
+        out["chunked_files"] = sorted(r for r, m in manifest.items() if m.get("storage"))
         target = tmp / "root"
-        state = set(source.files)
         for rel in _tracked_code(repo_root):
-            if rel in state or rel.startswith(("data/", "frontend/")):
+            if rel in manifest or rel.startswith(("data/", "frontend/")):
                 continue
             src = repo_root / rel
             if src.is_file():
                 dest = target / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(src, dest)
-        for rel, data in source.files.items():
-            dest = target / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(data)
-        restored = {rel: CO.sha256_bytes((target / rel).read_bytes()) for rel in source.files}
-        bad_manifest = sorted(r for r, sha in restored.items() if sha != source.manifest[r]["sha256"])
+        bad_manifest: list[str] = []
         identical, prefix, mutable, differs, gone = 0, 0, [], [], []
-        for rel, data in source.files.items():
-            live = repo_root / rel
-            if not live.is_file():
-                gone.append(rel)
-                continue
-            cur = live.read_bytes()
-            if cur == data:
-                identical += 1
-            elif classify(rel) == APPEND_ONLY and cur.startswith(data):
-                prefix += 1
-            elif classify(rel) == MUTABLE:
-                mutable.append(rel)
-            else:
-                differs.append(rel)
+        try:
+            for rel, data, meta in iter_backup(clone):
+                dest = target / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
+                if CO.sha256_bytes(dest.read_bytes()) != meta["sha256"]:
+                    bad_manifest.append(rel)
+                live = repo_root / rel
+                if not live.is_file():
+                    gone.append(rel)
+                    continue
+                cur = live.read_bytes()
+                if cur == data:
+                    identical += 1
+                elif classify(rel) == APPEND_ONLY and cur.startswith(data):
+                    prefix += 1
+                elif classify(rel) == MUTABLE:
+                    mutable.append(rel)
+                else:
+                    differs.append(rel)
+        except (CO.OpsError, OSError, ValueError, KeyError, EOFError, zlib.error) as error:
+            out["error"] = str(error)
+            return out
         out.update(manifest_mismatch=bad_manifest, byte_identical=identical, live_grew_since_backup=prefix,
                    mutable_changed_since_backup=mutable, differs_from_live=differs[:20], missing_in_live=gone[:20])
         checks = []
@@ -555,6 +789,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p_init = sub.add_parser("init", help="clone (or, with --create, start) the sports backup ref")
     p_init.add_argument("--create", action="store_true")
+    p_init.add_argument("--base-ref", help=f"with --create, start on this remote ref's tip (e.g. {LEGACY_REF})")
     p_run = sub.add_parser("run", help="snapshot, commit and push")
     p_run.add_argument("--if-due", action="store_true", help="skip unless the last successful push is >= 1 h old")
     p_run.add_argument("--purpose", default="manual")
@@ -563,12 +798,21 @@ def main(argv: list[str] | None = None) -> int:
     p_ver.add_argument("--keep", action="store_true")
     p_ver.add_argument("--no-replay", action="store_true")
     sub.add_parser("status")
+    p_pause = sub.add_parser("pause", help="make scheduled (--if-due) runs skip until `resume`")
+    p_pause.add_argument("--reason", required=True)
+    sub.add_parser("resume", help="remove the pause marker")
     for p in (p_init, p_run, p_ver):
         p.add_argument("--backup-dir", type=Path)
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
-        print(json.dumps(read_status(), indent=1))
+        print(json.dumps({"last_run": read_status(), "paused": read_pause()}, indent=1))
+        return EXIT_OK
+    if args.cmd == "pause":
+        print(json.dumps({"paused": set_pause(args.reason)}))
+        return EXIT_OK
+    if args.cmd == "resume":
+        print(json.dumps({"resumed": clear_pause()}))
         return EXIT_OK
     if args.cmd == "plan":
         col = collect_state()
@@ -576,13 +820,16 @@ def main(argv: list[str] | None = None) -> int:
                           "counts": col.counts, "missing": col.missing, "dependency_drift": col.dependency_drift},
                          indent=1))
         return EXIT_OK if not col.missing and not col.dependency_drift else EXIT_FAILED
+    if args.cmd == "run" and args.if_due and (paused := read_pause()):
+        print(json.dumps({"backup": "paused", **paused}))
+        return EXIT_OK
     try:
         cfg = load_config(backup_dir=args.backup_dir)
     except CO.OpsError as error:
         print(f"config error: {error}", file=sys.stderr)
         return EXIT_FAILED
     if args.cmd == "init":
-        print(json.dumps(backup_init(cfg, create_if_missing=args.create), indent=1))
+        print(json.dumps(backup_init(cfg, create_if_missing=args.create, base_ref=args.base_ref), indent=1))
         return EXIT_OK
     if args.cmd == "run":
         if args.if_due and not is_due():

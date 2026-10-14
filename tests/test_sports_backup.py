@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import gzip
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -144,12 +146,12 @@ def test_weather_lock_defers_push(repo: Path, cfg):
 def test_divergent_remote_is_a_conflict_never_forced(repo: Path, cfg, tmp_path: Path):
     assert BK.run_backup(cfg, repo_root=repo)["backup"] == "pushed"
     other = tmp_path / "other"
-    subprocess.run(["git", "clone", "-q", "--branch", "sports-state", cfg.remote, str(other)], check=True)
+    subprocess.run(["git", "clone", "-q", "--branch", CO._branch(BK.SPORTS_REF), cfg.remote, str(other)], check=True)
     (other / "x").write_text("foreign")
     subprocess.run(["git", "-C", str(other), "add", "x"], check=True)
     subprocess.run(["git", "-C", str(other), "-c", "user.name=o", "-c", "user.email=o@x", "commit", "-qm", "x"],
                    check=True)
-    subprocess.run(["git", "-C", str(other), "push", "-q", "origin", "HEAD:refs/heads/sports-state"], check=True)
+    subprocess.run(["git", "-C", str(other), "push", "-q", "origin", f"HEAD:{BK.SPORTS_REF}"], check=True)
     foreign = CO.remote_ref_sha(cfg.remote, cfg.ref)
     log = repo / BK.LOG_REL / "collector_cycles.jsonl"
     log.write_bytes(log.read_bytes() + b"{}\n")
@@ -179,5 +181,133 @@ def test_is_due(repo: Path):
     assert not BK.is_due(repo, now)
     BK._write_status(repo, {"backup": "pushed", "at": BK._iso(now - timedelta(minutes=61))})
     assert BK.is_due(repo, now)
-    BK._write_status(repo, {"backup": "push_failed", "at": BK._iso(now)})
+    BK._write_status(repo, {"backup": "push_failed", "at": BK._iso(now - timedelta(minutes=5))})
+    assert not BK.is_due(repo, now)
+    assert BK.is_due(repo, now + BK.FAILURE_BACKOFF)
+    BK._write_status(repo, {"backup": "push_deferred", "at": BK._iso(now)})
     assert BK.is_due(repo, now)
+
+
+@pytest.fixture()
+def small_chunks(monkeypatch):
+    monkeypatch.setattr(BK, "CHUNK_THRESHOLD", 1000)
+    monkeypatch.setattr(BK, "CHUNK_RAW_BYTES", 400)
+
+
+def _stored_chunks(cfg, rel: str) -> dict[str, bytes]:
+    d = cfg.backup_dir / BK.STATE_DIR / f"{rel}{BK.CHUNK_SUFFIX}"
+    return {p.name: p.read_bytes() for p in sorted(d.iterdir())}
+
+
+def test_large_files_are_chunked_and_restore_byte_exact(repo: Path, cfg, tmp_path: Path, small_chunks):
+    log_rel = f"{BK.LOG_REL}/collector_cycles.jsonl"
+    log = repo / log_rel
+    log.write_bytes(os.urandom(1500) + b"\r\n" + b'{"a":1}\n' * 100)
+    assert BK.run_backup(cfg, repo_root=repo)["backup"] == "pushed"
+    assert not (cfg.backup_dir / BK.STATE_DIR / log_rel).exists()
+    manifest = BK.load_manifest(cfg.backup_dir)
+    storage = manifest[log_rel]["storage"]
+    assert storage["format"] == BK.CHUNK_FORMAT and len(storage["chunks"]) == 6
+    assert sum(c["size"] for c in storage["chunks"]) == log.stat().st_size
+    before = _stored_chunks(cfg, log_rel)
+
+    log.write_bytes(log.read_bytes() + b'{"b":2}\n' * 20)
+    res = BK.run_backup(cfg, repo_root=repo)
+    assert res["backup"] == "pushed" and res["chunked_files"] == 1
+    after = _stored_chunks(cfg, log_rel)
+    assert len(after) == 7
+    for name in sorted(before)[:5]:
+        assert after[name] == before[name], "full chunks of an appended file are not rewritten"
+
+    source = BK.clone_and_verify(cfg, tmp_path / "restore")
+    assert source.files[log_rel] == log.read_bytes()
+    for rel, data in source.files.items():
+        assert data == (repo / rel).read_bytes(), rel
+
+
+def test_corrupt_or_unlisted_chunks_are_refused(repo: Path, cfg, tmp_path: Path, small_chunks):
+    log_rel = f"{BK.LOG_REL}/collector_cycles.jsonl"
+    (repo / log_rel).write_bytes(os.urandom(2500))
+    assert BK.run_backup(cfg, repo_root=repo)["backup"] == "pushed"
+    BK._hostile_clone(cfg, tmp_path / "c1")
+    chunk = tmp_path / "c1" / BK.STATE_DIR / BK.chunk_name(log_rel, 1)
+    chunk.write_bytes(gzip.compress(b"tampered", mtime=0))
+    with pytest.raises(CO.OpsError, match="chunk 1"):
+        list(BK.iter_backup(tmp_path / "c1"))
+    BK._hostile_clone(cfg, tmp_path / "c2")
+    (tmp_path / "c2" / BK.STATE_DIR / BK.chunk_name(log_rel, 99)).write_bytes(b"x")
+    with pytest.raises(CO.OpsError, match="unlisted"):
+        list(BK.iter_backup(tmp_path / "c2"))
+
+
+def test_oversized_blob_in_tree_or_unpushed_history_blocks_push(repo: Path, cfg, monkeypatch):
+    monkeypatch.setattr(BK, "MAX_BLOB_BYTES", 5000)
+    status = repo / BK.LOG_REL / "collector_status.json"
+    status.write_bytes(b"x" * 6000)
+    _write(repo, f"{CO.STATE_LOG_DIR}/cycle.lock", b"weather")
+    assert BK.run_backup(cfg, repo_root=repo)["backup"] == "push_deferred"
+    (repo / CO.STATE_LOG_DIR / "cycle.lock").unlink()
+    remote_before = CO.remote_ref_sha(cfg.remote, cfg.ref)
+    res = BK.run_backup(cfg, repo_root=repo)
+    assert res["backup"] == "blocked_oversized"
+    assert res["oversized"][0]["path"].endswith("collector_status.json")
+    status.write_bytes(b"{}")
+    res = BK.run_backup(cfg, repo_root=repo)
+    assert res["backup"] == "blocked_oversized", "the old blob is still in the unpushed history"
+    assert CO.remote_ref_sha(cfg.remote, cfg.ref) == remote_before
+
+
+def test_clean_branch_on_pushed_base_uploads_only_new_content(repo: Path, tmp_path: Path, small_chunks):
+    remote = tmp_path / "remote2.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+    legacy = BK.SportsBackupConfig(collector_id="test-host", remote=str(remote), ref=BK.LEGACY_REF,
+                                   backup_dir=tmp_path / "legacy", ssh_command=None)
+    BK.backup_init(legacy, create_if_missing=True)
+    assert BK.run_backup(legacy, repo_root=repo)["backup"] == "pushed"
+    legacy_sha = CO.remote_ref_sha(str(remote), BK.LEGACY_REF)
+
+    big_rel = f"{BK.LOG_REL}/collector_cycles.jsonl"
+    (repo / big_rel).write_bytes((repo / big_rel).read_bytes() + os.urandom(3000))
+    v2 = BK.SportsBackupConfig(collector_id="test-host", remote=str(remote), ref=BK.SPORTS_REF,
+                               backup_dir=tmp_path / "v2", ssh_command=None)
+    info = BK.backup_init(v2, create_if_missing=True, base_ref=BK.LEGACY_REF)
+    assert info["base_sha"] == legacy_sha
+    res = BK.run_backup(v2, repo_root=repo)
+    assert res["backup"] == "pushed", res
+    chunks = BK.load_manifest(v2.backup_dir)[big_rel]["storage"]["chunks"]
+    assert res["pending_blobs"] == len(chunks) + 1, "only the new chunks and the manifest are uploaded"
+    assert CO.remote_ref_sha(str(remote), BK.LEGACY_REF) == legacy_sha
+    head = CO.remote_ref_sha(str(remote), BK.SPORTS_REF)
+    assert subprocess.run(["git", "-C", str(v2.backup_dir), "merge-base", "--is-ancestor", legacy_sha, head]).returncode == 0
+    source = BK.clone_and_verify(v2, tmp_path / "restore")
+    assert source.files[big_rel] == (repo / big_rel).read_bytes()
+    with pytest.raises(CO.OpsError):
+        BK.backup_init(v2, create_if_missing=True, base_ref=BK.LEGACY_REF)
+
+
+def test_legacy_v1_manifest_is_readable(tmp_path: Path):
+    clone = tmp_path / "v1"
+    _write(clone, f"{BK.STATE_DIR}/a/b.json", b"{}\r\n")
+    (clone / BK.MANIFEST).write_text(json.dumps({"schema": "kel_sports_state_backup_v1", "profile": "sports", "files": {
+        "a/b.json": {"sha256": sha256_bytes(b"{}\r\n"), "size": 4, "class": BK.WRITE_ONCE}}}))
+    assert [(r, d) for r, d, _ in BK.iter_backup(clone)] == [("a/b.json", b"{}\r\n")]
+
+
+def test_pause_skips_only_scheduled_runs(repo: Path, monkeypatch, capsys):
+    monkeypatch.setattr(BK, "PAUSE_PATH", BK.pause_path(repo))
+    monkeypatch.setattr(BK, "STATUS_PATH", BK.status_path(repo))
+    assert BK.main(["pause", "--reason", "repair"]) == 0
+    capsys.readouterr()
+    assert BK.main(["run", "--if-due", "--purpose", "scheduled"]) == 0
+    assert json.loads(capsys.readouterr().out)["backup"] == "paused"
+    assert BK.read_status(repo) is None
+    assert BK.main(["resume"]) == 0
+    assert BK.read_pause(repo) is None
+
+
+def test_config_refuses_the_preserved_legacy_clone(tmp_path: Path):
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"collector_id": "h", "control_remote": "r", "backup_remote": "s",
+                             "backup_dir": str(tmp_path / "w")}))
+    with pytest.raises(CO.ConfigError, match="preserved"):
+        BK.load_config(p, backup_dir=BK.LEGACY_DIR)

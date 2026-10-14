@@ -1,4 +1,5 @@
 import { DataKindTag } from '../components/UnifiedEventCard'
+import { PredictionHistory } from '../components/PredictionHistory'
 import { eventSettlementText, snapshotScoreText, weatherTitle } from '../lib/weatherText'
 import { MetricHelp } from '../components/MetricHelp'
 import { StatusBadge } from '../components/StatusBadge'
@@ -123,6 +124,8 @@ export function SavedWeatherEventView({ data, loadedAt }: { data: SavedWeatherEv
           ) : null}
         </div>
       </section>
+
+      <PredictionHistory data={data} />
 
       <section className="panel space-y-2">
         <h3 className="font-semibold">All saved snapshots ({data.snapshots.length})</h3>

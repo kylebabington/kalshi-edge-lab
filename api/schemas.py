@@ -263,6 +263,22 @@ class SportsResultsResponse(BaseModel):
     breakdown: dict[str, list[dict[str, Any]]]
 
 
+class SportsResultsTimelineResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    label: str
+    kind: str
+    pair: dict[str, str]
+    collection: str
+    filters: dict[str, Any] = Field(default_factory=dict)
+    points: list[dict[str, Any]]
+    cohort: dict[str, Any]
+    final: dict[str, Any]
+    not_in_chart: dict[str, Any]
+    results_table_basis: dict[str, Any]
+
+
 class SportsCoverageResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 

@@ -807,6 +807,132 @@ def get_results(filters: dict, weighting: str = "event") -> dict:
             "artifacts": artifacts()}
 
 
+TIMELINE_NOTE = ("Each point adds one completed event: every contract selected for that event and pair (both "
+                 "probabilities saved, matching the filters) has a confirmed YES/NO outcome. Events count equally "
+                 "(each event's contracts are averaged first). Points are ordered by when the event's last selected "
+                 "contract settled. Descriptive only: it says how the difference evolved on this sample, not which "
+                 "candidate is better and nothing about profit.")
+
+
+def parse_pair(pair: str | None) -> tuple[str, str] | None:
+    a, _, b = (pair or "").partition(":")
+    return (a, b) if (a, b) in SCC.PAIRS else None
+
+
+def _event_completion(sel: list[dict], ev_scores: dict, a: str, b: str) -> tuple[str, list[dict] | str]:
+    """Classify one event for a pair: ``complete`` (with its scores), or why it is not."""
+    final, pending, nonbinary, mismatch = [], 0, 0, 0
+    for c in sel:
+        sc = ev_scores.get(c["ticker"])
+        if sc is None:
+            pending += 1
+        elif not sc["checksum_ok"]:
+            mismatch += 1
+        elif sc.get("y") not in (0, 1):
+            nonbinary += 1
+        elif not all("p" in (sc.get("candidates") or {}).get(k, {}) for k in (a, b)):
+            mismatch += 1
+        else:
+            final.append(sc)
+    if mismatch:
+        return "inconsistent", "score checksum mismatch or score lacks a saved probability"
+    if nonbinary:
+        return "nonbinary", f"{nonbinary} selected contract(s) settled without a YES/NO outcome"
+    if pending and final:
+        return "partial", f"{len(final)} of {len(sel)} selected contracts confirmed"
+    if pending:
+        return "pending", "no selected contract confirmed yet"
+    return "complete", final
+
+
+@_request
+def get_results_timeline(filters: dict, pair: tuple[str, str], collection: str | None = None) -> dict:
+    """Cumulative event-equal paired Brier difference (candidate minus reference) over completed events."""
+    from .ops import provenance as PV
+    from .scoring import report as RE
+    a, b = pair
+    now = _now()
+    modes = _collection_modes()
+    idx = _score_index(scores())
+    events: dict[str, list] = {"complete": [], "partial": [], "pending": [], "nonbinary": [], "inconsistent": []}
+    for s in records():
+        if s.get("unreadable") or s.get("status") != "WINDOW_CAPTURE" or not s.get("checksum_ok"):
+            continue
+        if filters.get("sport") and s["sport"] != filters["sport"]:
+            continue
+        if filters.get("competition") and s["competition"] != filters["competition"]:
+            continue
+        mode = PV.mode_of(s.get("run_id"), modes)
+        if collection and mode != collection:
+            continue
+        sel = [c for c in s["contracts"] if c["status"] == "ok" and c["p"][a] and c["p"][b]
+               and (not filters.get("family") or c["family"] == filters["family"])
+               and (not filters.get("cohort") or c["cohort"] == filters["cohort"])]
+        if not sel:
+            continue
+        key = f"{s['competition']}|{s['cluster']}"
+        state, detail = _event_completion(sel, idx.get(key, {}), a, b)
+        events[state].append({"event_key": key, "event_id": s["event_id"], "selected": len(sel), "mode": mode,
+                              "prediction_as_of": s["prediction_as_of"], "detail": detail})
+    dated, undated = [], []
+    for e in events["complete"]:
+        times = [_settled_at(sc) for sc in e["detail"]]
+        e["completed_at"] = max(times) if all(times) else None
+        (dated if e["completed_at"] else undated).append(e)
+    dated.sort(key=lambda e: (_ts(e["completed_at"]) or 0, e["event_key"]))
+    points, total = [], 0.0
+    for i, e in enumerate(dated, 1):
+        d = RE.paired(e["detail"], a, b)
+        total += d["brier_event"]
+        points.append({"event_id": e["event_id"], "completed_at": e["completed_at"], "contracts": d["contracts"],
+                       "collection_mode": e["mode"], "event_d_brier": d["brier_event"], "events": i,
+                       "cumulative_d_brier_event": total / i})
+    cohort_scores = [sc for e in dated for sc in e["detail"]]
+    on_cohort = RE.paired(cohort_scores, a, b) if cohort_scores else {"contracts": 0, "events": 0}
+    final = points[-1]["cumulative_d_brier_event"] if points else None
+    undated_scores = [sc for e in undated for sc in e["detail"]]
+    broader_scores = [sc for sc in _filter_scores([x for x in scores() if x["checksum_ok"]], filters)
+                      if sc.get("y") is not None
+                      and (not collection or PV.mode_of(sc.get("source_run_id"), modes) == collection)]
+    broader = RE.paired(broader_scores, a, b)
+    preds = sorted(e["prediction_as_of"] for e in dated if e["prediction_as_of"])
+
+    def brief(group: list[dict]) -> dict:
+        return {"events": len(group), "selected_contracts": sum(e["selected"] for e in group)}
+
+    return {
+        "generated_at": _iso(now), "label": "Prospective pilot: paired Brier difference over completed events",
+        "kind": "prospective", "pilot_note": PILOT_LABEL, "sign_note": SIGN_NOTE, "note": TIMELINE_NOTE,
+        "pair": {"candidate": a, "reference": b}, "pairs": [{"candidate": x, "reference": y} for x, y in SCC.PAIRS],
+        "filters": {k: v for k, v in filters.items() if v}, "collection": collection or "all",
+        "collection_modes": list(PV.MODES), "collection_labels": PV.MODE_LABELS,
+        "points": points,
+        "cohort": {"events": len(dated), "contracts": on_cohort["contracts"],
+                   "first_completed_at": dated[0]["completed_at"] if dated else None,
+                   "last_completed_at": dated[-1]["completed_at"] if dated else None,
+                   "first_prediction_as_of": preds[0] if preds else None,
+                   "last_prediction_as_of": preds[-1] if preds else None,
+                   "by_collection": dict(Counter(e["mode"] for e in dated))},
+        "final": {"cumulative_d_brier_event": final, "paired_d_brier_event_on_cohort": on_cohort.get("brier_event"),
+                  "equal": final is None or abs(final - on_cohort["brier_event"]) <= 1e-12},
+        "not_in_chart": {
+            "partially_settled": brief(events["partial"]),
+            "pending": brief(events["pending"]),
+            "nonbinary": brief(events["nonbinary"]),
+            "inconsistent": brief(events["inconsistent"]),
+            "undated_completed": {**brief(undated),
+                                  "d_brier_event": RE.paired(undated_scores, a, b).get("brier_event")
+                                  if undated_scores else None},
+        },
+        "results_table_basis": {
+            "note": "All labelled contracts under these filters (the Results table's basis): includes settled "
+                    "contracts of partially settled events and undated events, so it is a different cohort.",
+            "contracts": broader["contracts"], "events": broader["events"],
+            "d_brier_event": broader.get("brier_event"), "d_brier": broader.get("brier")},
+        "artifacts": artifacts(),
+    }
+
+
 # ---------------------------------------------------------------- coverage
 
 def _csv_rows(p: Path) -> list[dict] | None:
@@ -1075,10 +1201,12 @@ def collector_brief() -> dict:
 def _backup_brief() -> dict:
     from .ops import backup as BK
     st = BK.read_status()
+    paused = BK.read_pause()
     if not st:
-        return {"recorded": False, "note": "no sports state backup recorded on this machine"}
-    return {"recorded": True, **{k: st.get(k) for k in ("backup", "at", "finished_at", "files", "bytes",
-                                                          "missing_count", "incomplete", "local_head", "ref")}}
+        return {"recorded": False, "note": "no sports state backup recorded on this machine", "paused": paused}
+    return {"recorded": True, "paused": paused,
+            **{k: st.get(k) for k in ("backup", "at", "finished_at", "files", "bytes",
+                                      "missing_count", "incomplete", "local_head", "ref")}}
 
 
 def _cycle_history(cycles_path: Path) -> dict:

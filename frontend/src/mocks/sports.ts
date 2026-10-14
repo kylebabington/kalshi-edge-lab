@@ -11,10 +11,60 @@ import type {
   SportsEventList,
   SportsHistorical,
   SportsResults,
+  SportsResultsTimeline,
   SportsSummary,
 } from '../types/sports'
 
 export const MOCK_SOURCE = 'MOCK FIXTURE — not a saved capture'
+
+export const mockSportsResultsTimeline: SportsResultsTimeline = {
+  generated_at: '2026-10-11T14:00:00Z',
+  label: 'Prospective pilot: paired Brier difference over completed events (MOCK FIXTURE)',
+  kind: 'prospective',
+  pilot_note: 'MOCK FIXTURE',
+  sign_note: 'Differences are candidate minus reference on the same contracts.',
+  note: 'MOCK FIXTURE — each point adds one completed event.',
+  pair: { candidate: 'frozen', reference: 'market' },
+  pairs: [
+    { candidate: 'frozen', reference: 'market' },
+    { candidate: 'calibrated', reference: 'frozen' },
+    { candidate: 'blend', reference: 'frozen' },
+    { candidate: 'blend', reference: 'market' },
+  ],
+  filters: {},
+  collection: 'all',
+  collection_modes: ['automatic', 'collector_manual', 'manual_pilot'],
+  collection_labels: { automatic: 'Automatic', collector_manual: 'Collector (manual)', manual_pilot: 'Manual pilot' },
+  points: [
+    { event_id: 'ncaaf|espn:mock-1', completed_at: '2026-10-05T03:10:00Z', contracts: 2, collection_mode: 'manual_pilot', event_d_brier: 0.02, events: 1, cumulative_d_brier_event: 0.02 },
+    { event_id: 'nfl|espn:mock-2', completed_at: '2026-10-06T21:00:00Z', contracts: 3, collection_mode: 'automatic', event_d_brier: -0.04, events: 2, cumulative_d_brier_event: -0.01 },
+  ],
+  cohort: {
+    events: 2,
+    contracts: 5,
+    first_completed_at: '2026-10-05T03:10:00Z',
+    last_completed_at: '2026-10-06T21:00:00Z',
+    first_prediction_as_of: '2026-10-04T23:00:00Z',
+    last_prediction_as_of: '2026-10-06T16:00:00Z',
+    by_collection: { manual_pilot: 1, automatic: 1 },
+  },
+  final: { cumulative_d_brier_event: -0.01, paired_d_brier_event_on_cohort: -0.01, equal: true },
+  not_in_chart: {
+    partially_settled: { events: 1, selected_contracts: 4 },
+    pending: { events: 3, selected_contracts: 3 },
+    nonbinary: { events: 0, selected_contracts: 0 },
+    inconsistent: { events: 0, selected_contracts: 0 },
+    undated_completed: { events: 1, selected_contracts: 2, d_brier_event: 0.005 },
+  },
+  results_table_basis: {
+    note: 'All labelled contracts under these filters (MOCK FIXTURE).',
+    contracts: 9,
+    events: 4,
+    d_brier_event: -0.004,
+    d_brier: -0.006,
+  },
+  artifacts: { capture_records: 'mock', settlement_scores: 'mock', settlement_runs: 'mock', capture_runs: 'mock', raw_evidence: 'mock' },
+}
 
 const artifacts = {
   capture_records: 'mock',

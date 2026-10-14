@@ -3,10 +3,13 @@
  * snapshot, score or collector record.
  */
 import type {
+  SavedSnapshotHistoryRow,
   SavedWeatherEvent,
   SavedWeatherEventDetail,
   SavedWeatherEventList,
   SavedWeatherFilters,
+  SnapshotRun,
+  WeatherBucketDefinition,
   WeatherCollectorStatus,
   WeatherMetricsContext,
 } from '../types/weather'
@@ -87,6 +90,46 @@ export function mockSavedWeatherEvents(filters: SavedWeatherFilters = {}): Saved
   }
 }
 
+const B60 = '60° to 61°|60|61|KXHIGHNY-26SEP26-B60.5'
+const B62 = '62° to 63°|62|63|KXHIGHNY-26SEP26-B62.5'
+
+export const mockWeatherBuckets: WeatherBucketDefinition[] = [
+  { id: B60, label: '60° to 61°', lower_f: 60, upper_f: 61, ticker: 'KXHIGHNY-26SEP26-B60.5', bounds_parsed: true, snapshots: 2, valid_points: 1, definition_variants: 1 },
+  { id: B62, label: '62° to 63°', lower_f: 62, upper_f: 63, ticker: 'KXHIGHNY-26SEP26-B62.5', bounds_parsed: true, snapshots: 1, valid_points: 1, definition_variants: 1 },
+]
+
+const RUN: SnapshotRun = {
+  run_id: 'day_06z',
+  forecast_run: 'event-day 06Z',
+  gfs_model_run_at: '2026-09-26T06:00:00Z',
+  hrrr_model_run_at: '2026-09-26T09:00:00Z',
+  gefs_member_count: 31,
+  calibration_artifact_id: 'mock',
+  schema_version: '5.0.0',
+}
+
+function historyRows(event: SavedWeatherEvent): SavedSnapshotHistoryRow[] {
+  const last = { ...event.displayed_snapshot, score: event.displayed_snapshot_score }
+  if (event.event_ticker !== 'KXHIGHNY-26SEP26') return [last]
+  const first = snapshot(event.event_ticker, '2026-09-26', '2026-09-25T22:05:00Z')
+  return [
+    {
+      ...first,
+      checkpoint_id: 'dminus1_1800',
+      score: { state: 'scored', brier: 0.21, log_loss: 0.6, winning_bucket: '60° to 61°', scored_at: '2026-09-27T12:44:26Z' },
+      probabilities: { [B60]: { p: null, invalid: true } },
+      run: { ...RUN, run_id: 'prev_18z', forecast_run: 'previous-day 18Z' },
+      observation: { present: true, used_by_prediction: false, station_id: 'KNYC', high_so_far_f: null, latest_timestamp: null, latest_position: 'unknown', trajectory_points: { in_day: 0, before_day: 0, after_day: 0, unknown: 2 } },
+    },
+    {
+      ...last,
+      probabilities: { [B60]: { p: 0.42, invalid: false }, [B62]: { p: 0.31, invalid: false } },
+      run: RUN,
+      observation: { present: true, used_by_prediction: true, station_id: 'KNYC', high_so_far_f: 58.0, latest_timestamp: '2026-09-26T15:51:00Z', latest_position: 'in_day', trajectory_points: { in_day: 11, before_day: 1, after_day: 0, unknown: 0 } },
+    },
+  ]
+}
+
 export function mockSavedWeatherEvent(ticker: string): SavedWeatherEventDetail | null {
   const event = mockSavedWeatherItems.find((e) => e.event_ticker === ticker)
   if (!event) return null
@@ -95,7 +138,9 @@ export function mockSavedWeatherEvent(ticker: string): SavedWeatherEventDetail |
     label: 'Saved weather forecasts (MOCK FIXTURE)',
     source: MOCK_WEATHER_SOURCE,
     event,
-    snapshots: [{ ...event.displayed_snapshot, score: event.displayed_snapshot_score }],
+    snapshots: historyRows(event),
+    buckets: event.event_ticker === 'KXHIGHNY-26SEP26' ? mockWeatherBuckets : [],
+    history_note: 'MOCK FIXTURE',
   }
 }
 
