@@ -423,8 +423,11 @@ pauses between events while requests are running.
 - `GET /api/sports/results?sport=&competition=&family=&cohort=&weighting=event|contract`
 - `GET /api/sports/coverage?sport=&competition=&family=&status=&q=&page=&page_size=`
 - `GET /api/sports/historical?protocol=&level=&key=&family=&cohort=&comparison=&page=&page_size=`
-- `GET /api/sports/collector` — status files plus a passive `schtasks /Query` (result code decoded);
-  `unknown` when unreadable; last private sports-state backup result
+- `GET /api/sports/collector` — status files plus a passive `schtasks /Query` of the capture task
+  (`KalshiEdgeLab-SportsProspective`, every 5 minutes) and the separate backup task
+  (`KalshiEdgeLab-SportsBackup`, 15-minute checks, hourly snapshots); `unknown` when unreadable; cycle
+  failures and deadline misses reported separately; last private sports-state backup result (snapshot,
+  upload, pending commit, lock duration)
 
 UI routes: `/sports` (tabs Events, Results, Coverage, Historical Research; filters live in the URL) and
 `/sports/events/:eventId`. Which local artifacts populate each view, and how the 5-minute sports collector

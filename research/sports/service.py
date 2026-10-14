@@ -1205,8 +1205,10 @@ def _backup_brief() -> dict:
     if not st:
         return {"recorded": False, "note": "no sports state backup recorded on this machine", "paused": paused}
     return {"recorded": True, "paused": paused,
-            **{k: st.get(k) for k in ("backup", "at", "finished_at", "files", "bytes",
-                                      "missing_count", "incomplete", "local_head", "ref")}}
+            **{k: st.get(k) for k in ("backup", "at", "finished_at", "duration_s", "files", "bytes",
+                                      "missing_count", "incomplete", "local_head", "ref", "snapshot", "push",
+                                      "unpushed", "last_snapshot_at", "last_snapshot_lock_s", "sports_lock_held_s",
+                                      "last_pushed_at", "staging")}}
 
 
 def _cycle_history(cycles_path: Path) -> dict:
@@ -1233,6 +1235,7 @@ def _cycle_history(cycles_path: Path) -> dict:
 
 @_request
 def get_collector_status(task_query=None) -> dict:
+    from .ops import backup as BK
     from .ops import collector as CO
     from .ops import lock as LK
     from .ops import scheduler as SCH
@@ -1254,7 +1257,12 @@ def get_collector_status(task_query=None) -> dict:
         "generated_at": _iso(now), "task_name": CO.TASK_NAME,
         "scheduler": query(CO.TASK_NAME),
         "weather_task": query("KalshiEdgeLab-WeatherProspective"),
+        "backup_task_name": BK.BACKUP_TASK_NAME,
+        "backup_task": query(BK.BACKUP_TASK_NAME),
         "lock": LK.lock_state(LK.LOCK_PATH),
+        "cycle_failures": {"last_24h": (st or {}).get("failures_24h"),
+                           "consecutive": (st or {}).get("consecutive_failures"),
+                           "cycles_24h": (st or {}).get("cycles_24h")},
         "cadence_minutes": CO.CADENCE_MIN, "settlement_interval_minutes": CO.SETTLE_INTERVAL_S // 60,
         "status_recorded": st is not None,
         "status": st or {"note": "no automatic collector cycle recorded on this machine"},

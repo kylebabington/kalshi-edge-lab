@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { sportsBackupHealth } from '../../lib/health'
 import type { SchedulerState, SportsCollectorStatus } from '../../types/sports'
 import { ErrorState, LoadingState, StatusBadge } from '../StatusBadge'
 import { fmtMinutes, fmtTime, label } from './format'
@@ -29,6 +30,8 @@ export function CollectorStatusPanel({ loading, error, status }: Props) {
   const s = status.status
   const last = s.last_cycle
   const sched = status.scheduler
+  const b = status.backup
+  const backupHealth = sportsBackupHealth(status)
   return (
     <section className="panel space-y-3" aria-labelledby="collector-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -41,6 +44,7 @@ export function CollectorStatusPanel({ loading, error, status }: Props) {
         Task {status.task_name} runs every {status.cadence_minutes} minutes and checks settlements at most every{' '}
         {status.settlement_interval_minutes} minutes. Opening this page never starts a collection. {status.limits}
       </p>
+      <h4 className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Capture health</h4>
       <dl className="grid gap-x-6 sm:grid-cols-2 text-sm">
         <Row term="Configured / enabled">
           {String(sched.configured)} / {String(sched.enabled)}
@@ -70,22 +74,45 @@ export function CollectorStatusPanel({ loading, error, status }: Props) {
             : 'no'}
         </Row>
         <Row term="Lock-busy skips (24 h)">{s.skipped_lock_busy_24h ?? '—'}</Row>
-        <Row term="Failures (24 h) / consecutive">
+        <Row term="Cycle failures (24 h) / consecutive">
           {s.failures_24h ?? '—'} / {s.consecutive_failures ?? '—'}
         </Row>
-        <Row term="Missed windows (24 h / total)">
+        <Row term="Deadline misses (24 h / total)">
           {status.missed_windows.last_24h} / {status.missed_windows.total}
         </Row>
         <Row term="Since last accepted capture">{fmtMinutes(status.freshness.minutes_since_last_capture)}</Row>
         <Row term="Since last score">{fmtMinutes(status.freshness.minutes_since_last_score)}</Row>
         <Row term="Weather task">{schedulerText(status.weather_task)}</Row>
-        <Row term="Private state backup">
-          {status.backup?.recorded
-            ? `${label(status.backup.backup ?? 'unknown')} · ${fmtTime(status.backup.finished_at ?? status.backup.at)} · ${
-                status.backup.files ?? '—'
-              } files${status.backup.missing_count ? ` · ${status.backup.missing_count} MISSING` : ''}`
+      </dl>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Backup health</h4>
+        <StatusBadge status={backupHealth.label} />
+      </div>
+      <p className="text-xs text-[var(--text-muted)]">
+        {backupHealth.reason}. Task {status.backup_task_name ?? 'KalshiEdgeLab-SportsBackup'} checks every 15 minutes and
+        snapshots hourly; it holds the capture lock only while listing files.
+      </p>
+      <dl className="grid gap-x-6 sm:grid-cols-2 text-sm">
+        <Row term="Backup task">{status.backup_task ? schedulerText(status.backup_task) : 'unknown'}</Row>
+        <Row term="Next backup check (local)">{status.backup_task?.next_run_time ?? 'unknown'}</Row>
+        <Row term="Latest backup run">
+          {b?.recorded
+            ? `${label(b.backup ?? 'unknown')} · ${fmtTime(b.finished_at ?? b.at)}${
+                b.duration_s != null ? ` (${Math.round(b.duration_s)} s)` : ''
+              }`
             : 'not recorded'}
         </Row>
+        <Row term="Last snapshot">
+          {b?.last_snapshot_at
+            ? `${fmtTime(b.last_snapshot_at)} · ${b.files ?? '—'} files${b.missing_count ? ` · ${b.missing_count} MISSING` : ''}`
+            : 'none with the current backup'}
+        </Row>
+        <Row term="Capture lock held by snapshot">
+          {b?.last_snapshot_lock_s != null ? `${b.last_snapshot_lock_s} s` : '—'}
+        </Row>
+        <Row term="Last upload">{b?.last_pushed_at ? fmtTime(b.last_pushed_at) : 'none recorded'}</Row>
+        <Row term="Upload pending">{b?.unpushed ? 'yes (retried at the next 15-minute check)' : 'no'}</Row>
+        <Row term="Paused">{b?.paused ? `yes${b.paused.reason ? ` — ${b.paused.reason}` : ''}` : 'no'}</Row>
       </dl>
       {!sched.observable ? (
         <p className="text-xs text-[var(--warning)]">

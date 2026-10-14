@@ -135,13 +135,32 @@ describe('Sports events', () => {
         settlement_forced_by: '2026-10-11T17:37:11Z',
         skipped_lock_busy_24h: 2,
       },
-      backup: { recorded: true, backup: 'pushed', at: '2026-10-11T15:30:42Z', files: 4585, missing_count: 0 },
+      backup: {
+        recorded: true,
+        backup: 'push_failed',
+        snapshot: 'committed',
+        push: 'push_failed',
+        unpushed: true,
+        at: '2026-10-11T15:30:42Z',
+        last_snapshot_at: '2026-10-11T15:30:42Z',
+        last_snapshot_lock_s: 1.8,
+        files: 4585,
+        missing_count: 0,
+      },
+      missed_windows: { total: 4, last_24h: 3, recent: [] },
     })
     renderSports()
     expect(await screen.findByText(/0x800710E0 ERROR_REQUEST_REFUSED/)).toBeInTheDocument()
     expect(screen.getByText(/capture windows open\); runs by/)).toBeInTheDocument()
     expect(screen.getByText('Lock-busy skips (24 h)').nextSibling).toHaveTextContent('2')
+    expect(screen.getByText('Capture health')).toBeInTheDocument()
+    expect(screen.getByText('Backup health')).toBeInTheDocument()
+    expect(screen.getByText('Deadline misses (24 h / total)').nextSibling).toHaveTextContent('3 / 4')
+    expect(screen.getByText('Cycle failures (24 h) / consecutive')).toBeInTheDocument()
     expect(screen.getByText(/4585 files/)).toBeInTheDocument()
+    expect(screen.getByText('Capture lock held by snapshot').nextSibling).toHaveTextContent('1.8 s')
+    expect(screen.getByText('Upload pending').nextSibling).toHaveTextContent(/^yes/)
+    expect(screen.getByText('Backup degraded')).toBeInTheDocument()
   })
 
   it('filters events by collection mode via the URL', async () => {

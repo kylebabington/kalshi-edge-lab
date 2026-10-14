@@ -312,6 +312,25 @@ def test_collector_reports_backup_without_paths(populated, client):
     assert client.get("/api/sports/collector").json()["backup"]["paused"]["reason"] == "repairing"
 
 
+def test_collector_separates_capture_and_backup_health(populated, client):
+    BK.STATUS_PATH.write_text(json.dumps({
+        "backup": "push_failed", "snapshot": "committed", "push": "push_failed", "unpushed": True,
+        "push_error": "fatal: C:/secret/clone unreachable", "sports_lock_held_s": 1.4,
+        "last_snapshot_at": _iso(NOW), "last_pushed_at": None, "staging": "hard_link"}), encoding="utf-8")
+    CO.STATUS_PATH.write_text(json.dumps({"failures_24h": 2, "consecutive_failures": 1, "cycles_24h": 280}),
+                              encoding="utf-8")
+    S.clear_caches()
+    queried = []
+    r = S.get_collector_status(task_query=lambda name: queried.append(name) or {"exists": False})
+    assert BK.BACKUP_TASK_NAME in queried and CO.TASK_NAME in queried
+    assert r["backup_task_name"] == "KalshiEdgeLab-SportsBackup"
+    assert r["cycle_failures"] == {"last_24h": 2, "consecutive": 1, "cycles_24h": 280}
+    assert "total" in r["missed_windows"]
+    b = r["backup"]
+    assert (b["snapshot"], b["push"], b["unpushed"], b["sports_lock_held_s"]) == ("committed", "push_failed", True, 1.4)
+    assert "push_error" not in b and "secret" not in json.dumps(r)
+
+
 def test_scheduler_result_codes_are_decoded():
     assert SCH.decode_result("267009")["name"] == "SCHED_S_TASK_RUNNING"
     assert SCH.decode_result("267011")["name"] == "SCHED_S_TASK_HAS_NOT_RUN"

@@ -60,7 +60,7 @@ reusing an earlier run's bytes would misstate evidence timing and break offline 
 Concurrency and rate limits: manual `research.sports.live.run capture` and
 `research.sports.scoring.run settle` take the same lock, so manual and scheduled work never overlap
 (a busy lock makes the cycle exit 0 without work; manual commands exit 3). When the holder is the state
-backup, which holds the lock for seconds, the cycle first waits up to 60 s for it (`waited_for_backup_s`
+backup snapshot, which holds the lock for 1–3 s, the cycle first waits up to 60 s for it (`waited_for_backup_s`
 in the cycle log) before skipping. A stale lock is removed only
 when its owner process is confirmed gone (missing PID, or the PID now belongs to a process with a
 different start time); age alone never frees it. The lock is released on failure. The frozen fetcher is
@@ -121,19 +121,46 @@ weather backup, whose allowlist, ref (`refs/heads/state`), clone and ownership m
 - Push guard: before pushing, every blob that would be sent (`rev-list --objects` over the commits the
   remote does not have) is checked; any blob over 50 MiB stops the run with `blocked_oversized` and the
   offending paths instead of attempting the push.
-- Coordination: an unlocked warm-up pass copies and hashes everything first; the final pass, which
-  defines the snapshot and manifest, holds the sports lock (no capture or settlement writes mid-copy; a busy
-  lock skips) and only handles files whose size or modification time changed, so the lock is held for a
-  few seconds (2.4 s measured at 5,345 files). Hashes are cached by size and mtime in the clone's `.git`
-  directory; `verify-restore` rehashes everything. The push waits while the weather cycle lock is held (the weather backup
-  runs inside it), is never forced, and a remote with unknown commits is reported as `conflict`.
-- Schedule: the task wrapper runs `backup run --if-due` after each cycle, at below-normal priority with
-  single-threaded packing; it pushes at most hourly, and waits 30 minutes after a failure (a deferred or
-  busy run is retried at the next cycle). Its result goes to the task log and
-  `data\logs\sports\backup_status.json` and never changes the cycle's exit code. Backup failures are
-  reported separately from capture health. `backup pause --reason …` writes
+- Writer behavior (what the snapshot relies on): accepted/attempt records and finalized scores are created
+  once with `open(path, "xb")` under the sports lock and never rewritten; run summaries and evidence
+  bodies/meta are written in place under the lock into a new per-run directory; collector status/state JSON
+  and normalized dependencies are replaced atomically (`os.replace`); logs are appended.
+- Snapshot under the sports lock (the only locked work): list the allowlisted directories (scandir size and
+  mtime; logs get a full stat with file identity), copy the small mutable status JSONs (refused above
+  1 MiB rather than copied slowly), and hard-link the known dependency files into
+  `data\logs\sports\.backup_staging\` so an atomic replacement after the lock keeps the lock-time bytes. If
+  a hard link fails, the run drops the links and switches to verified reads (`staging = verified_read`, with
+  the reason) instead of copying under the lock. Measured: 2.9 s cold (first run, 9,694 listed files,
+  147 links) and 1.5 s warm, down from 250 s when the whole mirror ran under the lock.
+- After the lock is released (below-normal CPU, background I/O priority, reads capped at 40 MB/s via
+  `KEL_SPORTS_BACKUP_MBPS`): every file is read with its identity, size and mtime checked before and after
+  the read and against the lock-time listing; logs are read only up to their lock-time length and their
+  previously backed-up prefix must still match; evidence must match the sha256 pinned by its record or
+  score. An in-place change to a listed or hard-linked file therefore fails the run as
+  `inconsistent_snapshot` (retried at the next check). Accepted records, finalized scores, evidence or
+  dependencies from the previous manifest that disappear locally refuse the snapshot (`vanished`), and the
+  mirror's delete pass refuses to remove backed-up research state; only mutable status files may vanish.
+  The staged clone is then verified against the manifest (exact file set, every written file reassembled
+  and rehashed) before `git commit`; any failure resets the clone to HEAD. Hashes are cached by size and
+  mtime in the clone's `.git` directory; `verify-restore` rehashes everything. The push waits while the
+  weather cycle lock is held (the weather backup runs inside it), is never forced, and a remote with unknown
+  commits is reported as `conflict`.
+- Schedule: its own task, `KalshiEdgeLab-SportsBackup` (`scripts\sports_backup_task.ps1`, registered by
+  `scripts\register_sports_backup_task.ps1`), checks every 15 minutes with `run --if-due --low-priority`,
+  `IgnoreNew`, task priority 7 and a 3-hour limit, plus `data\logs\sports\backup.lock` so two runs never
+  overlap (`skipped_overlap`). A snapshot is taken at most hourly (30 minutes after a failed snapshot; a busy
+  lock or inconsistent snapshot is retried at the next check). A committed snapshot that failed to upload
+  stays in the clone and is retried at every 15-minute check without the sports lock; `backup push-pending`
+  uploads it immediately. The capture task (`KalshiEdgeLab-SportsProspective`) no longer runs the backup, so
+  an upload never delays a capture cycle. Results go to `data\logs\sports\backup_task_YYYY-MM-DD.log` and
+  `backup_status.json`. The UI shows capture health and backup health separately, and deadline misses
+  (MISSED records) separately from cycle failures. `backup pause --reason …` writes
   `data\logs\sports\backup_paused.json`, which makes only the scheduled `run --if-due` skip (collection is
   unaffected and nothing local is touched); `backup resume` removes it.
+- Measured on 2026-10-14 (40,319 files, 2.98 GB): the first run of this design took 27.7 min (cold
+  reference cache, 1,537 files written, 196 s upload) with the lock held 2.9 s; a warm run with nothing new
+  took 69 s at normal priority; a warm run with 397 new files took 219 s at background priority (lock
+  1.5 s, upload 4 s) while a scheduled capture cycle started and finished normally alongside it.
 - Restore check: `verify-restore` clones the ref fresh with `autocrlf=true`/`eol=crlf`, verifies the
   manifest, restores into an empty temporary tree next to a copy of the tracked code, compares every file
   byte-for-byte with this repo, and runs `replay --all` and `verify-scores` inside the isolated tree with
@@ -176,10 +203,16 @@ Start-ScheduledTask -TaskName KalshiEdgeLab-SportsProspective
 # Health audit from existing logs (read only); first results: sports_collector_health_2026-10-11.md
 .\.venv\Scripts\python.exe -m research.sports.ops.audit
 
+# Sports-state backup task (separate from capture; registering it never touches the capture task)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\register_sports_backup_task.ps1
+Get-ScheduledTaskInfo -TaskName KalshiEdgeLab-SportsBackup | Select-Object LastRunTime, LastTaskResult, NextRunTime
+Start-ScheduledTask   -TaskName KalshiEdgeLab-SportsBackup    # runs `run --if-due --low-priority`
+
 # Sports-state backup
 .\.venv\Scripts\python.exe -m research.sports.ops.backup plan             # what would be backed up
 .\.venv\Scripts\python.exe -m research.sports.ops.backup init [--create] [--base-ref refs/heads/sports-state]
-.\.venv\Scripts\python.exe -m research.sports.ops.backup run              # snapshot, commit, push
+.\.venv\Scripts\python.exe -m research.sports.ops.backup run [--low-priority]   # snapshot, commit, push
+.\.venv\Scripts\python.exe -m research.sports.ops.backup push-pending     # upload an unpushed commit; no snapshot, no sports lock
 .\.venv\Scripts\python.exe -m research.sports.ops.backup status           # last run + pause marker
 .\.venv\Scripts\python.exe -m research.sports.ops.backup pause --reason "..."   # skip scheduled backups only
 .\.venv\Scripts\python.exe -m research.sports.ops.backup resume

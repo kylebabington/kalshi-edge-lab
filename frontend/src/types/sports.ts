@@ -468,6 +468,9 @@ export type SportsCollectorStatus = {
   task_name: string
   scheduler: SchedulerState
   weather_task: SchedulerState
+  backup_task_name?: string
+  backup_task?: SchedulerState
+  cycle_failures?: { last_24h?: number | null; consecutive?: number | null; cycles_24h?: number | null }
   lock: { held: boolean; state: string; file_age_s?: number; owner?: Record<string, unknown> }
   cadence_minutes: number
   settlement_interval_minutes: number
@@ -514,12 +517,21 @@ export type SportsCollectorStatus = {
     backup?: string
     at?: string
     finished_at?: string
+    duration_s?: number
     files?: number
     bytes?: number
     missing_count?: number
     incomplete?: boolean
     local_head?: string
     ref?: string
+    snapshot?: string | null
+    push?: string | null
+    unpushed?: boolean
+    last_snapshot_at?: string | null
+    last_snapshot_lock_s?: number | null
+    sports_lock_held_s?: number | null
+    last_pushed_at?: string | null
+    staging?: string | null
     paused?: { paused_at?: string; reason?: string } | null
   }
   limits: string
