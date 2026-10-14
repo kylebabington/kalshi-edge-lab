@@ -297,7 +297,8 @@ def run_cycle(log=None, now_fn=None, session=None, dry_run: bool = False, settle
         rec["detail"] = f"{type(exc).__name__}: {exc}"
         log("ERROR " + traceback.format_exc().strip().replace("\n", "\n    "))
         code = 1
-    rec["finished_at"] = _iso(now_fn().timestamp())
+    as_of = now_fn().timestamp()
+    rec["finished_at"] = _iso(as_of)
     rec["duration_s"] = round(time.monotonic() - t0, 1)
     rec["exit_code"] = code
     rec["http"] = sess.stats
@@ -309,26 +310,27 @@ def run_cycle(log=None, now_fn=None, session=None, dry_run: bool = False, settle
     if dry_run:
         _write_json(LOG_DIR / "dry_runs" / f"{rec['started_at'].replace(':', '')}.json", rec)
     else:
-        record_cycle(rec)
+        record_cycle(rec, as_of=as_of)
     return code
 
 
 def record_cycle(rec: dict, cycles_path: Path | None = None, status_path: Path | None = None,
-                 state_path: Path | None = None) -> dict:
+                 state_path: Path | None = None, *, as_of: float | None = None) -> dict:
     cycles_path, status_path, state_path = cycles_path or CYCLES_PATH, status_path or STATUS_PATH, state_path or STATE_PATH
     cycles_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cycles_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(rec, sort_keys=True) + "\n")
-    status = build_status(cycles_path, _read_json(state_path, {}))
+    status = build_status(cycles_path, _read_json(state_path, {}), as_of=as_of)
     _write_json(status_path, status)
     return status
 
 
-def read_cycles(cycles_path: Path | None = None, since_s: float = 86400) -> list[dict]:
+def read_cycles(cycles_path: Path | None = None, since_s: float = 86400, *, as_of: float | None = None) -> list[dict]:
+    """Cycles started within ``since_s`` of ``as_of`` (wall clock when omitted); the boundary is inclusive."""
     cycles_path = cycles_path or CYCLES_PATH
     if not cycles_path.exists():
         return []
-    cutoff = time.time() - since_s
+    cutoff = (time.time() if as_of is None else as_of) - since_s
     out = []
     with open(cycles_path, encoding="utf-8") as f:
         for line in f:
@@ -341,8 +343,9 @@ def read_cycles(cycles_path: Path | None = None, since_s: float = 86400) -> list
     return out
 
 
-def build_status(cycles_path: Path, state: dict) -> dict:
-    recent = read_cycles(cycles_path)
+def build_status(cycles_path: Path, state: dict, *, as_of: float | None = None) -> dict:
+    as_of = time.time() if as_of is None else as_of
+    recent = read_cycles(cycles_path, as_of=as_of)
     worked = [r for r in recent if r.get("result") != "skipped_lock_busy"]
     durations = [r["duration_s"] for r in worked if r.get("duration_s") is not None]
     failures = [{"at": r["started_at"], "result": r.get("result"), "detail": r.get("detail"),

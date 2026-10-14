@@ -12,7 +12,9 @@ Responses never contain filesystem paths, credentials or complete evidence paylo
 from __future__ import annotations
 
 import csv
+import functools
 import json
+import os
 import threading
 import time
 from collections import Counter, defaultdict
@@ -62,6 +64,22 @@ HISTORICAL = [
 ]
 
 _lock = threading.Lock()
+_active = [0]  # requests in progress; the background warm-up waits while this is non-zero
+_active_lock = threading.Lock()
+
+
+def _request(fn):
+    """Mark a public entry point as a request in progress (see :func:`warm`)."""
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        with _active_lock:
+            _active[0] += 1
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            with _active_lock:
+                _active[0] -= 1
+    return run
 
 
 def _now() -> float:
@@ -100,6 +118,8 @@ def _comp_info() -> dict:
 # ---------------------------------------------------------------- cached file scans (write-once artifacts)
 
 class _Cache:
+    """Parsed file contents, reused only while the file's (mtime_ns, size) is unchanged."""
+
     def __init__(self):
         self.files: dict[str, tuple[int, int, object]] = {}
 
@@ -108,13 +128,76 @@ class _Cache:
             st = p.stat()
         except OSError:
             return None
+        return self.get(p, st.st_mtime_ns, st.st_size, parse)
+
+    def get(self, p: Path, mtime_ns: int, size: int, parse):
         key = str(p)
         hit = self.files.get(key)
-        if hit and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
+        if hit and hit[0] == mtime_ns and hit[1] == size:
             return hit[2]
         val = parse(p)
-        self.files[key] = (st.st_mtime_ns, st.st_size, val)
+        self.files[key] = (mtime_ns, size, val)
         return val
+
+
+def _scan_json(root: Path, depth: int) -> list[tuple[Path, int, int]]:
+    """``*.json`` files exactly ``depth`` directories below ``root`` as (path, mtime_ns, size), in
+    ``sorted(root.glob(...))`` order. One directory listing per folder; on Windows the listing already
+    carries size and modification time, so no per-file stat call is needed."""
+    out: list[tuple[Path, int, int]] = []
+
+    def walk(d: str, level: int) -> None:
+        try:
+            it = os.scandir(d)
+        except OSError:
+            return
+        with it:
+            for e in it:
+                try:
+                    if level < depth:
+                        if e.is_dir():
+                            walk(e.path, level + 1)
+                    elif e.name.lower().endswith(".json") and e.is_file():
+                        st = e.stat()
+                        out.append((Path(e.path), st.st_mtime_ns, st.st_size))
+                except OSError:
+                    continue
+
+    walk(str(root), 0)
+    out.sort(key=lambda x: x[0])
+    return out
+
+
+def _stat_sig(p: Path) -> tuple[int, int] | None:
+    try:
+        st = os.stat(p)
+    except OSError:
+        return None
+    return st.st_mtime_ns, st.st_size
+
+
+class _SigCache:
+    """Derived values keyed by name, reused only while every file read to build them still has the
+    (mtime_ns, size) it had when it was read (``None`` = absent). A changed, added or removed file
+    rebuilds the value, so integrity checks run again on changed evidence."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.items: dict[str, tuple[list[tuple[Path, tuple | None]], object]] = {}
+
+    def get(self, key: str, build):
+        with self.lock:
+            hit = self.items.get(key)
+            if hit and all(_stat_sig(p) == sig for p, sig in hit[0]):
+                return hit[1]
+            touched: list[tuple[Path, tuple | None]] = []
+            val = build(touched)
+            self.items[key] = (touched, val)
+            return val
+
+    def clear(self) -> None:
+        with self.lock:
+            self.items.clear()
 
 
 _records = _Cache()
@@ -150,8 +233,8 @@ def records(capture_dir: Path | None = None) -> list[dict]:
     root = (capture_dir or LC.CAPTURE_DIR) / "accepted" / "checkpoint"
     out = []
     with _lock:
-        for p in sorted(root.glob("*/*.json")):
-            s = _records.load(p, _summarize_record)
+        for p, mtime, size in _scan_json(root, 1):
+            s = _records.get(p, mtime, size, _summarize_record)
             if s:
                 out.append(s)
     return out
@@ -171,8 +254,8 @@ def scores(score_dir: Path | None = None) -> list[dict]:
     root = (score_dir or SCC.SCORE_DIR) / "finalized"
     out = []
     with _lock:
-        for p in sorted(root.glob("*/*/*.json")):
-            s = _scores.load(p, _load_score)
+        for p, mtime, size in _scan_json(root, 2):
+            s = _scores.get(p, mtime, size, _load_score)
             if s:
                 out.append(s)
     return out
@@ -193,28 +276,49 @@ def latest_capture_run(capture_dir: Path | None = None) -> dict | None:
 
 # ---------------------------------------------------------------- titles from saved evidence (read-only)
 
-def _evidence_body(run_id: str, source: str, key: str, sha: str | None) -> tuple[bytes | None, str]:
+def _evidence_body(run_id: str, source: str, key: str, sha: str | None,
+                   touched: list | None = None) -> tuple[bytes | None, str]:
+    """Saved evidence body, verified against its SHA-256. ``touched`` collects (path, signature) of each
+    file consulted, taken before reading, for :class:`_SigCache`."""
     p = LC.EVIDENCE_ROOT / run_id / source / key[:2] / f"{key}.body"
-    if not p.exists():
+    sig = _stat_sig(p)
+    if touched is not None:
+        touched.append((p, sig))
+    if sig is None:
         return None, "missing"
     body = p.read_bytes()
     if sha is None:
-        meta = _read_json(p.with_name(f"{key}.meta.json")) or {}
+        mp = p.with_name(f"{key}.meta.json")
+        if touched is not None:
+            touched.append((mp, _stat_sig(mp)))
+        meta = _read_json(mp) or {}
         sha = meta.get("sha256")
     if sha is None or sha256_bytes(body) != sha:
         return None, "hash_mismatch"
     return body, "ok"
 
 
-@lru_cache(maxsize=64)
+_titles = _SigCache()
+_descriptions = _SigCache()
+
+
+def clear_caches() -> None:
+    _titles.clear()
+    _descriptions.clear()
+
+
 def _milestone_titles(run_id: str) -> dict:
+    return _titles.get(f"{LC.EVIDENCE_ROOT}::{run_id}", lambda touched: _build_milestone_titles(run_id, touched))
+
+
+def _build_milestone_titles(run_id: str, touched: list) -> dict:
     """event_ticker -> milestone title/start, walking the run's saved milestone pages by cursor."""
     url = f"{KALSHI_BASE}/milestones"
     params = {"limit": LC.PAGE_LIMITS["milestones"], "category": "Sports",
               "minimum_start_date": LC.MILESTONE_MIN_START}
     out = {}
     for _ in range(LC.MAX_PAGES):
-        body, state = _evidence_body(run_id, "kalshi", request_key(url, params), None)
+        body, state = _evidence_body(run_id, "kalshi", request_key(url, params), None, touched)
         if body is None:
             break
         page = json.loads(body.decode("utf-8"))
@@ -235,8 +339,9 @@ def _title_runs() -> list[str]:
     return list(reversed(runs))
 
 
-def event_title(s: dict) -> dict:
-    for rid in [s.get("run_id")] + _title_runs()[:3]:
+def event_title(s: dict, title_runs: list[str] | None = None) -> dict:
+    runs = (_title_runs() if title_runs is None else title_runs)[:3]
+    for rid in [s.get("run_id")] + runs:
         if not rid:
             continue
         idx = _milestone_titles(rid)
@@ -246,16 +351,20 @@ def event_title(s: dict) -> dict:
     return {"title": None, "title_source": "unavailable: saved milestone evidence not present locally"}
 
 
-@lru_cache(maxsize=4096)
 def _market_descriptions(record_key: str) -> tuple[dict, dict]:
+    return _descriptions.get(record_key, lambda touched: _build_market_descriptions(record_key, touched))
+
+
+def _build_market_descriptions(record_key: str, touched: list) -> tuple[dict, dict]:
     path, run_id = record_key.split("::", 1)
+    touched.append((Path(path), _stat_sig(Path(path))))
     rec = _read_json(Path(path)) or {}
     own = set(rec.get("kalshi_event_tickers") or [])
     out, states = {}, Counter()
     for e in rec.get("evidence") or []:
         if not e.get("url", "").endswith("/markets") or (e.get("params") or {}).get("event_ticker") not in own:
             continue
-        body, state = _evidence_body(run_id, e["source"], e["key"], e.get("sha256"))
+        body, state = _evidence_body(run_id, e["source"], e["key"], e.get("sha256"), touched)
         states[state] += 1
         if body is None:
             continue
@@ -324,12 +433,25 @@ def _collection_modes() -> dict:
     return PV.run_modes()
 
 
-def _event_item(s: dict, ev_scores: dict, pending: dict, now: float, modes: dict | None = None) -> dict:
-    from .ops import provenance as PV
-    ttl = event_title(s)
+def _event_item(s: dict, ev_scores: dict, pending: dict, now: float, modes: dict | None = None,
+                title_runs: list[str] | None = None) -> dict:
+    return _enrich(_light_item(s, ev_scores, pending, now, modes), s, title_runs)
+
+
+def _enrich(item: dict, s: dict, title_runs: list[str] | None = None) -> dict:
+    """Fill the evidence-derived title and participants of a light item (in place)."""
+    ttl = event_title(s, title_runs)
     desc = {}
     if s["status"] == "WINDOW_CAPTURE":
         desc, _ = _market_descriptions(f"{s['_path']}::{s['run_id']}")
+    item["title"], item["title_source"] = ttl.get("title"), ttl.get("title_source")
+    item["participants"] = _participants(s, desc, ttl.get("title"))
+    return item
+
+
+def _light_item(s: dict, ev_scores: dict, pending: dict, now: float, modes: dict | None = None) -> dict:
+    """Everything except title and participants, which need saved evidence (see :func:`_enrich`)."""
+    from .ops import provenance as PV
     settle = _settlement(s, ev_scores, pending) if s["status"] == "WINDOW_CAPTURE" else {
         "state": "not_applicable", "contracts": 0, "final": 0, "labelled": 0, "pending": 0, "states": {}}
     ok = [c for c in s["contracts"] if c["status"] == "ok"]
@@ -337,8 +459,8 @@ def _event_item(s: dict, ev_scores: dict, pending: dict, now: float, modes: dict
         "event_id": s["event_id"], "competition": s["competition"],
         "competition_name": _comp_info().get(s["competition"], {}).get("name"), "sport": s["sport"],
         "source": s["source"],
-        "cluster": s["cluster"], "title": ttl.get("title"), "title_source": ttl.get("title_source"),
-        "participants": _participants(s, desc, ttl.get("title")), "kalshi_event_tickers": s["kalshi_event_tickers"],
+        "cluster": s["cluster"], "title": None, "title_source": None,
+        "participants": [], "kalshi_event_tickers": s["kalshi_event_tickers"],
         "event_start": s["start"], "window_open": s["window_open"], "scheduled_cutoff": s["scheduled_cutoff"],
         "capture_status": s["status"], "prediction_as_of": s["prediction_as_of"], "finalized_at": s["finalized_at"],
         "horizon_minutes": s["horizon_minutes"], "missed_reason": s["reason"] if s["status"] == "MISSED" else None,
@@ -383,14 +505,29 @@ def _sort_key(item: dict):
     return (VIEW_ORDER[item["view"]], start if item["view"] == "upcoming" else -start, item["event_id"])
 
 
-def all_events(now: float | None = None) -> list[dict]:
-    now = now if now is not None else _now()
-    idx = _score_index(scores())
+def _light_events(now: float, recs: list[dict] | None = None, all_scores: list[dict] | None = None
+                  ) -> tuple[list[dict], dict[int, dict]]:
+    """Sorted light items for every readable record, plus id(item) -> record summary for enrichment."""
+    recs = records() if recs is None else recs
+    idx = _score_index(scores() if all_scores is None else all_scores)
     run = latest_settlement_run() or {}
     pending = {d["ticker"]: d for d in run.get("diagnostics") or []}
     modes = _collection_modes()
-    out = [_event_item(s, idx.get(s["event_id"], {}), pending, now, modes) for s in records() if "unreadable" not in s]
-    return sorted(out, key=_sort_key)
+    out, src = [], {}
+    for s in recs:
+        if "unreadable" in s:
+            continue
+        item = _light_item(s, idx.get(s["event_id"], {}), pending, now, modes)
+        src[id(item)] = s
+        out.append(item)
+    return sorted(out, key=_sort_key), src
+
+
+def all_events(now: float | None = None) -> list[dict]:
+    now = now if now is not None else _now()
+    items, src = _light_events(now)
+    runs = _title_runs()
+    return [_enrich(i, src[id(i)], runs) for i in items]
 
 
 SORTS = ("default", "start_asc", "start_desc", "capture_desc", "settlement_desc")
@@ -412,23 +549,31 @@ def _sorted(items: list[dict], sort: str) -> list[dict]:
     return have + missing
 
 
+@_request
 def list_events(filters: dict, page: int = 1, page_size: int = 24, sort: str = "default") -> dict:
     loaded = _now()
-    items = all_events(loaded)
+    items, src = _light_events(loaded)
     facets = {k: sorted({str(x) for i in items for x in (i[k] if isinstance(i[k], list) else [i[k]]) if x})
               for k in ("sport", "competition", "families", "cohorts")}
     views = Counter(i["view"] for i in items)
+    runs = _title_runs()
+    if (filters.get("q") or "").strip():
+        items = [_enrich(i, src[id(i)], runs) for i in items]  # search covers titles and participants
     sel = _sorted([i for i in items if _matches(i, filters)], sort)
     page_size = max(1, min(page_size, 200))
     pages = max(1, -(-len(sel) // page_size))
     page = max(1, min(page, pages))
+    visible = sel[(page - 1) * page_size: page * page_size]
+    for i in visible:
+        if i["title_source"] is None:
+            _enrich(i, src[id(i)], runs)
     return {"generated_at": _iso(loaded), "label": "Saved captures", "source": SOURCE_SAVED,
             "artifacts": artifacts(), "filters": {k: v for k, v in filters.items() if v},
             "sort": sort if sort in SORTS else "default", "total": len(sel),
             "page": page, "page_size": page_size, "pages": pages,
             "views": {v: views.get(v, 0) for v in VIEWS}, "facets": facets,
             "facet_labels": {"competition": {c: _comp_info().get(c, {}).get("name") or c for c in facets["competition"]}},
-            "items": sel[(page - 1) * page_size: page * page_size]}
+            "items": visible}
 
 
 # ---------------------------------------------------------------- event detail
@@ -534,6 +679,7 @@ def _provenance(rec: dict, s: dict, ev_scores: dict) -> dict:
     }
 
 
+@_request
 def get_event(eid: str) -> dict | None:
     now = _now()
     s = next((x for x in records() if x.get("event_id") == eid), None)
@@ -628,10 +774,12 @@ def _period(ss: list[dict]) -> dict:
             "first_settled_at": settled[0] if settled else None, "last_settled_at": settled[-1] if settled else None}
 
 
+@_request
 def get_results(filters: dict, weighting: str = "event") -> dict:
     weighting = "contract" if weighting == "contract" else "event"
     now = _now()
-    all_sc = [s for s in scores() if s["checksum_ok"]]
+    loaded = scores()
+    all_sc = [s for s in loaded if s["checksum_ok"]]
     sel = _filter_scores(all_sc, filters)
     labelled = [s for s in sel if s.get("y") is not None]
     states = Counter(s["settlement"]["state"] for s in sel)
@@ -652,7 +800,7 @@ def get_results(filters: dict, weighting: str = "event") -> dict:
             "counts": {"final_scores": len(sel), "labelled_contracts": len(labelled),
                        "labelled_events": len({s["event_key"] for s in labelled}),
                        "settlement_states": dict(states),
-                       "excluded_score_checksum_problems": sum(1 for s in scores() if not s["checksum_ok"])},
+                       "excluded_score_checksum_problems": sum(1 for s in loaded if not s["checksum_ok"])},
             "period": _period(labelled),
             "facets": {g: sorted({str(s.get(g)) for s in all_sc if s.get(g) is not None}) for g in SCC.GROUP_KEYS},
             "overall": _metric_block(labelled, weighting), "breakdown": breakdown,
@@ -668,6 +816,7 @@ def _csv_rows(p: Path) -> list[dict] | None:
     return _misc.load(p, parse)
 
 
+@_request
 def get_coverage(filters: dict, page: int = 1, page_size: int = 50) -> dict:
     now = _now()
     series = _csv_rows(SERIES_MATRIX_CSV)
@@ -798,6 +947,7 @@ def _test_period(proto: dict) -> dict | None:
     return None
 
 
+@_request
 def get_historical(filters: dict, page: int = 1, page_size: int = 100) -> dict:
     now = _now()
     supersedes = {v: k for k, v in EV.PARENT.items()}
@@ -847,9 +997,23 @@ def artifacts() -> dict:
             "raw_evidence": "present" if LC.EVIDENCE_ROOT.exists() and any(LC.EVIDENCE_ROOT.iterdir()) else "missing"}
 
 
+def warm() -> None:
+    """Parse saved records and scores, then verify the saved title and market evidence of every event
+    (default list order first; search needs all of them), ahead of the first requests. Read-only and
+    network-free. Evidence parsing holds the interpreter lock, so it pauses while any request runs."""
+    items, src = _light_events(_now())
+    runs = _title_runs()
+    for i in items:
+        while _active[0]:
+            time.sleep(0.05)
+        _enrich(i, src[id(i)], runs)
+
+
+@_request
 def get_summary() -> dict:
     now = _now()
-    items = all_events(now)
+    recs, all_sc = records(), scores()
+    items, _ = _light_events(now, recs, all_sc)
     captured = [i for i in items if i["capture_status"] == "WINDOW_CAPTURE"]
     cand = {k: {"available": sum(i["candidate_available"][k] for i in captured),
                 "unavailable": sum(i["contracts_ok"] - i["candidate_available"][k] for i in captured)}
@@ -860,7 +1024,6 @@ def get_summary() -> dict:
     last_cap = max((i["prediction_as_of"] for i in captured if i["prediction_as_of"]), default=None)
     cr = latest_capture_run() or {}
     sr = latest_settlement_run() or {}
-    recs = records()
     return {
         "generated_at": _iso(now), "label": "Saved captures", "source": SOURCE_SAVED, "mode": "RESEARCH_ONLY",
         "protocol": LC.PROTOCOL, "scoring_protocol": SCC.PROTOCOL, "artifacts": artifacts(),
@@ -881,7 +1044,7 @@ def get_summary() -> dict:
                                 "counts": sr.get("counts")} if sr else None,
         "integrity": {"record_checksum_mismatches": sum(1 for s in recs if not s.get("checksum_ok", True)),
                       "unreadable_records": sum(1 for s in recs if s.get("unreadable")),
-                      "score_checksum_mismatches": sum(1 for s in scores() if not s["checksum_ok"])},
+                      "score_checksum_mismatches": sum(1 for s in all_sc if not s["checksum_ok"])},
         "collector": collector_brief(),
         "collection": _collection_summary(items),
     }
@@ -940,6 +1103,7 @@ def _cycle_history(cycles_path: Path) -> dict:
             "last_successful_cycle_at": (last_ok or {}).get("finished_at")}
 
 
+@_request
 def get_collector_status(task_query=None) -> dict:
     from .ops import collector as CO
     from .ops import lock as LK

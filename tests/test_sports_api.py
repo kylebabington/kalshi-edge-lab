@@ -92,8 +92,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(BK, "STATUS_PATH", logs / "backup_status.json")
     monkeypatch.setattr(LK, "LOCK_PATH", logs / "cycle.lock")
     monkeypatch.setattr(SCH, "query_task", lambda name, **_: {**SCH.UNKNOWN, "reason": "test"})
-    S._milestone_titles.cache_clear()
-    S._market_descriptions.cache_clear()
+    S.clear_caches()
     return {"capture": cap, "scores": sc, "root": tmp_path}
 
 

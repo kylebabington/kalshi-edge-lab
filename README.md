@@ -368,8 +368,12 @@ Python research engine
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn api.app:app --reload
+.\.venv\Scripts\python.exe -m uvicorn api.app:app --reload --reload-dir api --reload-dir research
 ```
+
+Without `watchfiles` installed, `--reload` polls every `.py` file under the reload directories several
+times a second. Limiting it to `api` and `research` keeps it out of `.venv` and the large `data/` tree,
+which otherwise uses a full CPU core and slows the API.
 
 API base: `http://localhost:8000`
 
@@ -397,6 +401,14 @@ CORS allows only `http://localhost:5173`.
 
 Sports (read-only; every handler reads saved artifacts and never fetches upstream, captures, settles,
 writes reports or starts the collector):
+
+The sports handlers keep parsed records and scores, and the titles and market descriptions read from
+saved evidence, in memory. Each value is reused only while every file it was built from has the same size
+and modification time, so new, changed or removed files are re-read and their checksums are checked
+again. Counts, filters, sorting and paging use record and score metadata only; titles and participants
+are filled in for the rows on the returned page (or for every event when `q` is set). At startup a
+background thread parses records and scores and reads the title and market evidence used by search; it
+pauses between events while requests are running.
 
 - `GET /api/sports/summary` — counts, candidate availability, last capture, collector brief, counts by
   collection mode

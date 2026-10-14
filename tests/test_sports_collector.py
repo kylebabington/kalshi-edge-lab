@@ -27,6 +27,8 @@ from research.sports.scoring import run as SCORE_RUN
 REPO = Path(__file__).resolve().parents[1]
 REAL_SCHEDULING_MILESTONES = CO.scheduling_milestones
 T0 = datetime(2026, 10, 11, 18, 0, tzinfo=timezone.utc)
+BASES = [T0, T0 + timedelta(days=3), T0 + timedelta(days=9)]
+BASE_IDS = ["t0", "t0+3d", "t0+9d"]
 
 
 def _iso(dt: datetime) -> str:
@@ -174,26 +176,27 @@ def test_cycle_waits_briefly_for_a_backup_holding_the_lock(ops, monkeypatch):
 
 # ---------------------------------------------------------------- cycles
 
-def test_cycle_capture_only_when_due_and_settlement_hourly(ops):
+@pytest.mark.parametrize("base", BASES, ids=BASE_IDS)
+def test_cycle_capture_only_when_due_and_settlement_hourly(ops, base):
     calls = ops["calls"]
-    clock = {"t": T0}
+    clock = {"t": base}
     now_fn = lambda: clock["t"]  # noqa: E731
-    calls["milestones"] = [_milestone("m1", T0 + timedelta(hours=6), ["KXNFLGAME-X"])]
+    calls["milestones"] = [_milestone("m1", base + timedelta(hours=6), ["KXNFLGAME-X"])]
     assert CO.run_cycle(log=_quiet, now_fn=now_fn) == 0
     assert calls["capture"] == [] and calls["settle"] == 1
 
-    clock["t"] = T0 + timedelta(minutes=5)
+    clock["t"] = base + timedelta(minutes=5)
     assert CO.run_cycle(log=_quiet, now_fn=now_fn) == 0
     assert calls["settle"] == 1  # not due again within the hour
 
-    clock["t"] = T0 + timedelta(minutes=65)
+    clock["t"] = base + timedelta(minutes=65)
     calls["milestones"] = [_milestone("m2", clock["t"] + timedelta(minutes=LC.HORIZON_MIN + 10), ["KXEPLGAME-Y"])]
     assert CO.run_cycle(log=_quiet, now_fn=now_fn) == 0
     assert calls["capture"] == [["epl"]]
     assert calls["settle"] == 1  # due, but deferred while a capture window is open
 
     calls["milestones"] = []
-    clock["t"] = T0 + timedelta(minutes=70)
+    clock["t"] = base + timedelta(minutes=70)
     assert CO.run_cycle(log=_quiet, now_fn=now_fn) == 0
     assert calls["settle"] == 2
     cycles = _cycles(ops)
@@ -242,13 +245,14 @@ def test_failed_scheduling_requests_fall_back_to_full_capture(ops, monkeypatch):
     assert not (ops["logs"] / "cycle.lock").exists()
 
 
-def test_cycle_errors_are_recorded_and_release_the_lock(ops, monkeypatch):
+@pytest.mark.parametrize("base", BASES, ids=BASE_IDS)
+def test_cycle_errors_are_recorded_and_release_the_lock(ops, monkeypatch, base):
     def broken(comps, log, session):
         raise RuntimeError("disk full")
 
     monkeypatch.setattr(CO, "run_capture", broken)
-    ops["calls"]["milestones"] = [_milestone("m", T0 + timedelta(minutes=LC.HORIZON_MIN + 10), ["KXNFLGAME-Z"])]
-    assert CO.run_cycle(log=_quiet, now_fn=lambda: T0) == 1
+    ops["calls"]["milestones"] = [_milestone("m", base + timedelta(minutes=LC.HORIZON_MIN + 10), ["KXNFLGAME-Z"])]
+    assert CO.run_cycle(log=_quiet, now_fn=lambda: base) == 1
     rec = _cycles(ops)[-1]
     assert rec["result"] == "error" and "disk full" in rec["detail"]
     assert not LK.LOCK_PATH.exists()
@@ -375,3 +379,40 @@ def test_status_reports_settlement_deferral_window(tmp_path):
     assert st["settlement_deferred_since"].startswith("2026-10-11T14:37:11")
     assert st["settlement_forced_by"].startswith("2026-10-11T17:37:11")
     assert CO.build_status(tmp_path / "none.jsonl", {})["settlement_deferred_since"] is None
+
+
+def _cycle_line(started: float, result: str = "ok") -> str:
+    return json.dumps({"started_at": _iso(datetime.fromtimestamp(started, timezone.utc)),
+                       "finished_at": _iso(datetime.fromtimestamp(started, timezone.utc)),
+                       "result": result, "duration_s": 1.0})
+
+
+@pytest.mark.parametrize("base", BASES, ids=BASE_IDS)
+def test_24h_history_boundary_uses_the_given_reference_time(tmp_path, base):
+    as_of = base.timestamp()
+    day = 86400
+    path = tmp_path / "cycles.jsonl"
+    path.write_text("\n".join([
+        _cycle_line(as_of - day - 1, "error"),  # just outside
+        _cycle_line(as_of - day, "error"),      # exactly at the boundary: inside (inclusive)
+        _cycle_line(as_of - day + 1),           # just inside
+        _cycle_line(as_of - 60),
+    ]) + "\n", encoding="utf-8")
+    recent = CO.read_cycles(path, as_of=as_of)
+    assert [r["result"] for r in recent] == ["error", "ok", "ok"]
+    assert len(CO.read_cycles(path, as_of=as_of + 1)) == 2  # one second later the boundary entry drops out
+    assert CO.read_cycles(path, as_of=as_of + 2 * day) == []
+
+    st = CO.build_status(path, {}, as_of=as_of)
+    assert st["cycles_24h"] == 3 and st["failures_24h"] == 1 and st["consecutive_failures"] == 0
+    assert [f["at"] for f in st["recent_failures"]] == [recent[0]["started_at"]]
+    assert CO.build_status(path, {}, as_of=as_of + 1)["failures_24h"] == 0
+
+
+def test_history_filter_defaults_to_the_wall_clock(tmp_path):
+    import time
+    path = tmp_path / "cycles.jsonl"
+    path.write_text(_cycle_line(time.time() - 60) + "\n" + _cycle_line(T0.timestamp() - 30 * 86400) + "\n",
+                    encoding="utf-8")
+    assert len(CO.read_cycles(path)) == 1
+    assert CO.build_status(path, {})["cycles_24h"] == 1
