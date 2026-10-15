@@ -1,302 +1,460 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchSportsCollector, fetchSportsEvents } from '../api/sports'
-import { fetchLiveWeather, fetchSavedWeatherEvents, fetchWeatherCollector } from '../api/weather'
-import { LiveWeatherCard, SavedWeatherCard, SportsCard } from '../components/eventCards'
-import { SportsHealthPanel, WeatherHealthPanel } from '../components/HealthPanels'
-import { sportsHealth, weatherHealth } from '../lib/health'
-import { EmptyState, ErrorState, LoadingState, StaleNotice, StatusBadge } from '../components/StatusBadge'
+import { eventPath, fetchSportsCollector, fetchSportsEvents } from '../api/sports'
+import { fetchSavedWeatherEvents, fetchWeatherCollector, weatherEventPath } from '../api/weather'
+import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
 import { TimezoneNote } from '../components/TimezoneNote'
-import { DataStamp } from '../components/sports/DataStamp'
 import { useAsync, type AsyncState } from '../components/sports/useAsync'
-import type { SportsEventItem } from '../types/sports'
-import type { ModelSummary, SavedWeatherEvent } from '../types/weather'
+import {
+  sportsBackupHealth,
+  sportsHealth,
+  weatherHealth,
+  type CollectorHealth,
+  type HealthState,
+} from '../lib/health'
+import { SPORTS_VIEW_LABELS, WEATHER_VIEW_LABELS, sportsEventTitle } from '../lib/labels'
+import { fmtLocal, fmtTargetDate } from '../lib/time'
+import { weatherTitle } from '../lib/weatherText'
+import type { SportsCollectorStatus, SportsEventItem, SportsEventList } from '../types/sports'
+import type { SavedWeatherEvent, SavedWeatherEventList, WeatherCollectorStatus } from '../types/weather'
 
-type Props = {
-  summary: ModelSummary | null
-  summaryLoading: boolean
-  summaryError: string | null
+const PREVIEW = 4
+
+type Tone = 'healthy' | 'warning' | 'stale' | 'error'
+
+const TONE_LABEL: Record<Tone, string> = {
+  healthy: 'Healthy',
+  warning: 'Warning',
+  stale: 'Stale',
+  error: 'Error',
 }
 
-const GROUP_SIZE = 6
+type Attention = { id: string; message: string; href?: string }
 
-export function DashboardPage(props: Props) {
+type Props = { apiStatus?: string }
+
+function toneOf(state: HealthState): Tone {
+  if (state === 'healthy') return 'healthy'
+  if (state === 'stale') return 'stale'
+  return 'warning'
+}
+
+function apiTone(status: string): Tone | 'loading' {
+  if (status === 'loading') return 'loading'
+  if (status === 'ok' || status === 'mock') return 'healthy'
+  if (status === 'down') return 'error'
+  return 'warning'
+}
+
+function healthLine(name: string, health: CollectorHealth): Attention | null {
+  if (health.state === 'healthy') return null
+  return { id: `${name}-health`, message: `${name}: ${health.reason}.` }
+}
+
+/**
+ * Attention is derived from collector health and the unfiltered view counts on the
+ * upcoming lists. Lifetime missed-window totals are not listed: only misses in the
+ * last 24 hours, missing artifact directories, and events still awaiting settlement.
+ */
+function buildAttention({
+  apiStatus,
+  weatherCollector,
+  sportsCollector,
+  weatherUpcoming,
+  weatherSettled,
+  sportsUpcoming,
+  sportsSettled,
+}: {
+  apiStatus: string
+  weatherCollector: AsyncState<WeatherCollectorStatus>
+  sportsCollector: AsyncState<SportsCollectorStatus>
+  weatherUpcoming: AsyncState<SavedWeatherEventList>
+  weatherSettled: AsyncState<SavedWeatherEventList>
+  sportsUpcoming: AsyncState<SportsEventList>
+  sportsSettled: AsyncState<SportsEventList>
+}): Attention[] {
+  const items: Attention[] = []
+  const api = apiTone(apiStatus)
+  if (api === 'error') items.push({ id: 'api', message: 'API is not responding.' })
+  else if (api === 'warning') items.push({ id: 'api', message: `API status is ${apiStatus}.` })
+
+  if (!weatherCollector.loading) {
+    if (weatherCollector.error) {
+      items.push({ id: 'weather-collector-error', message: `Weather collector status unavailable: ${weatherCollector.error}` })
+    } else if (weatherCollector.data) {
+      const line = healthLine('Weather collector', weatherHealth(weatherCollector.data))
+      if (line) items.push(line)
+      const missed = weatherCollector.data.forecast_freshness.missed_checkpoints_24h
+      if (missed > 0) {
+        items.push({
+          id: 'weather-checkpoints',
+          message: `${missed} missed weather ${missed === 1 ? 'checkpoint' : 'checkpoints'} in the last 24 hours.`,
+          href: '/markets?tab=saved',
+        })
+      }
+    }
+  }
+
+  if (!weatherUpcoming.loading) {
+    if (weatherUpcoming.error) {
+      items.push({ id: 'weather-upcoming-error', message: `Upcoming weather events failed to load: ${weatherUpcoming.error}` })
+    } else if (weatherUpcoming.data?.artifacts.snapshots === 'missing') {
+      items.push({
+        id: 'weather-missing',
+        message: 'No saved weather forecasts on this machine.',
+        href: '/markets?tab=saved',
+      })
+    } else if ((weatherUpcoming.data?.views.awaiting_settlement ?? 0) > 0) {
+      const n = weatherUpcoming.data!.views.awaiting_settlement
+      items.push({
+        id: 'weather-pending',
+        message: `${n} weather ${n === 1 ? 'event is' : 'events are'} awaiting settlement.`,
+        href: '/markets?tab=saved&status=awaiting_settlement',
+      })
+    }
+  }
+  if (!weatherSettled.loading && weatherSettled.error) {
+    items.push({ id: 'weather-settled-error', message: `Settled weather events failed to load: ${weatherSettled.error}` })
+  }
+
+  if (!sportsCollector.loading) {
+    if (sportsCollector.error) {
+      items.push({ id: 'sports-collector-error', message: `Sports collector status unavailable: ${sportsCollector.error}` })
+    } else if (sportsCollector.data) {
+      const line = healthLine('Sports collector', sportsHealth(sportsCollector.data))
+      if (line) items.push(line)
+      const backup = sportsBackupHealth(sportsCollector.data)
+      if (backup.state !== 'healthy' && !backup.initial) {
+        items.push({ id: 'sports-backup', message: `Sports backup: ${backup.reason}.` })
+      }
+      const misses = sportsCollector.data.missed_windows.last_24h
+      if (misses > 0) {
+        items.push({
+          id: 'sports-misses',
+          message: `${misses} sports deadline ${misses === 1 ? 'miss' : 'misses'} in the last 24 hours.`,
+          href: '/sports?tab=events&status=missed',
+        })
+      }
+    }
+  }
+
+  if (!sportsUpcoming.loading) {
+    if (sportsUpcoming.error) {
+      items.push({ id: 'sports-upcoming-error', message: `Upcoming sports events failed to load: ${sportsUpcoming.error}` })
+    } else if (sportsUpcoming.data?.artifacts.capture_records === 'missing') {
+      items.push({
+        id: 'sports-missing',
+        message: 'No saved sports captures on this machine.',
+        href: '/sports?tab=events',
+      })
+    } else if ((sportsUpcoming.data?.views.awaiting_settlement ?? 0) > 0) {
+      const n = sportsUpcoming.data!.views.awaiting_settlement
+      items.push({
+        id: 'sports-pending',
+        message: `${n} sports ${n === 1 ? 'event is' : 'events are'} awaiting settlement.`,
+        href: '/sports?tab=events&status=awaiting_settlement',
+      })
+    }
+  }
+  if (!sportsSettled.loading && sportsSettled.error) {
+    items.push({ id: 'sports-settled-error', message: `Settled sports events failed to load: ${sportsSettled.error}` })
+  }
+
+  return items
+}
+
+export function DashboardPage({ apiStatus = 'unknown' }: Props) {
+  const weatherCollector = useAsync(fetchWeatherCollector, 'dash-weather-collector')
+  const sportsCollector = useAsync(fetchSportsCollector, 'dash-sports-collector')
+  const weatherUpcoming = useAsync(
+    () => fetchSavedWeatherEvents({ status: 'upcoming', sort: 'target_asc', page_size: PREVIEW }),
+    'dash-weather-upcoming',
+  )
+  const weatherSettled = useAsync(
+    () => fetchSavedWeatherEvents({ status: 'settled', sort: 'settlement_desc', page_size: PREVIEW }),
+    'dash-weather-settled',
+  )
+  const sportsUpcoming = useAsync(
+    () => fetchSportsEvents({ status: 'upcoming', sort: 'start_asc', page_size: PREVIEW }),
+    'dash-sports-upcoming',
+  )
+  const sportsSettled = useAsync(
+    () => fetchSportsEvents({ status: 'settled', sort: 'settlement_desc', page_size: PREVIEW }),
+    'dash-sports-settled',
+  )
+
+  const attention = buildAttention({
+    apiStatus,
+    weatherCollector,
+    sportsCollector,
+    weatherUpcoming,
+    weatherSettled,
+    sportsUpcoming,
+    sportsSettled,
+  })
+  const checking =
+    weatherCollector.loading ||
+    sportsCollector.loading ||
+    weatherUpcoming.loading ||
+    weatherSettled.loading ||
+    sportsUpcoming.loading ||
+    sportsSettled.loading
+
   return (
     <div className="space-y-8">
       <header className="space-y-1">
-        <h2 className="text-xl font-semibold">Overview</h2>
+        <h2 className="text-xl font-semibold break-words">Overview</h2>
         <p className="text-sm text-[var(--text-muted)]">
-          Weather and sports load separately, so a slow or failed request in one never blocks the other. Research only —
-          no bets, no recommendations.
+          Saved weather and sports captures, collector status, and recent activity.
         </p>
         <TimezoneNote />
       </header>
-      <WeatherOverview {...props} />
-      <SportsOverview />
-    </div>
-  )
-}
 
-function SectionHeader({ id, title, href, linkText, children }: { id: string; title: string; href: string; linkText: string; children?: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-2">
-      <div>
-        <h2 id={id} className="text-lg font-semibold">
-          {title}
+      <section className="space-y-3" aria-labelledby="system-status">
+        <h2 id="system-status" className="text-lg font-semibold">
+          System status
         </h2>
-        {children}
-      </div>
-      <Link to={href} className="text-sm text-[var(--accent)] hover:underline">
-        {linkText} →
-      </Link>
-    </div>
-  )
-}
+        <ul className="grid gap-3 lg:grid-cols-3">
+          <StatusCard
+            label="API"
+            tone={apiTone(apiStatus)}
+            detail={apiStatus === 'loading' ? 'Checking API…' : `Reported status: ${apiStatus}`}
+          />
+          <CollectorCard
+            label="Weather collector"
+            state={weatherCollector}
+            health={weatherCollector.data ? weatherHealth(weatherCollector.data) : null}
+          />
+          <CollectorCard
+            label="Sports collector"
+            state={sportsCollector}
+            health={sportsCollector.data ? sportsHealth(sportsCollector.data) : null}
+          />
+        </ul>
+      </section>
 
-type ListPayload<T> = { items: T[]; total: number; generated_at: string; source?: string }
-
-function EventGroup<T>({
-  title,
-  description,
-  state,
-  render,
-  empty,
-  viewAll,
-}: {
-  title: string
-  description: string
-  state: AsyncState<ListPayload<T>>
-  render: (item: T) => ReactNode
-  empty: string
-  viewAll: string
-}) {
-  const data = state.data
-  return (
-    <section className="space-y-2" aria-label={title}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-semibold">
-          {title}
-          {data ? <span className="ml-2 text-xs text-[var(--text-muted)] mono">{data.total}</span> : null}
-        </h3>
-        {data && data.total > data.items.length ? (
-          <Link to={viewAll} className="text-xs text-[var(--accent)] hover:underline">
-            View all {data.total} →
-          </Link>
-        ) : null}
-      </div>
-      <p className="text-xs text-[var(--text-muted)]">{description}</p>
-      {state.loading && !data ? <LoadingState label={`Loading ${title.toLowerCase()}…`} /> : null}
-      {state.error ? <ErrorState message={state.error} onRetry={state.reload} /> : null}
-      {data && !state.error ? (
-        data.items.length === 0 ? (
-          <EmptyState title={`No ${title.toLowerCase()}`} detail={empty} />
-        ) : (
-          <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {data.items.map((item, i) => (
-              <li key={i}>{render(item)}</li>
+      <section className="space-y-3" aria-labelledby="needs-attention">
+        <h2 id="needs-attention" className="text-lg font-semibold">
+          Needs attention
+        </h2>
+        {attention.length ? (
+          <ul className="space-y-2" aria-label="Attention items">
+            {attention.map((item) => (
+              <li key={item.id} className="panel flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="break-words">{item.message}</span>
+                {item.href ? (
+                  <Link
+                    to={item.href}
+                    className="text-[var(--accent)] hover:underline shrink-0 inline-flex items-center min-h-[2.25rem] px-1"
+                  >
+                    View
+                  </Link>
+                ) : null}
+              </li>
             ))}
           </ul>
-        )
-      ) : null}
-    </section>
-  )
-}
-
-// ---------------------------------------------------------------- weather
-
-function useSavedWeather(status: string, sort: string) {
-  return useAsync(() => fetchSavedWeatherEvents({ status, sort, page_size: GROUP_SIZE }), `weather-${status}-${sort}`)
-}
-
-function WeatherOverview({ summary, summaryLoading, summaryError }: Props) {
-  const collector = useAsync(fetchWeatherCollector, 'weather-collector')
-  const upcoming = useSavedWeather('upcoming', 'target_asc')
-  const pending = useSavedWeather('awaiting_settlement', 'target_desc')
-  const settled = useSavedWeather('settled', 'settlement_desc')
-  const live = useAsync(fetchLiveWeather, 'weather-live')
-  const health = collector.data ? weatherHealth(collector.data) : null
-  const renderSaved = (e: SavedWeatherEvent) => <SavedWeatherCard event={e} />
-  const missing = upcoming.data?.artifacts.snapshots === 'missing'
-  return (
-    <section className="space-y-5" aria-labelledby="weather-overview">
-      <SectionHeader id="weather-overview" title="Weather" href="/markets?tab=saved" linkText="Browse weather events">
-        <p className="text-xs text-[var(--text-muted)]">NYC daily high (KXHIGHNY). Saved forecasts are immutable snapshots.</p>
-      </SectionHeader>
-      <WeatherHealthPanel state={collector} />
-      {health?.state === 'stale' ? (
-        <StaleNotice>
-          {health.reason}. Saved forecasts below are still valid records, but new checkpoints may be missing.
-        </StaleNotice>
-      ) : null}
-      {missing ? (
-        <EmptyState title="No saved weather forecasts on this machine" detail="Saved snapshots appear after the prospective cycle captures a checkpoint." />
-      ) : (
-        <>
-          <EventGroup
-            title="Upcoming captured events"
-            description="Target date today or later, with at least one saved forecast."
-            state={upcoming}
-            render={renderSaved}
-            empty="No saved forecast for an event that has not happened yet."
-            viewAll="/markets?tab=saved&status=upcoming"
-          />
-          <EventGroup
-            title="Pending settlement"
-            description="Target date has passed; no valid score confirms the outcome yet."
-            state={pending}
-            render={renderSaved}
-            empty="Every past event with a saved forecast has a confirmed outcome."
-            viewAll="/markets?tab=saved&status=awaiting_settlement"
-          />
-          <EventGroup
-            title="Recently settled"
-            description="Outcome confirmed by a valid score. The latest snapshot's own score is shown separately."
-            state={settled}
-            render={renderSaved}
-            empty="No saved forecast has a confirmed outcome yet."
-            viewAll="/markets?tab=saved&status=settled&sort=settlement_desc"
-          />
-        </>
-      )}
-      {upcoming.data ? <DataStamp generatedAt={upcoming.data.generated_at} loadedAt={upcoming.loadedAt} source={upcoming.data.source} /> : null}
-      <section className="space-y-2" aria-label="Open markets">
-        <h3 className="font-semibold">Open markets</h3>
-        <p className="text-xs text-[var(--text-muted)]">
-          Current market data and live weather sources, fetched on request (can be slow). Not a saved forecast.
-        </p>
-        {live.loading && !live.data ? <LoadingState label="Loading open weather markets (live sources)…" /> : null}
-        {live.error ? <ErrorState title="Live weather unavailable" message={live.error} onRetry={live.reload} /> : null}
-        {live.data && !live.error ? (
-          live.data.events.length === 0 ? (
-            <EmptyState title="No open KXHIGHNY events" detail="Open markets appear here when Kalshi lists them." />
-          ) : (
-            <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {live.data.events.map((e) => (
-                <li key={e.event_ticker}>
-                  <LiveWeatherCard event={e} />
-                </li>
-              ))}
-            </ul>
-          )
         ) : null}
-        {live.data ? <DataStamp generatedAt={live.data.generated_at} loadedAt={live.loadedAt} source="live sources" /> : null}
+        {checking ? <LoadingState label="Checking collectors and saved events…" /> : null}
+        {!checking && attention.length === 0 ? (
+          <EmptyState
+            title="Nothing needs attention"
+            detail="Collectors are current, saved data is available, and nothing is waiting on settlement."
+          />
+        ) : null}
       </section>
-      <WeatherModelPanels summary={summary} loading={summaryLoading} error={summaryError} />
-    </section>
-  )
-}
 
-function WeatherModelPanels({ summary, loading, error }: { summary: ModelSummary | null; loading: boolean; error: string | null }) {
-  if (loading) return <LoadingState label="Loading weather model artifacts…" />
-  if (error) return <ErrorState title="Weather model summary unavailable" message={error} />
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <div className="panel">
-        <h3 className="font-semibold">Weather model artifacts</h3>
-        {summary?.model_summary_available ? (
-          <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex justify-between gap-3">
-              <dt className="text-[var(--text-muted)]">Calibration rows</dt>
-              <dd className="mono">{String(summary.calibration.row_count ?? 'unknown')}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-[var(--text-muted)]">Usable CLINYC residuals</dt>
-              <dd className="mono">{String(summary.calibration.usable_clinyc_residuals ?? 'unknown')}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-[var(--text-muted)]">Transfer status</dt>
-              <dd>
-                <StatusBadge
-                  status={
-                    summary.settlement_regime?.transfer_validated
-                      ? 'VALIDATED'
-                      : String(summary.settlement_transfer?.transfer_status ?? summary.settlement_regime?.transfer_status ?? 'EXPERIMENTAL').toUpperCase()
-                  }
-                />
-              </dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="mt-3 text-sm text-[var(--text-muted)]">No calibration or backtest artifacts on this machine.</p>
-        )}
-      </div>
-      <div className="panel">
-        <h3 className="font-semibold">Research status</h3>
-        <ul className="mt-3 space-y-2 text-sm">
-          <li className="flex justify-between gap-3">
-            <span>Weather probability model</span>
-            <StatusBadge status={summary?.research_status?.weather_phase_1 ?? 'unknown'} />
-          </li>
-          <li className="flex justify-between gap-3">
-            <span>CLINYC transfer validation</span>
-            <StatusBadge status={summary?.research_status?.clinyc_target_calibration ?? 'unknown'} />
-          </li>
-          <li className="flex justify-between gap-3">
-            <span>Trade recommendations</span>
-            <StatusBadge status="DISABLED" />
-          </li>
-        </ul>
-      </div>
+      <section className="space-y-4" aria-labelledby="upcoming-heading">
+        <h2 id="upcoming-heading" className="text-lg font-semibold">
+          Upcoming
+        </h2>
+        <CategoryPreview
+          title="Weather"
+          viewAll="/markets?tab=saved&status=upcoming"
+          state={weatherUpcoming}
+          missing={weatherUpcoming.data?.artifacts.snapshots === 'missing'}
+          missingTitle="No saved weather forecasts on this machine"
+          missingDetail="Saved snapshots appear after the prospective cycle captures a checkpoint."
+          emptyTitle="No upcoming weather events"
+          emptyDetail="No saved forecast for an event that has not happened yet."
+          rows={(weatherUpcoming.data?.items ?? []).slice(0, PREVIEW).map((event) => (
+            <CompactWeather key={event.event_ticker} event={event} />
+          ))}
+        />
+        <CategoryPreview
+          title="Sports"
+          viewAll="/sports?tab=events&status=upcoming&sort=start_asc"
+          state={sportsUpcoming}
+          missing={sportsUpcoming.data?.artifacts.capture_records === 'missing'}
+          missingTitle="No saved sports captures on this machine"
+          missingDetail="Captures appear after the collector records an event inside its window."
+          emptyTitle="No upcoming sports events"
+          emptyDetail="No captured event is still upcoming."
+          rows={(sportsUpcoming.data?.items ?? []).slice(0, PREVIEW).map((event) => (
+            <CompactSports key={event.event_id} event={event} />
+          ))}
+        />
+      </section>
+
+      <section className="space-y-4" aria-labelledby="settled-heading">
+        <h2 id="settled-heading" className="text-lg font-semibold">
+          Recently settled
+        </h2>
+        <CategoryPreview
+          title="Weather"
+          viewAll="/markets?tab=saved&status=settled&sort=settlement_desc"
+          state={weatherSettled}
+          missing={weatherSettled.data?.artifacts.snapshots === 'missing'}
+          missingTitle="No saved weather forecasts on this machine"
+          missingDetail="Saved snapshots appear after the prospective cycle captures a checkpoint."
+          emptyTitle="No recently settled weather events"
+          emptyDetail="No saved forecast has a confirmed outcome yet."
+          rows={(weatherSettled.data?.items ?? []).slice(0, PREVIEW).map((event) => (
+            <CompactWeather key={event.event_ticker} event={event} />
+          ))}
+        />
+        <CategoryPreview
+          title="Sports"
+          viewAll="/sports?tab=events&status=settled&sort=settlement_desc"
+          state={sportsSettled}
+          missing={sportsSettled.data?.artifacts.capture_records === 'missing'}
+          missingTitle="No saved sports captures on this machine"
+          missingDetail="Captures appear after the collector records an event inside its window."
+          emptyTitle="No recently settled sports events"
+          emptyDetail="No captured event has fully settled yet."
+          rows={(sportsSettled.data?.items ?? []).slice(0, PREVIEW).map((event) => (
+            <CompactSports key={event.event_id} event={event} />
+          ))}
+        />
+      </section>
     </div>
   )
 }
 
-// ---------------------------------------------------------------- sports
-
-function useSportsGroup(status: string, sort: string) {
-  return useAsync(() => fetchSportsEvents({ status, sort, page_size: GROUP_SIZE }), `sports-${status}-${sort}`)
+function StatusCard({ label, tone, detail, onRetry }: { label: string; tone: Tone | 'loading'; detail: string; onRetry?: () => void }) {
+  return (
+    <li className="panel space-y-2" aria-label={label}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold">{label}</h3>
+        {tone === 'loading' ? (
+          <span className="text-xs text-[var(--text-muted)]">Checking…</span>
+        ) : (
+          <StatusBadge status={TONE_LABEL[tone]} />
+        )}
+      </div>
+      <p className="text-xs text-[var(--text-muted)] break-words">{detail}</p>
+      {onRetry ? (
+        <button type="button" className="pager-button text-sm" onClick={onRetry}>
+          Retry
+        </button>
+      ) : null}
+    </li>
+  )
 }
 
-function SportsOverview() {
-  const collector = useAsync(fetchSportsCollector, 'sports-collector')
-  const upcoming = useSportsGroup('upcoming', 'start_asc')
-  const pending = useSportsGroup('awaiting_settlement', 'start_desc')
-  const settled = useSportsGroup('settled', 'settlement_desc')
-  const health = collector.data ? sportsHealth(collector.data) : null
-  const renderSports = (e: SportsEventItem) => <SportsCard event={e} />
-  const missing = upcoming.data?.artifacts.capture_records === 'missing'
+function CollectorCard<T>({
+  label,
+  state,
+  health,
+}: {
+  label: string
+  state: AsyncState<T>
+  health: CollectorHealth | null
+}) {
+  if (state.loading && !state.data) {
+    return <StatusCard label={label} tone="loading" detail="Loading collector status…" />
+  }
+  if (state.error) {
+    return <StatusCard label={label} tone="error" detail={state.error} onRetry={state.reload} />
+  }
+  if (!health) return <StatusCard label={label} tone="warning" detail="Collector status has not loaded." />
+  return <StatusCard label={label} tone={toneOf(health.state)} detail={health.reason} />
+}
+
+function CategoryPreview({
+  title,
+  viewAll,
+  state,
+  missing,
+  missingTitle,
+  missingDetail,
+  emptyTitle,
+  emptyDetail,
+  rows,
+}: {
+  title: string
+  viewAll: string
+  state: AsyncState<{ items: unknown[] }>
+  missing: boolean
+  missingTitle: string
+  missingDetail: string
+  emptyTitle: string
+  emptyDetail: string
+  rows: ReactNode[]
+}) {
+  const count = state.data?.items.length ?? 0
   return (
-    <section className="space-y-5" aria-labelledby="sports-overview">
-      <SectionHeader id="sports-overview" title="Sports" href="/sports" linkText="Browse sports events">
-        <p className="text-xs text-[var(--text-muted)]">
-          Frozen <span className="mono">sports_phase2_capture_v2</span> candidates captured inside each event's window.
-        </p>
-      </SectionHeader>
-      <SportsHealthPanel state={collector} />
-      {health?.state === 'stale' ? (
-        <StaleNotice>{health.reason}. Upcoming events may be missing captures until the collector runs again.</StaleNotice>
+    <div className="space-y-2" aria-label={title}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-semibold">{title}</h3>
+        <Link
+          to={viewAll}
+          className="text-sm text-[var(--accent)] hover:underline inline-flex items-center min-h-[2.25rem] px-1"
+          aria-label={`View all ${title}`}
+        >
+          View all
+        </Link>
+      </div>
+      {state.loading && !state.data ? <LoadingState label={`Loading ${title.toLowerCase()}…`} /> : null}
+      {state.error ? <ErrorState message={state.error} onRetry={state.reload} /> : null}
+      {state.data && !state.error ? (
+        missing ? (
+          <EmptyState title={missingTitle} detail={missingDetail} />
+        ) : count === 0 ? (
+          <EmptyState title={emptyTitle} detail={emptyDetail} />
+        ) : (
+          <ul className="grid gap-3 md:grid-cols-2">{rows}</ul>
+        )
       ) : null}
-      {missing ? (
-        <EmptyState title="No saved sports captures on this machine" detail="Captures appear after the collector records an event inside its window." />
-      ) : (
-        <>
-          <EventGroup
-            title="Upcoming captured events"
-            description="Forecast saved; the event has not started yet."
-            state={upcoming}
-            render={renderSports}
-            empty="No captured event is still upcoming."
-            viewAll="/sports?tab=events&status=upcoming&sort=start_asc"
-          />
-          <EventGroup
-            title="Pending settlement"
-            description="Started or finished; some captured contracts are not final yet."
-            state={pending}
-            render={renderSports}
-            empty="No captured event is waiting for settlement."
-            viewAll="/sports?tab=events&status=awaiting_settlement"
-          />
-          <EventGroup
-            title="Recently settled"
-            description="Every captured contract is final, most recent Kalshi settlement first."
-            state={settled}
-            render={renderSports}
-            empty="No captured event has fully settled yet."
-            viewAll="/sports?tab=events&status=settled&sort=settlement_desc"
-          />
-        </>
-      )}
-      {upcoming.data ? <DataStamp generatedAt={upcoming.data.generated_at} loadedAt={upcoming.loadedAt} source={upcoming.data.source} /> : null}
-    </section>
+    </div>
+  )
+}
+
+function CompactWeather({ event }: { event: SavedWeatherEvent }) {
+  const title = weatherTitle(event.event_ticker, event.target_date)
+  return (
+    <CompactRow
+      href={weatherEventPath(event.event_ticker)}
+      title={title}
+      meta={fmtTargetDate(event.target_date)}
+      status={WEATHER_VIEW_LABELS[event.view] ?? event.view}
+    />
+  )
+}
+
+function CompactSports({ event }: { event: SportsEventItem }) {
+  const title = sportsEventTitle(event)
+  return (
+    <CompactRow
+      href={eventPath(event.event_id)}
+      title={title}
+      meta={event.event_start ? `Starts ${fmtLocal(event.event_start)}` : 'Start time unavailable'}
+      status={SPORTS_VIEW_LABELS[event.view] ?? event.view}
+    />
+  )
+}
+
+function CompactRow({ href, title, meta, status }: { href: string; title: string; meta: string; status: string }) {
+  return (
+    <li>
+      <article className="panel flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <Link to={href} className="font-medium break-words hover:underline" aria-label={`Open ${title}`}>
+            {title}
+          </Link>
+          <p className="text-xs text-[var(--text-muted)] break-words">{meta}</p>
+        </div>
+        <StatusBadge status={status} />
+      </article>
+    </li>
   )
 }

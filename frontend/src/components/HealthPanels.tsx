@@ -1,17 +1,9 @@
 import type { ReactNode } from 'react'
-import {
-  HEALTH_LABELS,
-  sportsBackupHealth,
-  sportsHealth,
-  sportsLastSuccess,
-  weatherHealth,
-  type CollectorHealth,
-} from '../lib/health'
+import { HEALTH_LABELS, weatherHealth, type CollectorHealth } from '../lib/health'
 import { fmtDuration, fmtLocal, minutesBetween } from '../lib/time'
-import type { SchedulerState, SportsCollectorStatus } from '../types/sports'
+import type { SchedulerState } from '../types/sports'
 import type { WeatherCollectorStatus } from '../types/weather'
 import { ErrorState, LoadingState, StatusBadge } from './StatusBadge'
-import { label } from './sports/format'
 
 function schedulerText(s: SchedulerState): string {
   if (!s.observable) return 'unknown'
@@ -24,8 +16,8 @@ function schedulerText(s: SchedulerState): string {
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="flex justify-between gap-3 border-b border-[var(--border)] py-1">
-      <dt className="text-[var(--text-muted)]">{term}</dt>
-      <dd className="mono text-right text-xs break-words">{children}</dd>
+      <dt className="text-[var(--text-muted)] shrink-0 max-w-[60%]">{term}</dt>
+      <dd className="mono text-right text-xs break-words min-w-0">{children}</dd>
     </div>
   )
 }
@@ -89,7 +81,7 @@ function HealthBlock({
 type State<T> = { loading: boolean; error: string | null; data: T | null; reload: () => void }
 
 export function WeatherHealthPanel({ state }: { state: State<WeatherCollectorStatus> }) {
-  if (state.loading && !state.data) return <LoadingState label="Loading weather collector health…" />
+  if (state.loading && !state.data) return <LoadingState label="Loading weather collector healthâ€¦" />
   if (state.error) return <ErrorState title="Weather collector status unavailable" message={state.error} onRetry={state.reload} />
   const s = state.data
   if (!s) return null
@@ -119,54 +111,5 @@ export function WeatherHealthPanel({ state }: { state: State<WeatherCollectorSta
       ]}
       note={`Task ${s.task_name} runs about every ${s.cadence_minutes} minutes. ${s.limits}`}
     />
-  )
-}
-
-export function SportsHealthPanel({ state }: { state: State<SportsCollectorStatus> }) {
-  if (state.loading && !state.data) return <LoadingState label="Loading sports collector health…" />
-  if (state.error) return <ErrorState title="Sports collector status unavailable" message={state.error} onRetry={state.reload} />
-  const s = state.data
-  if (!s) return null
-  const now = s.generated_at
-  const health = sportsHealth(s)
-  const lastResult = s.history?.last_cycle_result ?? s.status.last_cycle?.result
-  const lastFinished = s.history?.last_cycle_finished_at ?? s.status.last_cycle?.finished_at
-  const backup = sportsBackupHealth(s)
-  const b = s.backup
-  return (
-    <>
-      <HealthBlock
-        heading="Sports collector"
-        health={health}
-        rows={[
-          ['Scheduler', schedulerText(s.scheduler)],
-          ['Last successful cycle', ago(sportsLastSuccess(s), now)],
-          ['Last cycle', lastFinished ? `${fmtLocal(lastFinished)} (${label(lastResult)})` : 'none recorded'],
-          ['Cycle running now', s.lock.held ? `yes (${label(s.lock.state)})` : 'no'],
-          ['Cycle failures (24 h) / consecutive', `${s.status.failures_24h ?? '—'} / ${s.status.consecutive_failures ?? '—'}`],
-        ]}
-        freshness={[
-          ['Latest accepted capture', ago(s.freshness.last_accepted_capture_at, now)],
-          ['Latest score written', ago(s.freshness.last_score_written_at, now)],
-          ['Deadline misses (24 h / total)', `${s.missed_windows.last_24h} / ${s.missed_windows.total}`],
-        ]}
-        note={`Task ${s.task_name} runs every ${s.cadence_minutes} minutes. Opening this page never starts a collection.`}
-      />
-      <section className="panel space-y-2" aria-label="Sports state backup">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-semibold">Sports state backup</h3>
-          <StatusBadge status={backup.label} />
-        </div>
-        <p className="text-xs text-[var(--text-muted)]">
-          {backup.reason}. Runs as its own task, so backup problems never delay or fail a capture cycle.
-        </p>
-        <dl className="grid gap-x-6 text-sm md:grid-cols-2">
-          <Row term="Backup task">{s.backup_task ? schedulerText(s.backup_task) : 'unknown'}</Row>
-          <Row term="Last snapshot">{ago(b?.last_snapshot_at, now)}</Row>
-          <Row term="Last upload">{ago(b?.last_pushed_at, now)}</Row>
-          <Row term="Upload pending">{b?.unpushed ? 'yes' : 'no'}</Row>
-        </dl>
-      </section>
-    </>
   )
 }

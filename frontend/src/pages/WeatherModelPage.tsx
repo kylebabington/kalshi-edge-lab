@@ -7,15 +7,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import type { ModelSummary } from '../types/weather'
+import { fetchModelSummary } from '../api/weather'
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
 import { ResultKindBadge, SampleNote } from '../components/MetricHelp'
-
-type Props = {
-  loading: boolean
-  error: string | null
-  summary: ModelSummary | null
-}
+import { useAsync } from '../components/sports/useAsync'
 
 function pct(value: unknown): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
@@ -35,7 +30,8 @@ function dateRangeText(range: unknown): string {
   return String(range)
 }
 
-export function WeatherModelPage({ loading, error, summary }: Props) {
+export function WeatherModelPage() {
+  const { data: summary, loading, error } = useAsync(fetchModelSummary, 'model-summary')
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
   if (!summary) return <EmptyState title="No summary" detail="Model summary unavailable." />

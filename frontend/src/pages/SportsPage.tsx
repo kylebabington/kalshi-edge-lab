@@ -7,6 +7,8 @@ import {
   fetchSportsHistorical,
   fetchSportsResults,
 } from '../api/sports'
+import { CollectorDisclosure } from '../components/CollectorDisclosure'
+import { HelpDisclosure } from '../components/HelpDisclosure'
 import { MetricHelp, ResultKindBadge, SampleNote } from '../components/MetricHelp'
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
 import { TimezoneNote } from '../components/TimezoneNote'
@@ -18,6 +20,7 @@ import { Tabs } from '../components/sports/Tabs'
 import { TimelinePanel } from '../components/sports/TimelinePanel'
 import { CANDIDATE_LABELS, VIEW_LABELS, fmtNum, fmtSigned, label } from '../components/sports/format'
 import { useAsync } from '../components/sports/useAsync'
+import { HEALTH_LABELS, sportsBackupHealth, sportsHealth } from '../lib/health'
 import { cohortLabel, competitionLabel, familyLabel, sportLabel } from '../lib/labels'
 import { fmtLocal } from '../lib/time'
 import { CANDIDATES, type MetricBlock, type SportsResults } from '../types/sports'
@@ -66,14 +69,31 @@ export function SportsPage() {
   return (
     <div className="space-y-5">
       <header className="space-y-1">
-        <h2 className="text-xl font-semibold">Sports</h2>
+        <h2 className="text-xl font-semibold break-words">Sports</h2>
         <p className="text-sm text-[var(--text-muted)]">
-          Saved captures of the frozen <span className="mono">sports_phase2_capture_v2</span> candidates, taken
-          inside each event's capture window and scored only after Kalshi settles the market. These are saved
-          snapshots, not a live feed. Research only — no bets, no recommendations.
+          Saved captures taken inside each event's window. These are saved snapshots, not a live feed.
         </p>
+        <HelpDisclosure title="About this data">
+          <p>
+            Frozen <span className="mono">sports_phase2_capture_v2</span> candidates, scored only after Kalshi settles
+            the market. A missed window is never back-filled. No bets and no recommendations.
+          </p>
+        </HelpDisclosure>
       </header>
-      <CollectorStatusPanel loading={collector.loading} error={collector.error} status={collector.data} />
+      <CollectorDisclosure
+        badges={
+          collector.data ? (
+            <>
+              <StatusBadge status={HEALTH_LABELS[sportsHealth(collector.data).state]} />
+              <StatusBadge status={sportsBackupHealth(collector.data).label} />
+            </>
+          ) : collector.error ? (
+            <StatusBadge status="Status error" />
+          ) : null
+        }
+      >
+        <CollectorStatusPanel loading={collector.loading} error={collector.error} status={collector.data} />
+      </CollectorDisclosure>
       <Tabs
         tabs={TABS}
         active={tab}
@@ -127,11 +147,27 @@ export function EventsTab({ params, setParam }: { params: Params; setParam: SetP
       <FilterBar
         selects={[
           {
+            id: 'status',
+            label: 'Status',
+            value: filters.status,
+            allLabel: 'All saved records',
+            options: [
+              { value: 'captured', label: 'Captured (any settlement state)' },
+              ...(['upcoming', 'awaiting_settlement', 'settled', 'missed'] as const).map((v) => ({
+                value: v,
+                label: `${VIEW_LABELS[v]}${data ? ` (${data.views[v] ?? 0})` : ''}`,
+              })),
+            ],
+          },
+          {
             id: 'sport',
             label: 'Sport',
             value: filters.sport,
             options: (data?.facets.sport ?? []).map((v) => ({ value: v, label: sportLabel(v) })),
           },
+          { id: 'sort', label: 'Sort by', value: filters.sort, allLabel: 'Default (upcoming first)', options: EVENT_SORTS },
+        ]}
+        advancedSelects={[
           {
             id: 'competition',
             label: 'League / competition',
@@ -152,20 +188,6 @@ export function EventsTab({ params, setParam }: { params: Params; setParam: SetP
             value: filters.cohort,
             options: (data?.facets.cohorts ?? []).map((v) => ({ value: v, label: cohortLabel(v) })),
           },
-          { id: 'sort', label: 'Sort by', value: filters.sort, allLabel: 'Default (upcoming first)', options: EVENT_SORTS },
-          {
-            id: 'status',
-            label: 'Capture / settlement',
-            value: filters.status,
-            allLabel: 'All saved records',
-            options: [
-              { value: 'captured', label: 'Captured (any settlement state)' },
-              ...(['upcoming', 'awaiting_settlement', 'settled', 'missed'] as const).map((v) => ({
-                value: v,
-                label: `${VIEW_LABELS[v]}${data ? ` (${data.views[v] ?? 0})` : ''}`,
-              })),
-            ],
-          },
           {
             id: 'collection',
             label: 'Collection mode',
@@ -181,11 +203,13 @@ export function EventsTab({ params, setParam }: { params: Params; setParam: SetP
         onChange={(id, value) => setParam({ [id]: value })}
         search={{ label: 'Search participants or events', value: filters.q, placeholder: 'Team, player, ticker…' }}
         onSearch={onSearch}
+        onReset={() =>
+          setParam({ sport: '', competition: '', family: '', cohort: '', status: '', collection: '', q: '', sort: '' })
+        }
       />
       {data ? <DataStamp generatedAt={data.generated_at} loadedAt={state.loadedAt} source={data.source} /> : null}
       <p className="text-xs text-[var(--text-muted)]">
-        By default upcoming captured events are listed first, then events awaiting settlement, settled events and
-        missed windows. Every card is a saved forecast, not current market data. A missed window is never back-filled.
+        Upcoming captured events are listed first, then events awaiting settlement, settled events, and missed windows.
       </p>
       <TimezoneNote />
       {state.loading ? <LoadingState label="Loading saved captures…" /> : null}
@@ -403,8 +427,10 @@ export function ResultsTab({ params, setParam }: { params: Params; setParam: Set
           { id: 'cohort', label: 'Cohort', value: filters.cohort, options: opts(data?.facets.cohort) },
         ]}
         onChange={(id, value) => setParam({ [id]: value })}
+        onReset={() => setParam({ sport: '', competition: '', family: '', cohort: '', weighting: '' })}
+        extraActive={filters.weighting === 'contract' ? 1 : 0}
       >
-        <fieldset className="flex flex-col gap-1 text-xs text-[var(--text-muted)]">
+        <fieldset className="flex flex-col gap-1 text-xs text-[var(--text-muted)] w-full sm:w-auto">
           <legend>Weighting</legend>
           <div className="flex gap-3 text-sm text-[var(--text)]">
             <label className="flex items-center gap-1">
@@ -463,6 +489,7 @@ export function CoverageTab({ params, setParam }: { params: Params; setParam: Se
         onChange={(id, value) => setParam({ [id]: value })}
         search={{ label: 'Search series', value: filters.q, placeholder: 'Ticker or title…' }}
         onSearch={onSearch}
+        onReset={() => setParam({ sport: '', competition: '', family: '', status: '', q: '' })}
       />
       {data ? <DataStamp generatedAt={data.generated_at} loadedAt={state.loadedAt} source={data.source.series} /> : null}
       {state.loading ? <LoadingState label="Loading coverage…" /> : null}
@@ -644,6 +671,7 @@ export function HistoricalTab({ params, setParam }: { params: Params; setParam: 
           { id: 'comparison', label: 'Comparison', value: filters.comparison, options: opts(facets('comparison')) },
         ]}
         onChange={(id, value) => setParam({ [id]: value })}
+        onReset={() => setParam({ protocol: '', level: '', family: '', cohort: '', comparison: '' })}
       />
       {state.loading ? <LoadingState label="Loading historical research…" /> : null}
       {state.error ? <ErrorState message={state.error} onRetry={state.reload} /> : null}

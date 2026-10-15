@@ -26,7 +26,7 @@ export function Tabs({ tabs, active, onChange, label, idPrefix }: Props) {
   }
 
   return (
-    <div role="tablist" aria-label={label} className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-2">
+    <div role="tablist" aria-label={label} className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-2 max-w-full">
       {tabs.map((tab, index) => {
         const selected = tab.id === active
         return (
@@ -43,7 +43,7 @@ export function Tabs({ tabs, active, onChange, label, idPrefix }: Props) {
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(tab.id)}
             onKeyDown={(e) => onKeyDown(e, index)}
-            className={`rounded-lg px-3 py-2 text-sm transition ${
+            className={`rounded-lg px-3 py-2 text-sm min-h-[2.25rem] transition ${
               selected
                 ? 'bg-[var(--surface-raised)] text-[var(--text)] border border-[var(--border)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text)] border border-transparent'

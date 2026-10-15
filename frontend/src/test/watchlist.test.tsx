@@ -199,4 +199,28 @@ describe('Watchlist page', () => {
     expect(await screen.findByRole('article', { name: 'Old game' })).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByText('Your watchlist is empty')).toBeNull())
   })
+
+  it('sorts by settlement from the URL and keeps category when the sort changes', async () => {
+    seed([
+      { category: 'weather', key: 'KXHIGHNY-26SEP26', label: 'NYC high Sep 26' },
+      { category: 'weather', key: 'KXHIGHNY-99JAN01', label: 'NYC high Jan 1' },
+    ])
+    const user = userEvent.setup()
+    renderPage('/watchlist?sort=settled')
+    await waitFor(() => {
+      const links = screen.getAllByRole('link', { name: /Open NYC daily high/ })
+      expect(links[0]).toHaveAccessibleName(/Sep 26/)
+    })
+    await user.selectOptions(screen.getByLabelText('Sort'), 'Recently added')
+    expect(screen.getByTestId('location')).toHaveTextContent('/watchlist')
+    expect(screen.getByTestId('location').textContent).not.toContain('sort=')
+    await waitFor(() => {
+      const links = screen.getAllByRole('link', { name: /Open NYC daily high/ })
+      expect(links[0]).toHaveAccessibleName(/Jan 1/)
+    })
+    await user.selectOptions(screen.getByLabelText('Sort'), 'Settled')
+    await user.click(screen.getByRole('button', { name: 'Weather (2)' }))
+    expect(screen.getByTestId('location').textContent).toContain('category=weather')
+    expect(screen.getByTestId('location').textContent).toContain('sort=settled')
+  })
 })

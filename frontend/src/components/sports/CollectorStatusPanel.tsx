@@ -15,8 +15,8 @@ function schedulerText(s: SchedulerState): string {
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="flex justify-between gap-3 border-b border-[var(--border)] py-1">
-      <dt className="text-[var(--text-muted)]">{term}</dt>
-      <dd className="mono text-right text-xs break-all">{children}</dd>
+      <dt className="text-[var(--text-muted)] shrink-0 max-w-[60%]">{term}</dt>
+      <dd className="mono text-right text-xs break-all min-w-0">{children}</dd>
     </div>
   )
 }

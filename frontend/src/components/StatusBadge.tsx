@@ -11,7 +11,8 @@ export function StatusBadge({ status }: { status: string }) {
     upper.includes('EXPERIMENTAL') ||
     upper.includes('STALE') ||
     upper.includes('DEGRADED') ||
-    upper.includes('UNAVAILABLE')
+    upper.includes('UNAVAILABLE') ||
+    upper.includes('WARNING')
   ) {
     cls = 'badge badge-warning'
   }

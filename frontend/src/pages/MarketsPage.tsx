@@ -1,8 +1,12 @@
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fetchLiveWeather, fetchSavedWeatherEvents } from '../api/weather'
+import { fetchLiveWeather, fetchSavedWeatherEvents, fetchWeatherCollector } from '../api/weather'
+import { CollectorDisclosure } from '../components/CollectorDisclosure'
+import { HelpDisclosure } from '../components/HelpDisclosure'
+import { WeatherHealthPanel } from '../components/HealthPanels'
 import { LiveWeatherCard, SavedWeatherCard } from '../components/eventCards'
-import { EmptyState, ErrorState, LoadingState } from '../components/StatusBadge'
+import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
+import { HEALTH_LABELS, weatherHealth } from '../lib/health'
 import { TimezoneNote } from '../components/TimezoneNote'
 import { DataStamp } from '../components/sports/DataStamp'
 import { FilterBar, Pager } from '../components/sports/FilterBar'
@@ -11,8 +15,8 @@ import { useAsync } from '../components/sports/useAsync'
 import { WEATHER_VIEW_LABELS } from '../lib/labels'
 
 const TABS = [
-  { id: 'saved', label: 'Saved forecasts' },
-  { id: 'open', label: 'Open markets (current data)' },
+  { id: 'saved', label: 'Saved' },
+  { id: 'open', label: 'Live' },
 ]
 
 const SORTS = [
@@ -25,6 +29,7 @@ const SORTS = [
 export function MarketsPage() {
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') === 'open' ? 'open' : 'saved'
+  const collector = useAsync(fetchWeatherCollector, 'weather-collector')
   const setParam = useCallback(
     (updates: Record<string, string>) => {
       setParams(
@@ -45,11 +50,14 @@ export function MarketsPage() {
   return (
     <div className="space-y-5">
       <header className="space-y-1">
-        <h2 className="text-xl font-semibold">Weather events</h2>
-        <p className="text-sm text-[var(--text-muted)]">
-          NYC daily high (KXHIGHNY). <strong>Saved forecasts</strong> are immutable snapshots recorded before each
-          outcome. <strong>Open markets</strong> show current market and weather data fetched on request. Research only.
-        </p>
+        <h2 className="text-xl font-semibold break-words">Weather events</h2>
+        <p className="text-sm text-[var(--text-muted)]">NYC daily high (KXHIGHNY).</p>
+        <HelpDisclosure title="How this works">
+          <p>
+            Saved forecasts are immutable snapshots recorded before each outcome. Live shows current market and weather
+            data fetched on request. This view does not place bets or recommend trades.
+          </p>
+        </HelpDisclosure>
         <TimezoneNote />
       </header>
       <Tabs
@@ -59,9 +67,24 @@ export function MarketsPage() {
         idPrefix="weather"
         onChange={(id) => setParams(id === 'saved' ? {} : { tab: id }, { replace: true })}
       />
+      <p className="text-sm text-[var(--text-muted)]">
+        Saved forecasts are frozen before the outcome. Live is current Kalshi and weather data, fetched when you open
+        this tab, and is not a saved forecast.
+      </p>
       <div role="tabpanel" id={`weather-panel-${tab}`} aria-labelledby={`weather-tab-${tab}`} className="space-y-4">
         {tab === 'saved' ? <SavedTab params={params} setParam={setParam} /> : <OpenTab />}
       </div>
+      <CollectorDisclosure
+        badges={
+          collector.data ? (
+            <StatusBadge status={HEALTH_LABELS[weatherHealth(collector.data).state]} />
+          ) : collector.error ? (
+            <StatusBadge status="Status error" />
+          ) : null
+        }
+      >
+        <WeatherHealthPanel state={collector} />
+      </CollectorDisclosure>
     </div>
   )
 }
@@ -95,6 +118,7 @@ function SavedTab({ params, setParam }: { params: URLSearchParams; setParam: (u:
         onChange={(id, value) => setParam({ [id]: value })}
         search={{ label: 'Search events', value: filters.q, placeholder: 'Ticker or date, e.g. OCT12 or 2026-10' }}
         onSearch={onSearch}
+        onReset={() => setParam({ status: '', q: '', sort: '' })}
       />
       {data ? <DataStamp generatedAt={data.generated_at} loadedAt={state.loadedAt} source={data.source} /> : null}
       {state.loading ? <LoadingState label="Loading saved weather forecasts…" /> : null}
@@ -129,10 +153,6 @@ function OpenTab() {
   const data = state.data
   return (
     <>
-      <p className="text-xs text-[var(--text-muted)]">
-        Fetched from Kalshi and live weather sources when requested; can take a while. Values change as new data
-        arrives and are not saved forecasts.
-      </p>
       {data ? <DataStamp generatedAt={data.generated_at} loadedAt={state.loadedAt} source="live sources" /> : null}
       {state.loading ? <LoadingState label="Loading open weather markets (live sources)…" /> : null}
       {state.error ? <ErrorState title="Live weather unavailable" message={state.error} onRetry={state.reload} /> : null}

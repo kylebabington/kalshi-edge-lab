@@ -84,12 +84,29 @@ export function sportsLastSuccess(s: SportsCollectorStatus): string | null {
 
 const BACKUP_FAILURES = new Set(['failed', 'inconsistent_snapshot', 'conflict', 'blocked_oversized', 'push_failed'])
 
-export type BackupHealth = { state: HealthState; label: string; reason: string }
+/** `initial` marks a backup that has not run yet on this machine, which is expected right after setup and is not a failure. */
+export type BackupHealth = { state: HealthState; label: string; reason: string; initial?: boolean }
 
 /** Backup health is separate from capture health: a failed or slow backup never makes a capture cycle fail. */
 export function sportsBackupHealth(s: SportsCollectorStatus): BackupHealth {
   const b = s.backup
-  if (!b?.recorded) return { state: 'unknown', label: 'Backup not recorded', reason: 'No backup run recorded on this machine' }
+  if (!b?.recorded) {
+    // With no run recorded, only a task that is visibly missing or disabled counts as unhealthy.
+    // Otherwise the first hourly snapshot may simply not have happened yet.
+    const task = s.backup_task
+    if (task?.observable && task.configured === false) {
+      return { state: 'degraded', label: 'Backup unavailable: task not registered', reason: 'No backup run recorded and the backup task is not registered' }
+    }
+    if (task?.observable && task.enabled === false) {
+      return { state: 'degraded', label: 'Backup unavailable: task disabled', reason: 'No backup run recorded and the backup task is disabled' }
+    }
+    return {
+      state: 'unknown',
+      initial: true,
+      label: 'Backup not run yet',
+      reason: 'No backup run recorded on this machine yet; the first snapshot follows the backup task’s first hourly run',
+    }
+  }
   if (b.paused) return { state: 'degraded', label: 'Backup paused', reason: `Paused${b.paused.reason ? `: ${b.paused.reason}` : ''}` }
   const lastSnap = b.last_snapshot_at ?? (b.snapshot === undefined ? b.at : null) ?? null
   const age = minutesBetween(lastSnap, s.generated_at)

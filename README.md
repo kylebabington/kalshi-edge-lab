@@ -445,6 +445,7 @@ log.
 | `/markets/:eventTicker` | Open-market detail when the event is still open; otherwise the saved-forecast view with event settlement and per-snapshot scores. |
 | `/sports`, `/sports/events/:eventId` | Sports browsing with plain-language labels and sort by start, capture or settlement time. |
 | `/watchlist` | Starred events, filterable by `?category=weather` or `?category=sports`. |
+| `/opportunities`, `/opportunities/:ticker` | Current weather and sports markets ranked by attention score, with edge, EV, fees, warnings and manual AI research. |
 
 Collector health uses successful cycle times only (stale after 2 × cadence + 5 minutes; a missing
 timestamp is "unknown", never healthy). Forecast age is shown separately and never affects health. Times
@@ -464,6 +465,89 @@ before it is replaced. If storage is blocked or full, the list is kept in memory
 says "Changes won't persist". Changes sync across tabs. Each entry is looked up again through the
 read-only API; an entry whose event is no longer found stays on the list with an explanation until you
 remove it.
+
+### Opportunities
+
+`research/opportunities/` turns saved weather snapshots and saved sports captures into one `Opportunity`
+per contract. It reads only existing artifacts (no upstream fetches) and does not import the AI layer;
+the direction is raw data → opportunity/quality engine → AI eligibility/research.
+
+- **Edge** is model probability minus the executable price on the better side (YES at the ask, NO at
+  `1 − bid`). **EV before fees** is shown separately from **EV after fees**.
+- **Fees** come from the cached series fee schedule (`data/cache/fees/`). When it is missing, fees and
+  after-fee EV are `null` and a `fees unavailable` warning is shown; fees are never assumed to be zero.
+- **`attention_score`** (0–100) ranks which markets deserve a closer look. It is **not a probability,
+  not expected value and not a recommendation**. Every point is listed with its reason (edge, after-fee
+  EV, confidence, calibration, agreement, freshness, minus caution penalties).
+- **Quality**: `OK`, `CAUTION` (methodology uncertainty lowers the score and is shown as a warning) or
+  `BLOCKED` (invalid or missing prediction, stale data, no quote, failed integrity/status checks,
+  blocking source warnings). Blocked markets score 0, stay in the API, and are hidden in the UI unless
+  "Show blocked" is checked. Non-OK weather predictions are kept and marked blocked, not dropped.
+- Weather LOW confidence caused by the unvalidated KNYC → CLINYC settlement transfer is a caution, not a
+  block; the transfer warning is always shown.
+
+Endpoints:
+
+- `GET /api/opportunities?category=&min_confidence=&min_edge=&freshness=&quality=&eligibility=&ai_status=&include_blocked=&page=&page_size=`
+- `GET /api/opportunities/{ticker}` — opportunity, the evidence the AI would see, cached research state
+- `POST /api/opportunities/{ticker}/research?force=false` — manual AI research (see below)
+- `GET /api/ai/status` — provider, model, reachability
+
+Thresholds can be changed with `OPPORTUNITY_WEATHER_FRESH_S`, `OPPORTUNITY_WEATHER_MAX_AGE_S`,
+`OPPORTUNITY_SPORTS_FRESH_S`, `OPPORTUNITY_SPORTS_MAX_AGE_S`, `OPPORTUNITY_WIDE_SPREAD`,
+`OPPORTUNITY_SPORTS_CANDIDATE_DISAGREEMENT`, `OPPORTUNITY_MIN_WEATHER_SAMPLE` and
+`OPPORTUNITY_BLOCKING_WARNING_PATTERNS` (comma-separated, case-insensitive).
+
+### AI Research Setup
+
+AI research is optional and explains supplied evidence only. The statistical model stays the source of
+truth for probability, edge, EV, confidence, calibration, fees and freshness. **AI research does not
+modify the statistical model probability.** The AI never places trades, never recommends bets, and is
+instructed not to invent injuries, weather, news, odds or prices. V1 evidence is limited to data already
+in this repo (model output, saved quotes, forecasts, observations, NWS discussion, contract rules); there
+is no web search, news or injury feed.
+
+Every output is validated JSON (summary, supporting/contradictory evidence, risk factors, important
+changes, unknowns, `research_confidence`), with each statement labelled FACT, INFERENCE or UNKNOWN. A FACT
+without valid evidence ids is relabelled UNKNOWN. Output that claims the weather settlement transfer is
+validated is rejected.
+
+Install and run Ollama on Windows:
+
+```powershell
+winget install Ollama.Ollama      # or the installer from https://ollama.com/download
+ollama pull qwen3:8b
+ollama serve                      # skip if the Ollama tray app is already running
+```
+
+Settings (process environment, or a `.env` file in the repo root; process environment wins):
+
+```text
+AI_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen3:8b
+AI_TIMEOUT_S=180
+AI_NUM_CTX=8192             # Ollama's default 4096 silently truncates the ~3k-token prompt
+AI_MAX_OUTPUT_TOKENS=1500   # hard stop; an answer cut off here is reported as an error
+AI_MIN_EDGE=0.05            # markets below this edge are not eligible for AI research
+AI_RESEARCH_MAX_AGE_S=21600 # cached research older than this is shown as stale
+AI_AUTO_RESEARCH=false      # off by default; when true, top AI_AUTO_TOP_N eligible markets
+AI_AUTO_TOP_N=5
+```
+
+Speed depends on hardware. With a GPU a research call takes seconds; on CPU only (check `ollama ps`, column
+PROCESSOR) a 4B model took about 5 minutes per call here and an 8B model is slower, so raise
+`AI_TIMEOUT_S` (for example `900`) or use a smaller model such as `OLLAMA_MODEL=qwen3:4b-instruct`.
+
+Set `AI_PROVIDER=none` to disable AI entirely; everything else keeps working. If Ollama is not running,
+times out, or the model is missing, the research endpoint returns `status: "unavailable"` with the reason
+(for a missing model: `ollama pull <model>`) and the page keeps working.
+
+Research is manual: open an opportunity and press **Research with AI** (or **Refresh AI Research**).
+Results are cached under `data/cache/ai_research/` keyed by a fingerprint of the probability, quote,
+timestamps, warnings, evidence, provider, model and prompt version. A cached result is reused while the
+fingerprint matches and it is younger than `AI_RESEARCH_MAX_AGE_S`; otherwise it is shown as stale (with
+a "data changed" flag when the inputs differ) until refreshed. Research never runs on page load.
 
 ### Frontend
 

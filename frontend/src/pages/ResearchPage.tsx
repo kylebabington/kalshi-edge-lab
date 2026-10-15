@@ -1,15 +1,8 @@
-import type { ModelSummary } from '../types/weather'
 import { ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
 import { MetricHelp, ResultKindBadge, SampleNote } from '../components/MetricHelp'
 import { useAsync } from '../components/sports/useAsync'
-import { fetchWeatherMetricsContext } from '../api/weather'
+import { fetchModelSummary, fetchWeatherMetricsContext } from '../api/weather'
 import { fmtTargetDate } from '../lib/time'
-
-type Props = {
-  loading: boolean
-  error: string | null
-  summary: ModelSummary | null
-}
 
 function metric(v: unknown) {
   if (v == null || v === '') return 'unavailable'
@@ -21,10 +14,13 @@ function range(first: string | null | undefined, last: string | null | undefined
   return first ? `${fmtTargetDate(first)} – ${fmtTargetDate(last ?? first)}` : 'unknown'
 }
 
-export function ResearchPage({ loading, error, summary }: Props) {
+export function ResearchPage() {
+  const summaryState = useAsync(fetchModelSummary, 'model-summary')
   const context = useAsync(fetchWeatherMetricsContext, 'weather-metrics-context')
-  if (loading) return <LoadingState />
-  if (error) return <ErrorState message={error} />
+  if (summaryState.loading) return <LoadingState />
+  if (summaryState.error) return <ErrorState message={summaryState.error} />
+  const summary = summaryState.data
+  if (!summary) return <ErrorState message="Model summary unavailable." />
 
   const replay = context.data?.operational_replay
   const replayPeriod = context.loading

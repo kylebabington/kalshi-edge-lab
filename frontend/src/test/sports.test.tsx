@@ -37,6 +37,10 @@ vi.mock('../api/sports', async (importOriginal) => {
 
 const m = vi.mocked(api)
 
+function summaryByName(name: RegExp) {
+  return screen.getByText((_, element) => element?.tagName === 'SUMMARY' && name.test(element.textContent ?? ''))
+}
+
 function renderSports(path = '/sports') {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -104,7 +108,7 @@ describe('Sports events', () => {
     await screen.findAllByRole('link', { name: /^Open / })
     await user.selectOptions(screen.getByLabelText('Sport'), 'Soccer')
     await waitFor(() => expect(m.fetchSportsEvents).toHaveBeenLastCalledWith(expect.objectContaining({ sport: 'Soccer' })))
-    await user.selectOptions(screen.getByLabelText('Capture / settlement'), 'missed')
+    await user.selectOptions(screen.getByLabelText('Status'), 'missed')
     await waitFor(() => expect(m.fetchSportsEvents).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'missed' })))
     await user.type(screen.getByLabelText(/Search participants/i), 'mock{enter}')
     await waitFor(() => expect(m.fetchSportsEvents).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'mock' })))
@@ -160,13 +164,14 @@ describe('Sports events', () => {
     expect(screen.getByText(/4585 files/)).toBeInTheDocument()
     expect(screen.getByText('Capture lock held by snapshot').nextSibling).toHaveTextContent('1.8 s')
     expect(screen.getByText('Upload pending').nextSibling).toHaveTextContent(/^yes/)
-    expect(screen.getByText('Backup degraded')).toBeInTheDocument()
+    expect(screen.getAllByText('Backup degraded')).toHaveLength(2)
   })
 
   it('filters events by collection mode via the URL', async () => {
     const user = userEvent.setup()
     renderSports()
     await screen.findAllByRole('link', { name: /^Open / })
+    await user.click(summaryByName(/Advanced filters/))
     await user.selectOptions(screen.getByLabelText('Collection mode'), 'automatic')
     await waitFor(() =>
       expect(m.fetchSportsEvents).toHaveBeenLastCalledWith(expect.objectContaining({ collection: 'automatic' })),
@@ -177,6 +182,7 @@ describe('Sports events', () => {
     const user = userEvent.setup()
     renderSports()
     await screen.findAllByRole('link', { name: /^Open / })
+    await user.click(summaryByName(/Advanced filters/))
     expect(within(screen.getByLabelText('Contract family')).getByRole('option', { name: 'Game winner' })).toBeInTheDocument()
     expect(within(screen.getByLabelText('Contract family')).getByRole('option', { name: 'Point spread' })).toBeInTheDocument()
     expect(within(screen.getByLabelText('League / competition')).getByRole('option', { name: /^Premier League/ })).toBeInTheDocument()
@@ -184,6 +190,26 @@ describe('Sports events', () => {
     await waitFor(() =>
       expect(m.fetchSportsEvents).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'settlement_desc' })),
     )
+  })
+
+  it('opens advanced filters from the URL and clears them without dropping the tab', async () => {
+    const user = userEvent.setup()
+    renderSports('/sports?tab=events&competition=epl&family=spread&page=2')
+    expect(await screen.findByLabelText('League / competition')).toHaveValue('epl')
+    const details = summaryByName(/Advanced filters/).closest('details')
+    expect(details?.open).toBe(true)
+    expect(screen.getByLabelText('League / competition')).toHaveValue('epl')
+    expect(screen.getByText(/2 filters active/)).toBeInTheDocument()
+    await user.click(summaryByName(/Advanced filters/))
+    expect(details?.open).toBe(false)
+    expect(m.fetchSportsEvents).toHaveBeenLastCalledWith(expect.objectContaining({ competition: 'epl', family: 'spread' }))
+    await user.click(screen.getByRole('button', { name: 'Clear all' }))
+    await waitFor(() =>
+      expect(m.fetchSportsEvents).toHaveBeenLastCalledWith(
+        expect.objectContaining({ competition: '', family: '', sport: '', cohort: '', collection: '', q: '', sort: '', page: 1 }),
+      ),
+    )
+    expect(screen.getByRole('tab', { name: 'Events' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('restores filters, sort and page when returning from a detail page', async () => {
@@ -383,15 +409,30 @@ describe('Sports event detail', () => {
 })
 
 describe('Sports navigation and dashboard', () => {
-  it('app shell includes a Sports link and scopes the model chip to weather', () => {
+  it('app shell separates daily navigation from research tools', async () => {
+    const user = userEvent.setup()
     render(
       <MemoryRouter>
-        <AppShell apiStatus="ok" modelStatus="artifacts loaded" />
+        <AppShell apiStatus="ok" />
       </MemoryRouter>,
     )
     const nav = screen.getByRole('navigation', { name: 'Main' })
     expect(within(nav).getByRole('link', { name: 'Sports' })).toHaveAttribute('href', '/sports')
-    expect(screen.getByText(/Weather model: artifacts loaded/)).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'Watchlist' })).toHaveAttribute('href', '/watchlist')
+    expect(within(nav).queryByRole('link', { name: 'Weather Model' })).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'Sports' })).toHaveLength(1)
+    expect(screen.getByText(/^API: ok$/)).toBeInTheDocument()
+    expect(screen.queryByText(/Weather model:/)).toBeNull()
+    const more = screen.getByRole('button', { name: 'More' })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    expect(more).toHaveAttribute('aria-controls', 'research-tools')
+    more.focus()
+    await user.keyboard('{Enter}')
+    expect(more).toHaveAttribute('aria-expanded', 'true')
+    const research = screen.getByRole('navigation', { name: 'Research tools' })
+    expect(within(research).getByRole('link', { name: 'Weather Model' })).toHaveAttribute('href', '/weather-model')
+    expect(within(research).getByRole('link', { name: 'Research' })).toHaveAttribute('href', '/research')
+    expect(screen.getAllByText('Research Only')).toHaveLength(1)
   })
 
   it('every mock payload is labeled as a mock fixture', () => {

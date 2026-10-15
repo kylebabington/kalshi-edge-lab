@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,7 +7,6 @@ import * as sportsApi from '../api/sports'
 import * as weatherApi from '../api/weather'
 import { collectorHealth } from '../lib/health'
 import { mockSportsCollector, mockSportsEvents } from '../mocks/sports'
-import { mockModelSummary } from '../mocks/weatherEvent'
 import {
   mockSavedWeatherEvent,
   mockSavedWeatherEvents,
@@ -29,22 +28,19 @@ vi.mock('../api/weather', async (importOriginal) => ({
   fetchSavedWeatherEvent: vi.fn(),
   fetchWeatherCollector: vi.fn(),
   fetchLiveWeather: vi.fn(),
+  fetchModelSummary: vi.fn(),
 }))
 
 const sports = vi.mocked(sportsApi)
 const weather = vi.mocked(weatherApi)
 const never = () => new Promise<never>(() => {})
 
-function renderDashboard() {
+function renderDashboard(apiStatus = 'ok') {
   return render(
     <MemoryRouter>
-      <DashboardPage summary={mockModelSummary} summaryLoading={false} summaryError={null} />
+      <DashboardPage apiStatus={apiStatus} />
     </MemoryRouter>,
   )
-}
-
-function section(name: RegExp) {
-  return screen.getByRole('region', { name })
 }
 
 beforeEach(() => {
@@ -67,11 +63,13 @@ describe('Dashboard sections load independently', () => {
   it('renders sports while every weather request is still pending', async () => {
     weather.fetchSavedWeatherEvents.mockImplementation(never)
     weather.fetchWeatherCollector.mockImplementation(never)
-    weather.fetchLiveWeather.mockImplementation(never)
     renderDashboard()
     expect(await screen.findByRole('link', { name: /Open Mock United vs Fixture City/ })).toBeInTheDocument()
-    expect(screen.getByText(/Loading weather collector health/)).toBeInTheDocument()
-    expect(screen.getByText(/Loading open weather markets/)).toBeInTheDocument()
+    expect(screen.getAllByText('Loading weather…').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Loading collector status…').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Loading open weather markets/)).toBeNull()
+    expect(weather.fetchLiveWeather).not.toHaveBeenCalled()
+    expect(weather.fetchModelSummary).not.toHaveBeenCalled()
   })
 
   it('renders weather when sports fails, with a retryable sports error', async () => {
@@ -79,33 +77,62 @@ describe('Dashboard sections load independently', () => {
     sports.fetchSportsCollector.mockRejectedValue(new Error('500 sports down'))
     renderDashboard()
     expect(await screen.findByRole('link', { name: /Open NYC daily high · .*Jan 1, 2099/ })).toBeInTheDocument()
-    const sportsSection = section(/^Sports$/)
-    expect((await within(sportsSection).findAllByText('500 sports down')).length).toBeGreaterThan(0)
-    expect(within(sportsSection).getAllByRole('button', { name: 'Retry' }).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('500 sports down')).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Retry' }).length).toBeGreaterThan(0)
   })
 
-  it('a failing live weather request does not hide saved forecasts', async () => {
-    weather.fetchLiveWeather.mockRejectedValue(new Error('timeout'))
+  it('does not load live weather or model artifacts', async () => {
     renderDashboard()
-    expect(await screen.findByText('Live weather unavailable')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Open NYC daily high · .*Jan 1, 2099/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'System status' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Needs attention' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Upcoming' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Recently settled' })).toBeInTheDocument()
+    expect(screen.queryByText(/Weather model artifacts/)).toBeNull()
+    expect(screen.queryByText(/Research status/)).toBeNull()
+    expect(weather.fetchLiveWeather).not.toHaveBeenCalled()
+  })
+
+  it('does not flag a backup that has simply not run yet, but flags a missing backup task', async () => {
+    sports.fetchSportsCollector.mockResolvedValue({ ...mockSportsCollector, backup: undefined, backup_task: undefined })
+    const { unmount } = renderDashboard()
+    const attention = await screen.findByRole('region', { name: 'Needs attention' })
+    await waitFor(() => expect(within(attention).queryByText(/Sports collector/)).not.toBeNull())
+    expect(within(attention).queryByText(/Sports backup/)).toBeNull()
+    unmount()
+
+    sports.fetchSportsCollector.mockResolvedValue({
+      ...mockSportsCollector,
+      backup: undefined,
+      backup_task: {
+        observable: true,
+        configured: false,
+        enabled: 'unknown',
+        status: 'not registered',
+        next_run_time: '',
+        last_run_time: '',
+        last_result: '',
+      },
+    })
+    renderDashboard()
+    expect(await screen.findByText(/Sports backup: .*backup task is not registered/)).toBeInTheDocument()
   })
 
   it('shows clear empty states per group', async () => {
     sports.fetchSportsEvents.mockImplementation(async (f) => ({ ...mockSportsEvents(f), items: [], total: 0 }))
     renderDashboard()
-    const sportsSection = section(/^Sports$/)
-    expect(await within(sportsSection).findByText('No upcoming captured events')).toBeInTheDocument()
-    expect(within(sportsSection).getByText('No recently settled')).toBeInTheDocument()
+    const upcoming = await screen.findByRole('region', { name: 'Upcoming' })
+    expect(await within(upcoming).findByText('No upcoming sports events')).toBeInTheDocument()
+    const settled = screen.getByRole('region', { name: 'Recently settled' })
+    expect(within(settled).getByText('No recently settled sports events')).toBeInTheDocument()
   })
 })
 
 describe('Collector health vs forecast freshness', () => {
   it('reports unknown health when no successful cycle timestamp exists', async () => {
     renderDashboard()
-    const panel = await screen.findByRole('region', { name: 'Weather collector' })
-    expect(within(panel).getByText(/Collector health unknown/i)).toBeInTheDocument()
-    expect(within(panel).getByText('Saved forecast freshness')).toBeInTheDocument()
+    const panel = await screen.findByRole('listitem', { name: 'Weather collector' })
+    expect(within(panel).getByText('Warning')).toBeInTheDocument()
+    expect(within(panel).getByText(/No successful cycle time recorded/)).toBeInTheDocument()
   })
 
   it('reports stale health from successful cycle times, not from forecast age', async () => {
@@ -114,9 +141,9 @@ describe('Collector health vs forecast freshness', () => {
       cycles: { ...mockWeatherCollector.cycles, last_successful_cycle_at: '2026-10-11T08:00:00Z', last_cycle_exit_code: 0 },
     })
     renderDashboard()
-    const panel = await screen.findByRole('region', { name: 'Weather collector' })
-    expect(within(panel).getByText(/Collector stale/i)).toBeInTheDocument()
-    expect(screen.getByText(/new checkpoints may be missing/)).toBeInTheDocument()
+    const panel = await screen.findByRole('listitem', { name: 'Weather collector' })
+    expect(within(panel).getByText('Stale')).toBeInTheDocument()
+    expect(within(panel).getByText(/Last successful cycle/)).toBeInTheDocument()
   })
 
   it('a recent successful cycle is healthy even though the latest saved forecast is weeks old', async () => {
@@ -126,8 +153,8 @@ describe('Collector health vs forecast freshness', () => {
       forecast_freshness: { ...mockWeatherCollector.forecast_freshness, last_snapshot_prediction_as_of: '2026-09-20T12:00:00Z' },
     })
     renderDashboard()
-    const panel = await screen.findByRole('region', { name: 'Weather collector' })
-    expect(within(panel).getByText(/Collector healthy/i)).toBeInTheDocument()
+    const panel = await screen.findByRole('listitem', { name: 'Weather collector' })
+    expect(within(panel).getByText('Healthy')).toBeInTheDocument()
   })
 
   it('collectorHealth treats invalid timestamps as unknown and recent failures as degraded', () => {
@@ -137,17 +164,6 @@ describe('Collector health vs forecast freshness', () => {
     expect(collectorHealth({ ...base, lastSuccessAt: '2026-10-11T13:30:00Z', lastCycleOk: false }).state).toBe('degraded')
     expect(collectorHealth({ ...base, lastSuccessAt: '2026-10-11T13:30:00Z', lastCycleOk: true }).state).toBe('healthy')
     expect(collectorHealth({ ...base, nowIso: 'bad', lastSuccessAt: '2026-10-11T13:30:00Z', lastCycleOk: true }).state).toBe('unknown')
-  })
-})
-
-describe('Weather settlement display', () => {
-  it('separates confirmed event settlement from the latest snapshot score', async () => {
-    renderDashboard()
-    const settled = await screen.findByRole('link', { name: /Open NYC daily high · .*Sep 26, 2026/ })
-    const card = settled.closest('article')!
-    expect(within(card).getByText(/Confirmed/)).toBeInTheDocument()
-    expect(within(card).getByText(/latest snapshot shown here has no valid score of its own/)).toBeInTheDocument()
-    expect(within(card).queryByText(/Brier/)).toBeNull()
   })
 })
 
@@ -171,19 +187,57 @@ describe('Weather browsing', () => {
       expect.objectContaining({ status: 'settled', sort: 'capture_desc', q: 'SEP', page: 1 }),
     )
     expect(screen.getByLabelText('Status')).toHaveValue('settled')
+    const settled = screen.getByRole('link', { name: /Open NYC daily high · .*Sep 26, 2026/ })
+    const card = settled.closest('article')!
+    expect(within(card).getByText(/Confirmed/)).toBeInTheDocument()
+    expect(within(card).getByText(/latest snapshot shown here has no valid score of its own/)).toBeInTheDocument()
+    expect(within(card).queryByText(/Brier/)).toBeNull()
     await user.selectOptions(screen.getByLabelText('Sort by'), 'target_asc')
     expect(weather.fetchSavedWeatherEvents).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'target_asc' }))
     expect(weather.fetchLiveWeather).not.toHaveBeenCalled()
   })
 
-  it('labels saved forecasts and current market data distinctly', async () => {
+  it('labels Saved and Live distinctly and keeps tab=open working', async () => {
     const user = userEvent.setup()
-    renderWeather('/markets')
-    await screen.findByRole('link', { name: /Open NYC daily high · .*Sep 26, 2026/ })
-    expect(screen.getAllByText('Saved forecast').length).toBeGreaterThan(0)
-    await user.click(screen.getByRole('tab', { name: /Open markets/ }))
+    renderWeather('/markets?tab=open')
+    expect(screen.getByRole('tab', { name: 'Live' })).toHaveAttribute('aria-selected', 'true')
     expect(await screen.findByText('No open KXHIGHNY events')).toBeInTheDocument()
     expect(weather.fetchLiveWeather).toHaveBeenCalled()
+    await user.click(screen.getByRole('tab', { name: 'Saved' }))
+    await screen.findByRole('link', { name: /Open NYC daily high · .*Sep 26, 2026/ })
+    expect(screen.getAllByText('Saved forecast').length).toBeGreaterThan(0)
+  })
+
+  it('counts active filters and clears them without leaving Saved', async () => {
+    const user = userEvent.setup()
+    renderWeather('/markets?status=settled&sort=capture_desc&q=SEP')
+    await screen.findByRole('link', { name: /Open NYC daily high · .*Sep 26, 2026/ })
+    expect(screen.getByText(/3 filters active/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear all' }))
+    await waitFor(() =>
+      expect(weather.fetchSavedWeatherEvents).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status: '', sort: '', q: '', page: 1 }),
+      ),
+    )
+    expect(screen.getByRole('tab', { name: 'Saved' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('keeps saved forecasts available when live weather fails', async () => {
+    weather.fetchLiveWeather.mockRejectedValue(new Error('timeout'))
+    const user = userEvent.setup()
+    renderWeather('/markets?tab=open')
+    expect(await screen.findByText('Live weather unavailable')).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Saved' }))
+    expect(await screen.findAllByRole('link', { name: /Open NYC daily high/ })).not.toHaveLength(0)
+  })
+
+  it('keeps detailed collector health on the weather page', async () => {
+    const user = userEvent.setup()
+    renderWeather('/markets')
+    await user.click(screen.getByText('Collector status'))
+    // Once in the collapsed summary, once in the panel.
+    expect(await screen.findAllByText(/Collector health unknown/i)).toHaveLength(2)
+    expect(screen.getByText('Saved forecast freshness')).toBeInTheDocument()
   })
 
   it('opens a settled saved event without waiting on live sources and returns to the filtered list', async () => {

@@ -213,6 +213,8 @@ summary:focus-visible {
   padding: 0.4rem 0.6rem;
   font-size: 0.85rem;
   min-height: 2.25rem;
+  width: 100%;
+  max-width: 100%;
 }
 
 .pager-button {
@@ -221,6 +223,7 @@ summary:focus-visible {
   padding: 0.35rem 0.8rem;
   background: var(--surface-raised);
   color: var(--text);
+  min-height: 2.25rem;
 }
 
 .pager-button:disabled {

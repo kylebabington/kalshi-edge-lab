@@ -22,6 +22,7 @@ vi.mock('../api/weather', async (importOriginal) => {
     fetchEventSnapshots: vi.fn(async () => mockSnapshotList),
     fetchSnapshot: vi.fn(async () => mockSnapshot),
     fetchWeatherMetricsContext: vi.fn(async () => saved.mockWeatherMetricsContext),
+    fetchModelSummary: vi.fn(async () => mockModelSummary),
   }
 })
 
@@ -72,13 +73,13 @@ describe('UI foundation', () => {
     expect(screen.queryByRole('button', { name: /buy|sell|trade/i })).toBeNull()
   })
 
-  it('weather model page renders EXPERIMENTAL transfer', () => {
+  it('weather model page renders EXPERIMENTAL transfer', async () => {
     render(
       <MemoryRouter>
-        <WeatherModelPage loading={false} error={null} summary={mockModelSummary} />
+        <WeatherModelPage />
       </MemoryRouter>,
     )
-    expect(screen.getByText('SETTLEMENT TARGET TRANSFER')).toBeInTheDocument()
+    expect(await screen.findByText('SETTLEMENT TARGET TRANSFER')).toBeInTheDocument()
     expect(screen.getAllByText('EXPERIMENTAL').length).toBeGreaterThan(0)
     expect(screen.queryByText('VALIDATED')).toBeNull()
   })
@@ -136,26 +137,26 @@ describe('UI foundation', () => {
     expect(screen.queryByText(/\bBUY\b/)).toBeNull()
   })
 
-  it('research page shows Phase 4 multi-source and CLINYC progress', () => {
+  it('research page shows Phase 4 multi-source and CLINYC progress', async () => {
     render(
       <MemoryRouter>
-        <ResearchPage loading={false} error={null} summary={mockModelSummary} />
+        <ResearchPage />
       </MemoryRouter>,
     )
-    expect(screen.getByText(/MULTI-SOURCE EVIDENCE/i)).toBeInTheDocument()
+    expect(await screen.findByText(/MULTI-SOURCE EVIDENCE/i)).toBeInTheDocument()
     expect(screen.getByText(/PROSPECTIVE JOURNAL/i)).toBeInTheDocument()
     expect(screen.getByText(/CLINYC_TRANSFER_V1/i)).toBeInTheDocument()
     expect(screen.getByText(/0\s*\/\s*20/)).toBeInTheDocument()
     expect(screen.queryByText(/\bBUY\b/)).toBeNull()
   })
 
-  it('research page shows Phase 5 prospective validation and SHADOW ONLY', () => {
+  it('research page shows Phase 5 prospective validation and SHADOW ONLY', async () => {
     render(
       <MemoryRouter>
-        <ResearchPage loading={false} error={null} summary={mockModelSummary} />
+        <ResearchPage />
       </MemoryRouter>,
     )
-    expect(screen.getByText(/PROSPECTIVE WEATHER VALIDATION/i)).toBeInTheDocument()
+    expect(await screen.findByText(/PROSPECTIVE WEATHER VALIDATION/i)).toBeInTheDocument()
     expect(screen.getAllByText(/SHADOW ONLY/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/d0_1200/i)).toBeInTheDocument()
     expect(screen.getByText(/1\s*\/\s*1/)).toBeInTheDocument()
@@ -164,21 +165,21 @@ describe('UI foundation', () => {
   it('research page separates prospective snapshot scores from the historical shadow replay', async () => {
     render(
       <MemoryRouter>
-        <ResearchPage loading={false} error={null} summary={mockModelSummary} />
+        <ResearchPage />
       </MemoryRouter>,
     )
-    expect(screen.getAllByText(/Prospective · saved before outcome/).length).toBeGreaterThan(0)
+    expect(await screen.findAllByText(/Prospective · saved before outcome/)).not.toHaveLength(0)
     expect(await screen.findByText(/1 scored snapshots in 1/)).toBeInTheDocument()
     expect(screen.getAllByText(/Data period:/).length).toBeGreaterThan(0)
   })
 
-  it('weather model page labels backtest metrics as historical with their period', () => {
+  it('weather model page labels backtest metrics as historical with their period', async () => {
     render(
       <MemoryRouter>
-        <WeatherModelPage loading={false} error={null} summary={mockModelSummary} />
+        <WeatherModelPage />
       </MemoryRouter>,
     )
-    expect(screen.getAllByText(/Historical research · backtest \/ replay/).length).toBeGreaterThan(0)
+    expect(await screen.findAllByText(/Historical research · backtest \/ replay/)).not.toHaveLength(0)
     expect(screen.getAllByText(/calibration dataset/).length).toBeGreaterThan(0)
   })
 

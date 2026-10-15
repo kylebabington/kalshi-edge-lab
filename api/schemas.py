@@ -323,3 +323,79 @@ class ModelSummaryResponse(BaseModel):
     methodology_constants: dict[str, Any] = Field(default_factory=dict)
     calibration: dict[str, Any] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
+
+
+class EligibilityResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    eligible: bool
+    status: str
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    blocking_reasons: list[str] = Field(default_factory=list)
+    domain: str
+    rules_version: str
+
+
+class OpportunityItem(BaseModel):
+    """attention_score ranks what deserves a look; it is not a probability, EV or recommendation."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    ticker: str
+    event_key: str
+    category: str
+    title: str
+    model_probability: float | None = None
+    market_probability: float | None = None
+    probability_edge: float | None = None
+    expected_value_before_fees: float | None = None
+    estimated_fees: float | None = None
+    expected_value_after_fees: float | None = None
+    attention_score: int
+    quality_status: str
+    data_freshness_status: str
+    ai_research_status: str
+    eligibility: EligibilityResponse
+
+
+class OpportunityListResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    mode: str
+    note: str
+    ai: dict[str, Any]
+    total: int
+    counts: dict[str, Any]
+    page: int
+    page_size: int
+    pages: int
+    items: list[OpportunityItem]
+
+
+class AIResearchResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    ticker: str
+    status: str
+    freshness: str
+    data_changed: bool
+    eligibility: EligibilityResponse
+    research: dict[str, Any] | None = None
+    provider: str | None = None
+    model: str | None = None
+    created_at: str | None = None
+    error: dict[str, Any] | None = None
+    note: str
+
+
+class OpportunityDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    opportunity: OpportunityItem
+    evidence: list[dict[str, Any]]
+    research: AIResearchResponse
+    ai: dict[str, Any]
