@@ -473,3 +473,59 @@ class OpportunityDetailResponse(BaseModel):
     evidence: list[dict[str, Any]]
     research: AIResearchResponse
     ai: dict[str, Any]
+
+
+# --- Market Explorer (cache-backed; GETs never hit Kalshi) ---
+
+
+class ExploreRefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    watched_event_tickers: list[str] = Field(default_factory=list, max_length=500)
+
+
+class ExploreSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    mode: str
+    event_count: int
+    categories: list[dict[str, Any]] = Field(default_factory=list)
+    lifecycle_totals: dict[str, int] = Field(default_factory=dict)
+    series_metadata: dict[str, Any] = Field(default_factory=dict)
+    latest_run: dict[str, Any] | None = None
+    refresh: dict[str, Any] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+
+
+class ExploreEventListResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    mode: str
+    page: int
+    page_size: int
+    total: int
+    pages: int
+    events: list[dict[str, Any]] = Field(default_factory=list)
+    partial_crawl: bool = False
+    latest_run_id: str | None = None
+
+
+class ExploreEventDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    mode: str
+    event_ticker: str
+    markets: list[dict[str, Any]] = Field(default_factory=list)
+    coverage: dict[str, Any] = Field(default_factory=dict)
+    quote_section_label: str | None = None
+
+
+class ExploreRefreshResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    accepted: bool
+    conflict: bool = False
+    status: dict[str, Any] = Field(default_factory=dict)

@@ -20,10 +20,11 @@ export async function apiGet<T>(path: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export async function apiPost<T>(path: string): Promise<T> {
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${DEFAULT_BASE}${path}`, {
     method: 'POST',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!response.ok) {
     const text = await response.text()

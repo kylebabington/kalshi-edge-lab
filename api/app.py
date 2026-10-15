@@ -12,8 +12,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import health, opportunities, research, sports, weather
+from api.routes import explore, health, opportunities, research, sports, weather
 from research.ai.config import load_env_file
+from research.explore.discovery import recover_stale_job
 from research.sports import service as sports_service
 
 log = logging.getLogger(__name__)
@@ -29,6 +30,10 @@ def _warm_sports() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    try:
+        recover_stale_job()
+    except Exception:
+        log.exception("explore lock recovery failed")
     threading.Thread(target=_warm_sports, name="sports-warm", daemon=True).start()
     yield
 
@@ -53,3 +58,4 @@ app.include_router(weather.router, prefix="/api")
 app.include_router(sports.router, prefix="/api")
 app.include_router(opportunities.router, prefix="/api")
 app.include_router(research.router, prefix="/api")
+app.include_router(explore.router, prefix="/api")

@@ -45,6 +45,7 @@ describe('watchlist identifiers', () => {
 
   it('parses ids at the first colon so sports ids containing colons and pipes stay intact', () => {
     expect(parseWatchId('sports:ncaaf|espn:401')).toEqual({ category: 'sports', key: 'ncaaf|espn:401' })
+    expect(parseWatchId('kalshi:KXOTHER-MOCK')).toEqual({ category: 'kalshi', key: 'KXOTHER-MOCK' })
     expect(parseWatchId('other:abc')).toBeNull()
     expect(parseWatchId('weather:')).toBeNull()
   })

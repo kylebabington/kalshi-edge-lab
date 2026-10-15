@@ -1,4 +1,4 @@
-export type WatchCategory = 'weather' | 'sports'
+export type WatchCategory = 'weather' | 'sports' | 'kalshi'
 
 export type WatchEntry = {
   /** `${category}:${key}` — the category prefix keeps weather and sports keys from colliding. */
@@ -19,7 +19,7 @@ export type WatchlistSnapshot = {
 
 export const STORAGE_KEY = 'kalshi-edge-lab.watchlist.v1'
 const BACKUP_KEY = `${STORAGE_KEY}.unreadable-backup`
-const CATEGORIES: readonly WatchCategory[] = ['weather', 'sports']
+const CATEGORIES: readonly WatchCategory[] = ['weather', 'sports', 'kalshi']
 const MAX_KEY_LENGTH = 300
 
 export function watchId(category: WatchCategory, key: string): string {

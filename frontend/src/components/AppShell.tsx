@@ -5,6 +5,7 @@ import { isMockMode } from '../api/client'
 const primary = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/opportunities', label: 'Opportunities', end: false },
+  { to: '/explore', label: 'Explore', end: false },
   { to: '/markets', label: 'Weather', end: false },
   { to: '/sports', label: 'Sports', end: false },
   { to: '/watchlist', label: 'Watchlist', end: false },
@@ -57,7 +58,7 @@ export function AppShell({ apiStatus }: Props) {
             Research software. Does not place bets or give betting recommendations.
           </p>
         </div>
-        <nav aria-label="Main" className="grid grid-cols-4 gap-1 lg:flex lg:flex-col lg:gap-2">
+        <nav aria-label="Main" className="grid grid-cols-3 sm:grid-cols-6 gap-1 lg:flex lg:flex-col lg:gap-2">
           {primary.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => linkClass(isActive)}>
               {item.label}

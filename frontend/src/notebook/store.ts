@@ -5,7 +5,7 @@
 export type NoteKind = 'note' | 'question'
 /** `ai_commentary` marks text the user pasted from an AI tool; the app never generates it. */
 export type NoteOrigin = 'personal' | 'ai_commentary'
-export type EventCategory = 'weather' | 'sports'
+export type EventCategory = 'weather' | 'sports' | 'kalshi'
 
 export type NoteTarget = { type: 'experiment'; id: string } | { type: 'event'; category: EventCategory; key: string }
 
@@ -33,7 +33,7 @@ export const STORAGE_KEY = 'kalshi-edge-lab.notebook.v1'
 const BACKUP_KEY = `${STORAGE_KEY}.unreadable-backup`
 export const KINDS: readonly NoteKind[] = ['note', 'question']
 export const ORIGINS: readonly NoteOrigin[] = ['personal', 'ai_commentary']
-const EVENT_CATEGORIES: readonly EventCategory[] = ['weather', 'sports']
+const EVENT_CATEGORIES: readonly EventCategory[] = ['weather', 'sports', 'kalshi']
 export const MAX_TEXT_LENGTH = 10000
 export const MAX_TAGS = 20
 const MAX_TAG_LENGTH = 40

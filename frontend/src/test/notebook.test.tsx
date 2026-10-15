@@ -87,6 +87,29 @@ describe('NotebookPanel', () => {
     expect(screen.queryByText('other target')).toBeNull()
   })
 
+  it('shows notes for all aliases without rewriting their targets', async () => {
+    const user = userEvent.setup()
+    const kalshiTarget = { type: 'event' as const, category: 'kalshi' as const, key: 'KXNFL-1' }
+    const sportsTarget = { type: 'event' as const, category: 'sports' as const, key: 'nfl|cluster' }
+    const { store } = storeWith([
+      entry('early', { target: kalshiTarget, text: 'noted before mapping' }),
+      entry('later', { target: sportsTarget, text: 'noted after mapping' }),
+    ])
+    render(
+      <MemoryRouter>
+        <NotebookPanel target={sportsTarget} aliases={[kalshiTarget]} store={store} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('noted before mapping')).toBeInTheDocument()
+    expect(screen.getByText('noted after mapping')).toBeInTheDocument()
+    expect(store.getSnapshot().entries.find((e) => e.id === 'early')!.target).toEqual(kalshiTarget)
+
+    await user.type(screen.getByLabelText('Text'), 'new preferred note')
+    await user.click(screen.getByRole('button', { name: 'Add note' }))
+    const added = store.getSnapshot().entries.find((e) => e.text === 'new preferred note')
+    expect(added?.target).toEqual(sportsTarget)
+  })
+
   it('edits and deletes with confirmation', async () => {
     const user = userEvent.setup()
     const { store } = storeWith([entry('a')])

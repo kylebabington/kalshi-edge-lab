@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { exploreEventPath } from '../api/explore'
 import { eventPath } from '../api/sports'
 import { weatherEventPath } from '../api/weather'
+import { fmtLocal } from '../lib/time'
 import { LiveWeatherCard, SavedWeatherCard, SportsCard } from '../components/eventCards'
 import { EmptyState, LoadingState } from '../components/StatusBadge'
 import { TimezoneNote } from '../components/TimezoneNote'
-import { fmtLocal } from '../lib/time'
 import { PersistenceNotice } from '../watchlist/StarButton'
 import type { Resolved } from '../watchlist/resolve'
 import type { WatchCategory, WatchEntry } from '../watchlist/store'
@@ -16,6 +17,7 @@ const FILTERS: { id: '' | WatchCategory; label: string }[] = [
   { id: '', label: 'All' },
   { id: 'weather', label: 'Weather' },
   { id: 'sports', label: 'Sports' },
+  { id: 'kalshi', label: 'Kalshi' },
 ]
 
 const SORTS = [
@@ -33,6 +35,12 @@ function parseSort(raw: string | null): SortId {
 
 function viewOf(data: Resolved): string | null {
   if (data.kind === 'sports' || data.kind === 'weather-saved') return data.event.view
+  if (data.kind === 'kalshi') {
+    if (data.event.lifecycle === 'final') return 'settled'
+    if (data.event.lifecycle === 'closed') return 'pending'
+    if (data.event.lifecycle === 'open') return 'upcoming'
+    return null
+  }
   return null
 }
 
@@ -42,6 +50,7 @@ function eventTime(row: ResolvedRow): string | null {
   if (data.kind === 'sports') return data.event.event_start
   if (data.kind === 'weather-saved') return data.event.target_date
   if (data.kind === 'weather-live') return data.event.target_date ?? data.event.prediction.target_date ?? null
+  if (data.kind === 'kalshi') return data.event.retrieved_at ?? null
   return null
 }
 
@@ -90,7 +99,7 @@ function compareRows(sort: SortId, a: ResolvedRow, b: ResolvedRow): number {
 export function WatchlistPage() {
   const [params, setParams] = useSearchParams()
   const raw = params.get('category')
-  const category: '' | WatchCategory = raw === 'weather' || raw === 'sports' ? raw : ''
+  const category: '' | WatchCategory = raw === 'weather' || raw === 'sports' || raw === 'kalshi' ? raw : ''
   const sort = parseSort(params.get('sort'))
   const { entries, store } = useWatchlist()
   const [confirming, setConfirming] = useState(false)
@@ -190,7 +199,7 @@ export function WatchlistPage() {
       {entries.length === 0 ? (
         <EmptyState
           title="Your watchlist is empty"
-          detail="Use the star on any weather or sports event card or detail page to add it here."
+          detail="Use the star on any weather, sports, or explore event card or detail page to add it here."
         />
       ) : shown.length === 0 ? (
         <EmptyState title={`No ${category} events on your watchlist`} detail="Choose another category to see your other entries." />
@@ -227,11 +236,17 @@ function WatchRow({ row, onRemove }: { row: ResolvedRow; onRemove: () => void })
     )
   }
   if (row.error || !r || r.kind === 'not_found') {
-    const href = entry.category === 'sports' ? eventPath(entry.key) : weatherEventPath(entry.key)
+    const href =
+      entry.category === 'sports'
+        ? eventPath(entry.key)
+        : entry.category === 'kalshi'
+          ? exploreEventPath(entry.key)
+          : weatherEventPath(entry.key)
+    const kindLabel = entry.category === 'sports' ? 'Sports' : entry.category === 'kalshi' ? 'Kalshi' : 'Weather'
     return (
       <article className="panel space-y-2 h-full" aria-label={entry.label}>
         <div className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">
-          {entry.category === 'sports' ? 'Sports' : 'Weather'} · <span className="mono normal-case tracking-normal">{entry.key}</span>
+          {kindLabel} · <span className="mono normal-case tracking-normal">{entry.key}</span>
         </div>
         <h3 className="font-semibold break-words">{entry.label}</h3>
         {row.error ? (
@@ -262,7 +277,52 @@ function WatchRow({ row, onRemove }: { row: ResolvedRow; onRemove: () => void })
       {r.kind === 'sports' ? <SportsCard event={r.event} /> : null}
       {r.kind === 'weather-saved' ? <SavedWeatherCard event={r.event} /> : null}
       {r.kind === 'weather-live' ? <LiveWeatherCard event={r.event} /> : null}
+      {r.kind === 'kalshi' ? <KalshiExploreCard event={r.event} /> : null}
       {footer}
     </div>
   )
+}
+
+function KalshiExploreCard({ event }: { event: import('../types/explore').ExploreEventDetail }) {
+  const title = event.title || event.event_ticker
+  return (
+    <article className="panel space-y-2 h-full" aria-label={title}>
+      <div className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">
+        {event.category || 'Kalshi'} · <span className="mono normal-case tracking-normal">{event.event_ticker}</span>
+      </div>
+      <h3 className="font-semibold break-words">
+        <Link to={exploreEventPath(event.event_ticker)} className="hover:underline">
+          {title}
+        </Link>
+      </h3>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt className="text-[var(--text-muted)]">Lifecycle</dt>
+        <dd>{event.lifecycle ?? 'unknown'}</dd>
+        <dt className="text-[var(--text-muted)]">Retrieved</dt>
+        <dd className="mono">{event.retrieved_at ? fmtLocal(event.retrieved_at) : 'unavailable'}</dd>
+        <dt className="text-[var(--text-muted)]">Freshness</dt>
+        <dd>{event.retrieval_freshness?.state ?? 'unknown'}</dd>
+        <dt className="text-[var(--text-muted)]">Model</dt>
+        <dd>{coverageModelLabel(event.coverage)}</dd>
+        <dt className="text-[var(--text-muted)]">Saved forecast</dt>
+        <dd>{coverageForecastLabel(event.coverage)}</dd>
+      </dl>
+    </article>
+  )
+}
+
+function coverageModelLabel(c: import('../types/explore').ExploreCoverage | undefined): string {
+  if (!c) return 'unknown'
+  if (c.model_supported === 'weather') return 'Weather model supported'
+  if (c.model_supported === 'sports') return 'Sports model supported'
+  if (c.model_supported === 'none') return 'No model registered'
+  return String(c.model_supported)
+}
+
+function coverageForecastLabel(c: import('../types/explore').ExploreCoverage | undefined): string {
+  if (!c) return 'unknown'
+  if (c.saved_forecast === 'available') return 'Available'
+  if (c.saved_forecast === 'lookup_pending') return 'Lookup pending'
+  if (c.model_supported === 'sports' || c.model_supported === 'weather') return 'No saved forecast'
+  return 'Unavailable'
 }

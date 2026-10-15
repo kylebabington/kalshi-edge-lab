@@ -176,11 +176,26 @@ export function NoteList({
   )
 }
 
-/** Notes, questions and tags attached to one experiment or event. */
-export function NotebookPanel({ target, title = 'My notes', store: storeProp }: { target: NoteTarget; title?: string; store?: NotebookStore }) {
+/**
+ * Notes for one primary target. Optional `aliases` lists other known identities for the
+ * same event; matching notes are shown without rewriting their original targets.
+ */
+export function NotebookPanel({
+  target,
+  aliases,
+  title = 'My notes',
+  store: storeProp,
+}: {
+  target: NoteTarget
+  /** Extra identities that should surface notes without moving them onto `target`. */
+  aliases?: readonly NoteTarget[]
+  title?: string
+  store?: NotebookStore
+}) {
   const { entries, problem, store } = useNotebook(storeProp)
-  const key = targetKey(target)
-  const mine = entries.filter((e) => targetKey(e.target) === key)
+  const keys = new Set([targetKey(target), ...(aliases ?? []).map(targetKey)])
+  const mine = entries.filter((e) => keys.has(targetKey(e.target)))
+  const showTarget = Boolean(aliases?.length)
   const [kind, setKind] = useState<NoteKind>('note')
   const [origin, setOrigin] = useState<NoteOrigin>('personal')
   const [text, setText] = useState('')
@@ -194,6 +209,7 @@ export function NotebookPanel({ target, title = 'My notes', store: storeProp }: 
       setError('Write something first.')
       return
     }
+    // New notes always attach to the preferred target; existing notes keep their targets.
     const added = store.add({ kind, origin, text, tags: parseTagText(tags), target })
     if (!added) {
       setError('This note could not be added.')
@@ -216,7 +232,7 @@ export function NotebookPanel({ target, title = 'My notes', store: storeProp }: 
       </div>
       <NotebookDisclaimer />
       <StorageProblem problem={problem} />
-      <NoteList entries={mine} store={store} empty="No notes here yet." />
+      <NoteList entries={mine} store={store} showTarget={showTarget} empty="No notes here yet." />
       <form onSubmit={submit} className="space-y-2 border-t border-[var(--border)] pt-3">
         <div className="flex flex-wrap gap-3">
           <label className="flex flex-col gap-1 text-xs text-[var(--text-muted)]">

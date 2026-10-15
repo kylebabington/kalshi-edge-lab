@@ -455,10 +455,11 @@ log.
 | Route | What it shows |
 | --- | --- |
 | `/` | Overview: separate Weather and Sports sections, each with collector health, saved-forecast freshness, and upcoming / pending settlement / recently settled cards. Every list loads on its own, so a slow or failed request never blocks another. |
+| `/explore`, `/explore/events/:eventTicker` | Market Explorer: Kalshi events across categories from the local explorer cache, with Refresh markets, lifecycle/freshness/lookup fields, and model support vs saved-forecast coverage shown separately. Quotes are labelled **Latest retrieved quotes**. |
 | `/markets` | Weather events: **Saved forecasts** tab (search, status, sort, pagination in the URL) and **Open markets** tab (current market data from the slow live endpoint). |
 | `/markets/:eventTicker` | Open-market detail when the event is still open; otherwise the saved-forecast view with event settlement and per-snapshot scores. |
 | `/sports`, `/sports/events/:eventId` | Sports browsing with plain-language labels and sort by start, capture or settlement time. |
-| `/watchlist` | Starred events, filterable by `?category=weather` or `?category=sports`. |
+| `/watchlist` | Starred events, filterable by `?category=weather`, `sports`, or `kalshi`. |
 | `/research` | Research Hub: Weather and Sports experiment catalog (filters `q`, `category`, `designation`, `mode`, `status` in the URL) and the weather model summary. Each list loads on its own. |
 | `/research/:experimentId` | One experiment (`weather.*` or `sports.*`): question, candidates, reference, cohort rules, limitations, historical replay / manual pilot / automatic collection, tracked vs local sources, read-only frozen settings and personal notes. |
 | `/research/notebook` | Personal notebook: all notes and questions, filters, JSON export and import with a merge preview. |
@@ -476,12 +477,24 @@ comparable across rows; there are no rankings.
 
 **Watchlist storage.** Stars live only in this browser under the localStorage key
 `kalshi-edge-lab.watchlist.v1` as `{version: 1, entries: [{id, category, key, label, added_at}]}`. IDs are
-`weather:<event_ticker>` or `sports:<event_id>`, so identical keys in the two categories never collide.
+`weather:<event_ticker>`, `sports:<event_id>`, or `kalshi:<event_ticker>`, so identical keys in different categories never collide.
+Explorer stars prefer weather/sports keys when known; notebook notes keep the target they were created with and the UI resolves aliases when displaying.
 Invalid entries are dropped; unreadable data is copied to `kalshi-edge-lab.watchlist.v1.unreadable-backup`
 before it is replaced. If storage is blocked or full, the list is kept in memory for the tab and the page
 says "Changes won't persist". Changes sync across tabs. Each entry is looked up again through the
 read-only API; an entry whose event is no longer found stays on the list with an explanation until you
 remove it.
+
+### Market Explorer
+
+- `GET /api/explore/summary` — cached event counts, categories, series-metadata freshness, latest refresh state
+- `GET /api/explore/events` — paginated explorer cards (`category`, `q`, `lifecycle`, `coverage`, `quote`, `sort`, `page`, `page_size`)
+- `GET /api/explore/events/{event_ticker}` — one cached event with markets, rules, coverage, and latest retrieved quotes
+- `POST /api/explore/refresh` — start an open-event crawl + watched/non-final lookups (body may list `watched_event_tickers`); GET never starts a crawl
+- `GET /api/explore/refresh` — refresh job status (pages, events, lookup attempted vs refreshed)
+
+Cache lives under `data/cache/explore/`. Lifecycle, retrieval freshness, and lookup outcome are separate fields.
+`model_supported` and `saved_forecast` are separate; a supported sports series without a capture is not labelled “No model available”.
 
 ### Research Hub
 
