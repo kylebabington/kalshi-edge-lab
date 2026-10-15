@@ -26,6 +26,15 @@ vi.mock('../api/weather', async (importOriginal) => {
   }
 })
 
+vi.mock('../api/research', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/research')>()
+  const mocks = await import('../mocks/research')
+  return {
+    ...actual,
+    fetchResearchExperiments: vi.fn(async (category: 'weather' | 'sports') => mocks.mockExperimentList(category)),
+  }
+})
+
 describe('UI foundation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -137,17 +146,62 @@ describe('UI foundation', () => {
     expect(screen.queryByText(/\bBUY\b/)).toBeNull()
   })
 
-  it('research page shows Phase 4 multi-source and CLINYC progress', async () => {
+  it('research page shows data sources and CLINYC progress', async () => {
     render(
       <MemoryRouter>
         <ResearchPage />
       </MemoryRouter>,
     )
-    expect(await screen.findByText(/MULTI-SOURCE EVIDENCE/i)).toBeInTheDocument()
+    expect(await screen.findByText('Data sources')).toBeInTheDocument()
     expect(screen.getByText(/PROSPECTIVE JOURNAL/i)).toBeInTheDocument()
-    expect(screen.getByText(/CLINYC_TRANSFER_V1/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'CLINYC_TRANSFER_V1' })).toBeInTheDocument()
     expect(screen.getByText(/0\s*\/\s*20/)).toBeInTheDocument()
     expect(screen.queryByText(/\bBUY\b/)).toBeNull()
+  })
+
+  it('research page never presents a configured source as active or a phase as complete', async () => {
+    render(
+      <MemoryRouter>
+        <ResearchPage />
+      </MemoryRouter>,
+    )
+    await screen.findByText('Data sources')
+    const summary = document.getElementById('weather-model-summary')!
+    expect(summary).not.toHaveTextContent(/\bACTIVE\b/i)
+    expect(summary).not.toHaveTextContent(/\bCOMPLETE\b/)
+    expect(summary).not.toHaveTextContent(/\bLIVE\b/)
+    expect(screen.getAllByText('UNKNOWN').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('CONFIGURED').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/No tracked completion record exists for this phase/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Operations · failed/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Evidence · missing/).length).toBeGreaterThan(0)
+  })
+
+  it('research page shows unknown, not defaults, when summary fields are absent', async () => {
+    const weather = await import('../api/weather')
+    vi.mocked(weather.fetchModelSummary).mockResolvedValueOnce({
+      ...mockModelSummary,
+      research_status: undefined,
+      research_status_details: undefined,
+      multi_source_evidence: undefined,
+      multi_source_evidence_details: undefined,
+      prospective_journal: undefined,
+      settlement_transfer: { available: false },
+      prospective_validation: undefined,
+    })
+    render(
+      <MemoryRouter>
+        <ResearchPage />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText(/Research status: unknown/)).toBeInTheDocument()
+    expect(screen.getByText(/Data source status: unknown/)).toBeInTheDocument()
+    expect(screen.getByText(/Prospective journal counts: unavailable/)).toBeInTheDocument()
+    expect(screen.getByText(/unavailable\s*\/\s*unavailable/)).toBeInTheDocument()
+    const summary = document.getElementById('weather-model-summary')!
+    expect(summary).not.toHaveTextContent(/\bCOMPLETE\b/)
+    expect(summary).not.toHaveTextContent(/0\s*\/\s*20/)
+    expect(summary).not.toHaveTextContent(/SHADOW ONLY/)
   })
 
   it('research page shows Phase 5 prospective validation and SHADOW ONLY', async () => {

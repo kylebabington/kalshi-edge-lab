@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import health, opportunities, sports, weather
+from api.routes import health, opportunities, research, sports, weather
 from research.ai.config import load_env_file
 from research.sports import service as sports_service
 
@@ -52,3 +52,4 @@ app.include_router(health.router, prefix="/api")
 app.include_router(weather.router, prefix="/api")
 app.include_router(sports.router, prefix="/api")
 app.include_router(opportunities.router, prefix="/api")
+app.include_router(research.router, prefix="/api")

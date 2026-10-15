@@ -9,6 +9,7 @@ import { TimezoneNote } from '../components/TimezoneNote'
 import { DataKindTag } from '../components/UnifiedEventCard'
 import { competitionLabel, familyLabel, sportLabel, sportsEventTitle } from '../lib/labels'
 import { StarButton } from '../watchlist/StarButton'
+import { NotebookPanel } from '../notebook/NotebookPanel'
 import { BackLink } from './BackLink'
 import { DataStamp } from '../components/sports/DataStamp'
 import {
@@ -486,5 +487,10 @@ export function SportsEventPage() {
       </div>
     )
   }
-  return state.data ? <SportsEventView data={state.data} loadedAt={state.loadedAt} /> : null
+  return state.data ? (
+    <div className="space-y-5">
+      <SportsEventView data={state.data} loadedAt={state.loadedAt} />
+      <NotebookPanel target={{ type: 'event', category: 'sports', key: eventId }} title="My notes on this event" />
+    </div>
+  ) : null
 }

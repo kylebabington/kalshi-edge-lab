@@ -1,209 +1,167 @@
-import { ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
-import { MetricHelp, ResultKindBadge, SampleNote } from '../components/MetricHelp'
+import { useCallback } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ErrorState, LoadingState } from '../components/StatusBadge'
+import { FilterBar } from '../components/sports/FilterBar'
 import { useAsync } from '../components/sports/useAsync'
-import { fetchModelSummary, fetchWeatherMetricsContext } from '../api/weather'
-import { fmtTargetDate } from '../lib/time'
+import { ExperimentCard } from '../components/research/ExperimentCard'
+import { WeatherModelSummarySection } from '../components/research/WeatherModelSummarySection'
+import { fetchResearchExperiments } from '../api/research'
+import { filterExperiments, type CatalogFilters } from '../components/research/format'
+import { COLLECTION_MODES, MODE_LABELS, type ResearchCategory } from '../types/research'
 
-function metric(v: unknown) {
-  if (v == null || v === '') return 'unavailable'
-  const n = Number(v)
-  return Number.isFinite(n) ? (Number.isInteger(n) ? String(n) : n.toFixed(4)) : String(v)
-}
+const FILTER_KEYS = ['q', 'category', 'designation', 'mode', 'status'] as const
 
-function range(first: string | null | undefined, last: string | null | undefined) {
-  return first ? `${fmtTargetDate(first)} – ${fmtTargetDate(last ?? first)}` : 'unknown'
+const CATEGORY_TITLES: Record<ResearchCategory, string> = { weather: 'Weather experiments', sports: 'Sports experiments' }
+
+function CategorySection({ category, filters }: { category: ResearchCategory; filters: CatalogFilters }) {
+  const load = useCallback(() => fetchResearchExperiments(category), [category])
+  const state = useAsync(load, `research-experiments:${category}`)
+  const headingId = `research-${category}-heading`
+
+  let body
+  if (state.loading) body = <LoadingState label={`Loading ${category} experiments…`} />
+  else if (state.error)
+    body = (
+      <ErrorState
+        title={`${category === 'weather' ? 'Weather' : 'Sports'} experiments unavailable`}
+        message={state.error}
+        onRetry={state.reload}
+      />
+    )
+  else {
+    const all = state.data?.experiments ?? []
+    const shown = filterExperiments(all, filters)
+    body = shown.length ? (
+      <div className="grid gap-4 lg:grid-cols-2">
+        {shown.map((c) => (
+          <ExperimentCard key={c.id} card={c} />
+        ))}
+      </div>
+    ) : (
+      <div className="panel text-sm text-[var(--text-muted)]">
+        {all.length ? `No ${category} experiments match these filters (${all.length} in total).` : `No ${category} experiments reported.`}
+      </div>
+    )
+  }
+
+  return (
+    <section className="space-y-3" aria-labelledby={headingId}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 id={headingId} className="text-lg font-semibold">
+          {CATEGORY_TITLES[category]}
+        </h3>
+        {state.data && !state.loading ? (
+          <span className="text-xs text-[var(--text-muted)]">{state.data.experiments.length} registered</span>
+        ) : null}
+      </div>
+      {state.data?.summary_note && !state.loading ? (
+        <p className="text-xs text-[var(--text-muted)]">{state.data.summary_note}</p>
+      ) : null}
+      {body}
+    </section>
+  )
 }
 
 export function ResearchPage() {
-  const summaryState = useAsync(fetchModelSummary, 'model-summary')
-  const context = useAsync(fetchWeatherMetricsContext, 'weather-metrics-context')
-  if (summaryState.loading) return <LoadingState />
-  if (summaryState.error) return <ErrorState message={summaryState.error} />
-  const summary = summaryState.data
-  if (!summary) return <ErrorState message="Model summary unavailable." />
+  const [params, setParams] = useSearchParams()
+  const filters: CatalogFilters = {
+    q: params.get('q') ?? '',
+    designation: params.get('designation') ?? '',
+    mode: params.get('mode') ?? '',
+    status: params.get('status') ?? '',
+  }
+  const category = params.get('category') ?? ''
 
-  const replay = context.data?.operational_replay
-  const replayPeriod = context.loading
-    ? 'loading…'
-    : replay?.available
-      ? `${range(replay.first_target_date, replay.last_target_date)} (historical replay)`
-      : 'unknown'
-  const prospectiveScores = context.data?.prospective_snapshot_scores
-  const prospectivePeriod = context.loading
-    ? 'loading…'
-    : prospectiveScores
-      ? `${range(prospectiveScores.first_target_date, prospectiveScores.last_target_date)} (target dates)`
-      : 'unknown'
+  const setParam = useCallback(
+    (key: string, value: string) => {
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          if (value) next.set(key, value)
+          else next.delete(key)
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setParams],
+  )
+  const onSearch = useCallback((value: string) => setParam('q', value.trim()), [setParam])
+  const onReset = useCallback(() => {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        for (const k of FILTER_KEYS) next.delete(k)
+        return next
+      },
+      { replace: true },
+    )
+  }, [setParams])
 
-  const constants = summary?.methodology_constants ?? {}
-  const status = summary?.research_status ?? {}
-  const multi = summary?.multi_source_evidence ?? {}
-  const journal = summary?.prospective_journal ?? {}
-  const transfer = summary?.settlement_transfer ?? {}
-  const prospective = summary?.prospective_validation
-  const coverage = prospective?.checkpoint_coverage ?? {}
-  const prospectiveN = Number(transfer.prospective_n ?? 0)
-  const prospectiveTarget = Number(transfer.prospective_target_n ?? 20)
-  const incumbent = prospective?.incumbent_gfs
-  const shadowMetrics = prospective?.shadow_gfs_hrrr_equal
-  const delta = prospective?.paired_delta_brier as
-    | { mean?: number; ci95?: number[] }
-    | null
-    | undefined
+  const showWeather = category !== 'sports'
+  const showSports = category !== 'weather'
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-xl font-semibold">Research</h2>
-      <div className="grid gap-4 md:grid-cols-2">
-        {[
-          ['Weather Phase 1', status.weather_phase_1 ?? 'COMPLETE'],
-          ['Weather Phase 2', status.weather_phase_2 ?? 'COMPLETE'],
-          ['Weather Phase 3 Transfer', status.weather_phase_3_transfer ?? 'EXPERIMENTAL'],
-          ['Weather Phase 4 Evidence', status.weather_phase_4_evidence ?? 'COMPLETE'],
-          ['Weather Phase 5 Shadow', status.weather_phase_5_shadow ?? 'SHADOW_ONLY'],
-          ['CLINYC Target Calibration', status.clinyc_target_calibration ?? 'IN PROGRESS'],
-          ['Weather ↔ Kalshi Execution Backtest', status.weather_kalshi_execution_backtest ?? 'BLOCKED'],
-          ['Live Recommendations', status.live_recommendations ?? 'DISABLED'],
-        ].map(([title, value]) => (
-          <div key={title} className="panel flex items-center justify-between gap-3">
-            <div className="font-medium">{title}</div>
-            <StatusBadge status={String(value)} />
-          </div>
-        ))}
-      </div>
-
-      <section className="panel space-y-3">
-        <h3 className="font-semibold">MULTI-SOURCE EVIDENCE</h3>
-        <dl className="grid gap-2 sm:grid-cols-2 text-sm mono">
-          {Object.entries(multi).map(([key, value]) => (
-            <div key={key} className="flex justify-between gap-3 border-b border-[var(--border)] py-1">
-              <dt>{key}</dt>
-              <dd>
-                <StatusBadge status={String(value)} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <section className="panel space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-semibold">PROSPECTIVE JOURNAL</h3>
-          <ResultKindBadge kind="prospective" />
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1 max-w-3xl">
+          <h2 className="text-xl font-semibold">Research</h2>
+          <p className="text-sm text-[var(--text-muted)]">
+            Weather and Sports experiments and frozen protocols. Every status shows what supports it; when the support is
+            missing it shows unknown or unavailable rather than a success. Research only: no bets, no recommendations.
+          </p>
         </div>
-        <SampleNote
-          n={prospectiveScores ? `${prospectiveScores.scored_snapshots} scored snapshots in ${prospectiveScores.events}` : null}
-          unit="events"
-          period={prospectivePeriod}
-        />
-        <dl className="grid gap-2 sm:grid-cols-3 text-sm mono">
-          <div>
-            snapshots <span className="font-semibold">{String(journal.snapshots ?? 0)}</span>
-          </div>
-          <div>
-            scored <span className="font-semibold">{String(journal.scored_snapshots ?? 0)}</span>
-          </div>
-          <div>
-            settled scored{' '}
-            <span className="font-semibold">{String(journal.settled_events_scored ?? 0)}</span>
-          </div>
-        </dl>
-      </section>
+        <Link to="/research/notebook" className="pager-button text-sm">
+          Personal notebook
+        </Link>
+      </header>
 
-      <section className="panel space-y-2">
-        <h3 className="font-semibold">CLINYC_TRANSFER_V1</h3>
-        <p className="text-sm text-[var(--text-muted)]">Prospective confirmation progress (frozen hypothesis).</p>
-        <div className="text-2xl mono">
-          {prospectiveN} / {prospectiveTarget}
-        </div>
-        <StatusBadge status={String(transfer.transfer_status ?? 'experimental')} />
-      </section>
+      <FilterBar
+        search={{ label: 'Search experiments', value: filters.q, placeholder: 'Title, ID or protocol' }}
+        onSearch={onSearch}
+        selects={[
+          {
+            id: 'category',
+            label: 'Category',
+            value: category,
+            options: [
+              { value: 'weather', label: 'Weather' },
+              { value: 'sports', label: 'Sports' },
+            ],
+          },
+          {
+            id: 'designation',
+            label: 'Designation',
+            value: filters.designation,
+            options: [
+              { value: 'historical', label: 'Historical' },
+              { value: 'prospective', label: 'Prospective' },
+            ],
+          },
+          {
+            id: 'mode',
+            label: 'Collection mode',
+            value: filters.mode,
+            options: COLLECTION_MODES.map((m) => ({ value: m, label: MODE_LABELS[m] })),
+          },
+          {
+            id: 'status',
+            label: 'Results',
+            value: filters.status,
+            options: [
+              { value: 'available', label: 'Results available' },
+              { value: 'unavailable', label: 'No results available' },
+            ],
+          },
+        ]}
+        onChange={setParam}
+        onReset={onReset}
+      />
 
-      <section className="panel space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="font-semibold">PROSPECTIVE WEATHER VALIDATION</h3>
-          <StatusBadge status={String(prospective?.status ?? 'SHADOW ONLY')} />
-        </div>
-        <p className="text-sm text-[var(--text-muted)]">
-          Incumbent remains calibrated GFS. Equal-weight GFS+HRRR is shadow research only.
-        </p>
-        <dl className="grid gap-2 sm:grid-cols-2 text-sm mono">
-          {Object.entries(coverage).map(([id, row]) => (
-            <div key={id} className="flex justify-between gap-3 border-b border-[var(--border)] py-1">
-              <dt>{id}</dt>
-              <dd>{row.display ?? `${row.captured ?? 0} / ${row.total ?? 0}`}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="text-sm mono space-y-1">
-          <div>
-            scored events{' '}
-            <span className="font-semibold">{String(prospective?.scored_events ?? 0)}</span>
-          </div>
-          <div>
-            captured{' '}
-            <span className="font-semibold">{String(prospective?.captured_checkpoints ?? 0)}</span>
-            {' / '}
-            missed{' '}
-            <span className="font-semibold">{String(prospective?.missed_checkpoints ?? 0)}</span>
-          </div>
-          {incumbent || shadowMetrics || delta ? (
-            <div className="space-y-1 rounded-lg border border-[var(--border)] p-2 font-sans">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold">Shadow evaluation metrics</span>
-                <ResultKindBadge kind="historical" />
-              </div>
-              <p className="text-xs text-[var(--text-muted)]">
-                These come from the shadow evaluation replay over past operational forecasts, not from the saved
-                prospective snapshots above.
-              </p>
-              {incumbent ? (
-                <div className="mono">
-                  incumbent GFS Brier <MetricHelp metric="brier" label="Brier" /> = {metric(incumbent.brier)} · log loss{' '}
-                  <MetricHelp metric="log_loss" label="log loss" /> = {metric(incumbent.log_loss)} · n ={' '}
-                  {metric((incumbent as { n?: unknown }).n)}
-                </div>
-              ) : null}
-              {shadowMetrics ? (
-                <div className="mono">
-                  GFS+HRRR equal Brier = {metric(shadowMetrics.brier)} · log loss = {metric(shadowMetrics.log_loss)} · n ={' '}
-                  {metric((shadowMetrics as { n?: unknown }).n)}
-                </div>
-              ) : null}
-              {delta ? (
-                <div className="mono">
-                  paired Δ Brier (shadow − GFS) <MetricHelp metric="paired" label="a paired difference" /> mean ={' '}
-                  {metric(delta.mean)}
-                  {Array.isArray(delta.ci95) ? ` · 95% CI [${metric(delta.ci95[0])}, ${metric(delta.ci95[1])}]` : ''}
-                  {(delta as { n?: unknown }).n != null ? ` · n = ${metric((delta as { n?: unknown }).n)}` : ''}
-                </div>
-              ) : null}
-              <SampleNote n={replay ? replay.target_dates : null} unit="replay target dates available" period={replayPeriod} />
-            </div>
-          ) : null}
-          <div>
-            transfer for shadow V1:{' '}
-            <StatusBadge
-              status={String(prospective?.experimental_transfer_status ?? 'experimental')}
-            />
-          </div>
-        </div>
-      </section>
+      {showWeather ? <CategorySection category="weather" filters={filters} /> : null}
+      {showSports ? <CategorySection category="sports" filters={filters} /> : null}
 
-      <section className="panel">
-        <h3 className="font-semibold">Methodology constants</h3>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
-          Phase 5 does not promote the shadow. Combination policy = none for live WeatherPrediction.
-        </p>
-        <dl className="mt-3 grid gap-2 sm:grid-cols-2 text-sm mono">
-          {Object.entries(constants).map(([key, value]) => (
-            <div key={key} className="flex justify-between gap-3 border-b border-[var(--border)] py-1">
-              <dt className="text-[var(--text-muted)]">{key}</dt>
-              <dd>{String(value)}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+      <WeatherModelSummarySection />
     </div>
   )
 }

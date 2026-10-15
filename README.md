@@ -380,7 +380,21 @@ API base: `http://localhost:8000`
 - `GET /api/health`
 - `GET /api/weather/live` — may fetch current open markets / GFS / GEFS / observations
 - `GET /api/weather/events/{event_ticker}`
-- `GET /api/weather/model/summary` — read-only artifacts (`model_summary_available`)
+- `GET /api/weather/model/summary` — read-only artifacts (`model_summary_available`). Status fields
+  never report success without evidence (changed semantics; record kinds are under "Research Hub" below):
+  - `research_status.weather_phase_1|2|4_evidence` are `UNKNOWN` (no tracked completion record exists;
+    previously hardcoded `COMPLETE`). `weather_phase_3_transfer` is `VALIDATED` / `EXPERIMENTAL` from the
+    transfer artifact, or `UNAVAILABLE` when the artifact is missing (previously `EXPERIMENTAL`).
+    Policy values (`SHADOW_ONLY`, `DISABLED`, `BLOCKED`) are unchanged.
+  - `multi_source_evidence` values are `CONFIGURED` or `PRESENT` (a supporting file exists; validity not
+    checked); never `ACTIVE`/`LIVE`. The last saved fetch outcome per source is in
+    `multi_source_evidence_details[source].operations`.
+  - `prospective_journal.settled_events_scored` counts distinct events among score files (previously a
+    copy of the score-file count). `settlement_transfer.stale` is `null` (no freshness rule) and
+    `last_updated` comes from the artifact. `prospective_validation.scored_events` is `null` when its
+    summary artifact is missing; `experimental_transfer_status` comes from the transfer artifact or is
+    `unknown`.
+  - `research_status_details` / `multi_source_evidence_details` carry structured status records.
 - `GET /api/weather/saved-events?status=&q=&sort=&page=&page_size=` — one item per event from saved
   snapshots and score files. `status` is `all|upcoming|awaiting_settlement|settled`; `sort` is
   `default|target_asc|target_desc|capture_desc|settlement_desc`. Settlement has two separate levels:
@@ -445,6 +459,9 @@ log.
 | `/markets/:eventTicker` | Open-market detail when the event is still open; otherwise the saved-forecast view with event settlement and per-snapshot scores. |
 | `/sports`, `/sports/events/:eventId` | Sports browsing with plain-language labels and sort by start, capture or settlement time. |
 | `/watchlist` | Starred events, filterable by `?category=weather` or `?category=sports`. |
+| `/research` | Research Hub: Weather and Sports experiment catalog (filters `q`, `category`, `designation`, `mode`, `status` in the URL) and the weather model summary. Each list loads on its own. |
+| `/research/:experimentId` | One experiment (`weather.*` or `sports.*`): question, candidates, reference, cohort rules, limitations, historical replay / manual pilot / automatic collection, tracked vs local sources, read-only frozen settings and personal notes. |
+| `/research/notebook` | Personal notebook: all notes and questions, filters, JSON export and import with a merge preview. |
 | `/opportunities`, `/opportunities/:ticker` | Current weather and sports markets ranked by attention score, with edge, EV, fees, warnings and manual AI research. |
 
 Collector health uses successful cycle times only (stale after 2 × cadence + 5 minutes; a missing
@@ -465,6 +482,42 @@ before it is replaced. If storage is blocked or full, the list is kept in memory
 says "Changes won't persist". Changes sync across tabs. Each entry is looked up again through the
 read-only API; an entry whose event is no longer found stays on the list with an explanation until you
 remove it.
+
+### Research Hub
+
+- `GET /api/research/experiments?category=weather|sports` — catalog cards for registered experiments
+  and frozen protocols (`category` is required, so the two lists load independently)
+- `GET /api/research/experiments/{experiment_id}` — one experiment with its detail sections; 404 when the
+  ID is not registered
+
+Both endpoints only read tracked protocols, hypotheses and docs plus local result files (cached by size
+and modification time). They never fetch upstream, run models, write reports or verify integrity. Sample
+counts come from file counts, tracked summary CSVs and the already cached sports layer; while the sports
+index is still loading after startup, the sports capture card says so and its counts are `null`.
+
+Every status is a record `{kind, state, label, basis, source, as_of, reason}` (`research/status_records.py`):
+
+| kind | states |
+| --- | --- |
+| implementation | `implemented` (tracked implementation files) or `unknown` |
+| evidence | `present` (file exists; validity not checked), `missing`, `invalid` (unparseable), `not_checked` |
+| operations | `recent_success`, `stale`, `failed`, `unknown`, `not_applicable` |
+| integrity | `verified` only when a recorded verification ran; catalog cards always report `not_checked` |
+| policy / configuration | intentional states such as `RESEARCH_ONLY`, `NO_BET`, `SHADOW_ONLY`, `CONFIGURED` |
+
+Missing or unreadable support is shown as unknown or unavailable with its reason, never as success. Cards
+label results as a tracked summary (in git), a local artifact (this machine only) or a live page.
+
+**Personal notebook.** Notes and questions with tags, attached to an experiment or to a weather or sports
+event, live only in this browser under `kalshi-edge-lab.notebook.v1` as `{version: 1, entries: [{id, kind:
+note|question, origin: personal|ai_commentary, text, tags, target, created_at, updated_at}]}`. `target` is
+`{type: "experiment", id}` or `{type: "event", category, key}`. Storage handling matches the watchlist
+(invalid entries dropped, unreadable data copied to `.unreadable-backup`, in-memory fallback with a
+warning, cross-tab sync). Notes are **not** included in collector backups, are never sent to the API and
+are not research evidence. `ai_commentary` marks text you pasted from an AI tool; the hub never calls a
+model. Export writes `{format: "kalshi-edge-lab.notebook", version: 1, exported_at, entries}`. Import
+validates the file and previews new, identical, conflicting and invalid entries; merge only adds new IDs
+and keeps your version on conflicts; replacing the whole notebook requires an explicit confirmation.
 
 ### Opportunities
 

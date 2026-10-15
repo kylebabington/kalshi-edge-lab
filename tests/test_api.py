@@ -88,7 +88,10 @@ def test_model_summary_includes_phase4_fields():
     response = client.get("/api/weather/model/summary")
     assert response.status_code == 200
     payload = response.json()
-    assert payload.get("research_status", {}).get("weather_phase_4_evidence") == "COMPLETE"
+    # No tracked completion record exists, so the phase is not reported as COMPLETE.
+    assert payload.get("research_status", {}).get("weather_phase_4_evidence") == "UNKNOWN"
+    assert "COMPLETE" not in payload["research_status"].values()
+    assert "ACTIVE" not in payload["multi_source_evidence"].values()
     assert payload.get("research_status", {}).get("weather_phase_5_shadow") == "SHADOW_ONLY"
     assert payload.get("research_status", {}).get("nbm") == "PHASE_6_CANDIDATE"
     assert "multi_source_evidence" in payload

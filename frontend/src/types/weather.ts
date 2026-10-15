@@ -79,14 +79,53 @@ export type ProspectiveValidation = {
     string,
     { captured?: number; missed?: number; total?: number; display?: string }
   >
-  scored_events?: number
+  scored_events?: number | null
+  scored_events_basis?: string
   captured_checkpoints?: number
   missed_checkpoints?: number
   incumbent_gfs?: Record<string, number | null> | null
   shadow_gfs_hrrr_equal?: Record<string, number | null> | null
   paired_delta_brier?: Record<string, unknown> | null
   experimental_transfer_status?: string
+  experimental_transfer_status_basis?: string
+  /** Methodology declaration (how replay is designed), not a run result. */
   historical_replay?: Record<string, unknown>
+  historical_replay_kind?: string
+}
+
+export type StatusKind = 'implementation' | 'evidence' | 'operations' | 'integrity' | 'policy' | 'configuration'
+
+/** What kind of claim a status is and what supports it. */
+export type StatusRecord = {
+  kind: StatusKind | string
+  state: string
+  label: string
+  basis: string
+  source?: string | null
+  as_of?: string | null
+  reason?: string | null
+  checks?: Record<string, unknown>
+}
+
+export type PhaseStatusDetail = {
+  label: string
+  value: string
+  reason?: string | null
+  basis?: string
+  implementation?: StatusRecord
+  evidence?: StatusRecord[]
+  completion?: StatusRecord
+  protocol?: StatusRecord
+}
+
+export type ResearchStatusDetail = PhaseStatusDetail | (StatusRecord & { value?: string })
+
+export type SourceStatusDetail = {
+  label: string
+  value: string
+  configuration: StatusRecord
+  evidence: StatusRecord[]
+  operations: StatusRecord
 }
 
 export type ModelSummary = {
@@ -101,8 +140,12 @@ export type ModelSummary = {
   settlement_regime?: Record<string, unknown>
   settlement_transfer?: Record<string, unknown>
   direct_clinyc?: Record<string, unknown>
+  /** Legacy strings. Phases without a tracked completion record are UNKNOWN, never COMPLETE. */
   research_status?: Record<string, string>
+  research_status_details?: Record<string, ResearchStatusDetail>
+  /** Legacy strings: CONFIGURED or PRESENT (file present, validity not checked); never ACTIVE. */
   multi_source_evidence?: Record<string, string>
+  multi_source_evidence_details?: Record<string, SourceStatusDetail>
   prospective_journal?: Record<string, unknown>
   prospective_validation?: ProspectiveValidation
   notes?: string[]

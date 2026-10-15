@@ -314,7 +314,30 @@ class SportsCollectorResponse(BaseModel):
     limits: str
 
 
+class StatusRecord(BaseModel):
+    """What kind of claim a status is and what supports it (see research/status_records.py)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    kind: str
+    state: str
+    label: str
+    basis: str
+    source: str | None = None
+    as_of: str | None = None
+    reason: str | None = None
+
+
 class ModelSummaryResponse(BaseModel):
+    """Weather model summary.
+
+    ``research_status`` and ``multi_source_evidence`` keep their legacy string values for
+    compatibility, but no longer report success without evidence: phases without a tracked
+    completion record are ``UNKNOWN``; sources are ``CONFIGURED`` or ``PRESENT`` (file present,
+    validity not checked), never ``ACTIVE``. The ``*_details`` maps carry structured records
+    with kind, basis, source and timestamp.
+    """
+
     model_config = ConfigDict(extra="allow")
 
     model_summary_available: bool
@@ -322,7 +345,58 @@ class ModelSummaryResponse(BaseModel):
     mode: str
     methodology_constants: dict[str, Any] = Field(default_factory=dict)
     calibration: dict[str, Any] = Field(default_factory=dict)
+    research_status: dict[str, str] | None = None
+    research_status_details: dict[str, dict[str, Any]] | None = None
+    multi_source_evidence: dict[str, str] | None = None
+    multi_source_evidence_details: dict[str, dict[str, Any]] | None = None
     notes: list[str] = Field(default_factory=list)
+
+
+class ResearchExperimentCard(BaseModel):
+    """Catalog card. Missing values are ``None`` with a reason; status uses StatusRecord kinds."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    category: str
+    protocol_id: str | None = None
+    title: str
+    version: str | None = None
+    designation: str
+    modes: list[str] = Field(default_factory=list)
+    lifecycle: dict[str, Any] | None = None
+    frozen_at: str | None = None
+    period: dict[str, Any] | None = None
+    period_reason: str | None = None
+    samples: list[dict[str, Any]] = Field(default_factory=list)
+    results: list[dict[str, Any]] = Field(default_factory=list)
+    results_available: bool = False
+    status: dict[str, Any] = Field(default_factory=dict)
+    summary_note: str | None = None
+    error: str | None = None
+
+
+class ResearchExperimentListResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    category: str
+    mode: str
+    experiments: list[ResearchExperimentCard]
+
+
+class ResearchExperimentDetailResponse(ResearchExperimentCard):
+    generated_at: str
+    mode: str
+    question: str | None = None
+    reference: str | None = None
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
+    cohort_rules: list[dict[str, Any]] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    mode_blocks: list[dict[str, Any]] = Field(default_factory=list)
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+    frozen_settings: dict[str, Any] | None = None
+    links: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class EligibilityResponse(BaseModel):

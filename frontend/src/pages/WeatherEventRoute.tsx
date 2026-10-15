@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StatusBadge'
 import { weatherTitle } from '../lib/weatherText'
 import { useAsync } from '../components/sports/useAsync'
 import { StarButton } from '../watchlist/StarButton'
+import { NotebookPanel } from '../notebook/NotebookPanel'
 import { BackLink } from './BackLink'
 import { MarketDetailPage } from './MarketDetailPage'
 import { SavedWeatherEventView } from './SavedWeatherEventView'
@@ -22,6 +23,7 @@ export function WeatherEventRoute() {
   const needLive = savedDone && (saved.error != null || saved.data?.event.view === 'upcoming')
   const live = useAsync(async () => (needLive ? fetchLiveWeather() : null), `live-${eventTicker}-${needLive}`)
   const open = live.data?.events.find((e) => e.event_ticker === eventTicker) ?? null
+  const notebookTarget = { type: 'event', category: 'weather', key: eventTicker } as const
 
   if (!savedDone || (needLive && live.loading)) {
     return <LoadingState label={needLive ? 'Checking open markets (live sources)…' : 'Loading saved forecasts…'} />
@@ -36,10 +38,17 @@ export function WeatherEventRoute() {
         </div>
         <MarketDetailPage loading={false} error={null} event={open} />
         {saved.data ? <PredictionHistory data={saved.data} /> : null}
+        <NotebookPanel target={notebookTarget} title="My notes on this event" />
       </div>
     )
   }
-  if (saved.data) return <SavedWeatherEventView data={saved.data} loadedAt={saved.loadedAt} />
+  if (saved.data)
+    return (
+      <div className="space-y-5">
+        <SavedWeatherEventView data={saved.data} loadedAt={saved.loadedAt} />
+        <NotebookPanel target={notebookTarget} title="My notes on this event" />
+      </div>
+    )
   return (
     <div className="space-y-3">
       <BackLink fallback="/markets" label="Weather events" />

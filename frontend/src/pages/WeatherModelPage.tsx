@@ -46,11 +46,14 @@ export function WeatherModelPage() {
   }
 
   const errorRows = Object.entries(summary.forecast_error_by_run ?? {})
-  const reliability = (summary.reliability_bins ?? []).map((bin) => ({
-    bin: String(bin.bin ?? ''),
-    predicted: Number(bin.mean_predicted ?? 0),
-    observed: Number(bin.observed_frequency ?? 0),
-  }))
+  const reliability = (summary.reliability_bins ?? [])
+    .filter((bin) => bin.mean_predicted != null && bin.observed_frequency != null)
+    .map((bin) => ({
+      bin: String(bin.bin ?? ''),
+      predicted: Number(bin.mean_predicted),
+      observed: Number(bin.observed_frequency),
+    }))
+    .filter((row) => Number.isFinite(row.predicted) && Number.isFinite(row.observed))
 
   const counts = (summary.reliability_bins ?? []).map((bin) => Number((bin as { count?: unknown; n?: unknown }).count ?? (bin as { n?: unknown }).n))
   const reliabilityN = counts.length && counts.every(Number.isFinite) ? counts.reduce((a, b) => a + b, 0) : null
@@ -59,6 +62,11 @@ export function WeatherModelPage() {
   const transfer = summary.settlement_transfer ?? {}
   const transferStatus = String(transfer.transfer_status ?? summary.settlement_regime?.transfer_status ?? 'unavailable')
   const showValidated = transferStatus === 'validated' && Boolean(transfer.transfer_validated)
+  const transferBadge = showValidated
+    ? 'VALIDATED'
+    : transferStatus === 'validated'
+      ? 'EXPERIMENTAL'
+      : transferStatus.toUpperCase()
   const direct = summary.direct_clinyc ?? {}
   const datasetExists = Boolean(
     direct.dataset_exists ?? summary.calibration?.direct_clinyc_dataset_exists,
@@ -66,9 +74,10 @@ export function WeatherModelPage() {
   const directEligible = Boolean(
     direct.operationally_eligible ?? summary.calibration?.direct_clinyc_operationally_eligible,
   )
-  const developmentN = Number(transfer.development_n ?? 0)
-  const prospectiveN = Number(transfer.prospective_n ?? 0)
-  const prospectiveTarget = Number(transfer.prospective_target_n ?? 20)
+  const known = (v: unknown) => (v == null || v === '' ? 'unknown' : String(v))
+  const developmentN = known(transfer.development_n)
+  const prospectiveN = known(transfer.prospective_n)
+  const prospectiveTarget = known(transfer.prospective_target_n)
   const upperBound = transfer.integer_mismatch_95_upper
 
   return (
@@ -96,7 +105,7 @@ export function WeatherModelPage() {
           <div>TWC / CLINYC</div>
         </div>
         <dl className="grid gap-2 sm:grid-cols-2 text-sm">
-          <div>Development pairs: <span className="mono">{developmentN || '—'}</span></div>
+          <div>Development pairs: <span className="mono">{developmentN}</span></div>
           <div>Exact match: <span className="mono">{pct(transfer.exact_match_rate)}</span></div>
           <div>Same bucket: <span className="mono">{pct(transfer.same_bucket_rate)}</span></div>
           <div>
@@ -113,7 +122,7 @@ export function WeatherModelPage() {
           </div>
           <div className="flex items-center gap-2">
             Transfer status:{' '}
-            <StatusBadge status={showValidated ? 'VALIDATED' : 'EXPERIMENTAL'} />
+            <StatusBadge status={transferBadge} />
           </div>
           <div>
             Prospective confirmation:{' '}
@@ -202,11 +211,11 @@ export function WeatherModelPage() {
 
       <section className="panel space-y-2">
         <h3 className="font-semibold">Settlement regime</h3>
-        <div className="text-sm">Historical: <span className="mono">{String(summary.settlement_regime?.historical ?? 'nws_cli_knyc')}</span></div>
-        <div className="text-sm">Current: <span className="mono">{String(summary.settlement_regime?.current_typical ?? 'weather_company_clinyc')}</span></div>
+        <div className="text-sm">Historical: <span className="mono">{String(summary.settlement_regime?.historical ?? 'unknown')}</span></div>
+        <div className="text-sm">Current: <span className="mono">{String(summary.settlement_regime?.current_typical ?? 'unknown')}</span></div>
         <div className="text-sm flex items-center gap-2">
           Transfer:{' '}
-          <StatusBadge status={showValidated ? 'VALIDATED' : 'EXPERIMENTAL'} />
+          <StatusBadge status={transferBadge} />
         </div>
       </section>
     </div>

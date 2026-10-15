@@ -753,12 +753,21 @@ def get_model_summary() -> dict[str, Any]:
             "by_run": {},
         }
 
+    from research import status_records as SR
+    from research.weather.transfer import TRANSFER_REPORT_PATH
+
     settlement_transfer: dict[str, Any]
     if transfer_art:
+        generated = transfer_art.get("generated_at")
         settlement_transfer = {
             "available": True,
-            "stale": False,
-            "last_updated": None,
+            # No freshness rule is defined for this artifact, so staleness is not determined.
+            "stale": None,
+            "stale_basis": "no freshness rule defined for this artifact",
+            "last_updated": generated if isinstance(generated, str) else SR.mtime_iso(TRANSFER_REPORT_PATH),
+            "last_updated_basis": "artifact generated_at"
+            if isinstance(generated, str)
+            else "artifact file modification time",
             "source_regime": transfer_art.get("source_regime"),
             "target_regime": transfer_art.get("target_regime"),
             "development_n": transfer_art.get("development_n")
@@ -790,8 +799,10 @@ def get_model_summary() -> dict[str, Any]:
     else:
         settlement_transfer = {
             "available": False,
-            "stale": True,
+            "stale": None,
+            "stale_basis": "artifact missing",
             "last_updated": None,
+            "last_updated_basis": "artifact missing",
             "transfer_status": "unavailable",
             "validation_status": "unavailable",
             "transfer_validated": False,
@@ -813,13 +824,29 @@ def get_model_summary() -> dict[str, Any]:
     )
     from research.weather.sources.nws_forecast import POINT_CACHE_PATH
 
-    snapshot_count = len(iter_all_snapshots())
-    score_count = len(load_all_scores())
-    hrrr_status = (
-        "ACTIVE" if HRRR_CALIBRATION_CSV.exists() or HRRR_EVAL_REPORT.exists() else "LIVE"
+    snapshots = iter_all_snapshots()
+    scores = load_all_scores()
+    snapshot_count = len(snapshots)
+    score_count = len(scores)
+    scored_event_count = len(
+        {str(s.get("event_ticker")) for s in scores if isinstance(s, dict) and s.get("event_ticker")}
     )
-    nws_status = "ACTIVE" if POINT_CACHE_PATH.exists() else "LIVE"
-    afd_status = "LIVE"
+    now = datetime.now(timezone.utc)
+    research_status, research_status_details = _research_status(
+        SR,
+        transfer_art=transfer_art,
+        transfer_validated=transfer_validated,
+        clinyc_eligible=bool(eligibility.get("direct_clinyc_operationally_eligible")),
+        hrrr_paths=(HRRR_CALIBRATION_CSV, HRRR_EVAL_REPORT),
+        transfer_path=TRANSFER_REPORT_PATH,
+    )
+    multi_source_evidence, multi_source_details = _source_status(
+        SR,
+        snapshots=snapshots,
+        hrrr_paths=(HRRR_CALIBRATION_CSV, HRRR_EVAL_REPORT),
+        nws_point_cache=POINT_CACHE_PATH,
+        now=now,
+    )
 
     return {
         "model_summary_available": model_summary_available,
@@ -905,36 +932,15 @@ def get_model_summary() -> dict[str, Any]:
             "report_exists": HRRR_EVAL_REPORT.exists(),
             "report_path": str(HRRR_EVAL_REPORT),
         },
-        "research_status": {
-            "weather_phase_1": "COMPLETE",
-            "weather_phase_2": "COMPLETE",
-            "weather_phase_3_transfer": (
-                "EXPERIMENTAL" if not transfer_validated else "VALIDATED"
-            ),
-            "weather_phase_4_evidence": "COMPLETE",
-            "weather_phase_5_shadow": "SHADOW_ONLY",
-            "clinyc_target_calibration": (
-                "OPERATIONAL"
-                if eligibility.get("direct_clinyc_operationally_eligible")
-                else "INSUFFICIENT_HISTORY"
-            ),
-            "weather_kalshi_execution_backtest": "BLOCKED",
-            "live_recommendations": "DISABLED",
-            "model_combination_policy": MODEL_COMBINATION_POLICY,
-            "nbm": "PHASE_6_CANDIDATE",
-        },
-        "multi_source_evidence": {
-            "GFS": "ACTIVE",
-            "GEFS": "ACTIVE",
-            "HRRR": hrrr_status,
-            "NWS": nws_status,
-            "AFD": afd_status,
-            "OBS": "ACTIVE",
-        },
+        "research_status": research_status,
+        "research_status_details": research_status_details,
+        "multi_source_evidence": multi_source_evidence,
+        "multi_source_evidence_details": multi_source_details,
         "prospective_journal": {
             "snapshots": snapshot_count,
             "scored_snapshots": score_count,
-            "settled_events_scored": score_count,
+            "settled_events_scored": scored_event_count,
+            "settled_events_scored_basis": "distinct event tickers among saved snapshot scores",
             "snapshot_root": str(SNAPSHOT_ROOT),
             "score_root": str(SCORE_ROOT),
             "recommended_checkpoints": [
@@ -949,7 +955,9 @@ def get_model_summary() -> dict[str, Any]:
                 "GET endpoints never create snapshots. Scheduler: HH:05 ET hourly."
             ),
         },
-        "prospective_validation": _prospective_validation_summary(),
+        "prospective_validation": _prospective_validation_summary(
+            transfer_status=settlement_transfer.get("transfer_status") if transfer_art else None
+        ),
         "notes": []
         if model_summary_available
         else [
@@ -959,7 +967,198 @@ def get_model_summary() -> dict[str, Any]:
     }
 
 
-def _prospective_validation_summary() -> dict[str, Any]:
+_PHASE_IMPLEMENTATION = {
+    "weather_phase_1": ("Phase 1 GFS calibration", ["weather_model.py", "research/weather/calibration.py"]),
+    "weather_phase_2": ("Phase 2 CLINYC recovery", ["research/weather/phase2.py", "research/weather/clinyc.py"]),
+    "weather_phase_4_evidence": ("Phase 4 multi-source evidence", ["research/weather/phase4.py"]),
+}
+
+NO_COMPLETION_RECORD = "No tracked completion record exists for this phase"
+
+
+def _research_status(
+    SR: Any,
+    *,
+    transfer_art: dict[str, Any] | None,
+    transfer_validated: bool,
+    clinyc_eligible: bool,
+    hrrr_paths: tuple[Any, Any],
+    transfer_path: Any,
+) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+    """Legacy strings plus structured records. Never reports COMPLETE without a completion record."""
+    from research.weather.transfer import HYPOTHESIS_PATH
+
+    evidence_paths = {
+        "weather_phase_1": [(CALIBRATION_CSV, "GFS calibration CSV")],
+        "weather_phase_2": [(PAIRS_CSV, "KNYC/CLINYC pairs CSV")],
+        "weather_phase_4_evidence": [
+            (hrrr_paths[0], "HRRR calibration CSV"),
+            (hrrr_paths[1], "HRRR evaluation report"),
+        ],
+    }
+    status: dict[str, str] = {}
+    details: dict[str, dict[str, Any]] = {}
+    for key, (label, modules) in _PHASE_IMPLEMENTATION.items():
+        status[key] = "UNKNOWN"
+        details[key] = {
+            "label": label,
+            "value": "UNKNOWN",
+            "reason": NO_COMPLETION_RECORD,
+            "implementation": SR.implementation(label, modules),
+            "evidence": [SR.file_evidence(name, path) for path, name in evidence_paths[key]],
+            "completion": SR.unknown("implementation", f"{label} completion", NO_COMPLETION_RECORD),
+        }
+
+    if transfer_art is None:
+        transfer_value = "UNAVAILABLE"
+        transfer_reason = "settlement_transfer_assessment.json not found on this machine"
+    elif transfer_validated:
+        transfer_value = "VALIDATED"
+        transfer_reason = None
+    else:
+        transfer_value = "EXPERIMENTAL"
+        transfer_reason = "artifact present; transfer_validated flag is not set"
+    status["weather_phase_3_transfer"] = transfer_value
+    details["weather_phase_3_transfer"] = {
+        "label": "Phase 3 settlement transfer",
+        "value": transfer_value,
+        "reason": transfer_reason,
+        "basis": "transfer_validated flag in settlement_transfer_assessment.json",
+        "evidence": [SR.json_evidence("Transfer assessment", transfer_path, parsed=transfer_art)],
+        "protocol": SR.file_evidence("CLINYC transfer hypothesis", HYPOTHESIS_PATH, what="tracked hypothesis"),
+    }
+
+    status["weather_phase_5_shadow"] = "SHADOW_ONLY"
+    details["weather_phase_5_shadow"] = SR.policy(
+        "Phase 5 shadow candidate", "SHADOW_ONLY", "Policy: the shadow candidate is never used for decisions"
+    )
+    clinyc_value = "OPERATIONAL" if clinyc_eligible else "INSUFFICIENT_HISTORY"
+    status["clinyc_target_calibration"] = clinyc_value
+    details["clinyc_target_calibration"] = SR.record(
+        "evidence",
+        "present" if clinyc_eligible else "missing",
+        "CLINYC target-regime calibration",
+        "Derived from calibration rows with the weather_company_clinyc regime "
+        "(assess_direct_clinyc_eligibility)",
+        source=SR.rel(CALIBRATION_CSV),
+        reason=None if clinyc_eligible else "Not enough CLINYC-regime history for direct calibration",
+    )
+    details["clinyc_target_calibration"]["value"] = clinyc_value
+    status["weather_kalshi_execution_backtest"] = "BLOCKED"
+    details["weather_kalshi_execution_backtest"] = SR.policy(
+        "Kalshi execution backtest", "BLOCKED", "Policy: no execution backtest is run for weather"
+    )
+    status["live_recommendations"] = "DISABLED"
+    details["live_recommendations"] = SR.policy(
+        "Live recommendations", "DISABLED", "Policy: research only, no trade recommendations"
+    )
+    status["model_combination_policy"] = MODEL_COMBINATION_POLICY
+    details["model_combination_policy"] = SR.configuration(
+        "Model combination policy", MODEL_COMBINATION_POLICY, "Code constant MODEL_COMBINATION_POLICY"
+    )
+    status["nbm"] = "PHASE_6_CANDIDATE"
+    details["nbm"] = SR.record(
+        "configuration",
+        "PHASE_6_CANDIDATE",
+        "NBM",
+        "Declared roadmap label in code; not evidence of any NBM data or run",
+    )
+    return status, details
+
+
+# Legacy key -> evidence block name in saved snapshots.
+_SOURCE_BLOCKS = {
+    "GFS": "gfs",
+    "GEFS": "gefs",
+    "HRRR": "hrrr",
+    "NWS": "nws_forecast",
+    "AFD": "nws_discussion",
+    "OBS": "observations",
+}
+
+RECENT_FETCH_HOURS = 24.0
+
+
+def _source_status(
+    SR: Any,
+    *,
+    snapshots: list[dict[str, Any]],
+    hrrr_paths: tuple[Any, Any],
+    nws_point_cache: Any,
+    now: datetime,
+) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+    """Configured sources, file evidence and last saved fetch outcome. Never "ACTIVE"."""
+    latest = None
+    for snap in snapshots:
+        if not isinstance(snap, dict):
+            continue
+        if latest is None or str(snap.get("created_at") or "") > str(latest.get("created_at") or ""):
+            latest = snap
+    latest_evidence = (latest or {}).get("evidence") if isinstance(latest, dict) else None
+    latest_id = (latest or {}).get("snapshot_id") if isinstance(latest, dict) else None
+
+    files = {
+        "HRRR": [(hrrr_paths[0], "HRRR calibration CSV"), (hrrr_paths[1], "HRRR evaluation report")],
+        "NWS": [(nws_point_cache, "NWS point cache")],
+    }
+    legacy: dict[str, str] = {}
+    details: dict[str, dict[str, Any]] = {}
+    for key, block_name in _SOURCE_BLOCKS.items():
+        evidence = [SR.file_evidence(name, path) for path, name in files.get(key, [])]
+        any_present = any(e["state"] == "present" for e in evidence)
+        legacy[key] = "PRESENT" if any_present else "CONFIGURED"
+
+        block = latest_evidence.get(block_name) if isinstance(latest_evidence, dict) else None
+        if not isinstance(block, dict):
+            operations = SR.unknown(
+                "operations",
+                f"{key} last saved fetch",
+                "No saved snapshot records this source"
+                if latest is not None
+                else "No saved snapshots on this machine",
+            )
+        else:
+            quality = str(block.get("quality_status") or "")
+            retrieved = block.get("retrieved_at")
+            age = SR.age_hours(retrieved, now)
+            source = f"snapshot {latest_id}" if latest_id else None
+            if quality in ("missing", "unavailable"):
+                operations = SR.record(
+                    "operations", "failed", f"{key} last saved fetch",
+                    f"Latest saved snapshot recorded quality '{quality}'",
+                    source=source, as_of=retrieved,
+                )
+            elif quality == "ok" and age is not None:
+                state = "recent_success" if age <= RECENT_FETCH_HOURS else "stale"
+                operations = SR.record(
+                    "operations", state, f"{key} last saved fetch",
+                    f"Latest saved snapshot recorded quality 'ok' (recent means within {int(RECENT_FETCH_HOURS)} h)",
+                    source=source, as_of=retrieved,
+                    reason=None if state == "recent_success" else f"Last saved fetch {age:.0f} h ago",
+                )
+            elif quality == "stale":
+                operations = SR.record(
+                    "operations", "stale", f"{key} last saved fetch",
+                    "Latest saved snapshot recorded quality 'stale'",
+                    source=source, as_of=retrieved,
+                )
+            else:
+                operations = SR.unknown(
+                    "operations", f"{key} last saved fetch",
+                    f"Latest saved snapshot recorded quality '{quality or 'none'}' without a usable time",
+                    source=source,
+                )
+        details[key] = {
+            "label": key,
+            "value": legacy[key],
+            "configuration": SR.configuration(key, "CONFIGURED", "Source is wired into the live evidence pipeline"),
+            "evidence": evidence,
+            "operations": operations,
+        }
+    return legacy, details
+
+
+def _prospective_validation_summary(transfer_status: str | None = None) -> dict[str, Any]:
     """Read-only Phase 5 prospective / shadow status for Research page."""
     from research.weather.checkpoints import (
         CHECKPOINT_IDS,
@@ -1036,9 +1235,12 @@ def _prospective_validation_summary() -> dict[str, Any]:
         "available": bool(summary) or bool(comparison) or bool(receipts),
         "checkpoints": methodology_checkpoint_block(),
         "checkpoint_coverage": coverage,
-        "scored_events": (summary or {}).get("totals", {}).get("scored_snapshots", 0)
+        "scored_events": (summary.get("totals") or {}).get("scored_snapshots")
         if isinstance(summary, dict)
-        else 0,
+        else None,
+        "scored_events_basis": "prospective_validation_summary.json totals.scored_snapshots"
+        if isinstance(summary, dict)
+        else "prospective_validation_summary.json not found on this machine",
         "captured_checkpoints": sum(v["captured"] for v in coverage.values()),
         "missed_checkpoints": sum(v["missed"] for v in coverage.values()),
         "incumbent_gfs": incumbent,
@@ -1047,12 +1249,17 @@ def _prospective_validation_summary() -> dict[str, Any]:
         "shadow_candidate": hyp
         if isinstance(hyp, dict)
         else {"candidate_id": "SHADOW_GFS_HRRR_EQUAL_V1", "status": "unregistered"},
-        "experimental_transfer_status": "experimental",
+        "experimental_transfer_status": str(transfer_status).lower() if transfer_status else "unknown",
+        "experimental_transfer_status_basis": "transfer_status in settlement_transfer_assessment.json"
+        if transfer_status
+        else "settlement transfer artifact missing or has no transfer_status",
+        # Methodology declaration (how replay is designed), not a run result.
         "historical_replay": {
             "asof_observations_available": False,
             "intraday": "MODEL_ONLY_REPLAY",
             "dminus1_1800": "FULL_OPERATIONAL_REPLAY",
         },
+        "historical_replay_kind": "methodology",
         "error_correlation_available": isinstance(correlation, dict),
         "artifacts": {
             "prospective_summary": str(PROSPECTIVE_SUMMARY_PATH),
