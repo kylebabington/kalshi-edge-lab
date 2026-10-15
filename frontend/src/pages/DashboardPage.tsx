@@ -1,10 +1,12 @@
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { eventPath, fetchSportsCollector, fetchSportsEvents } from '../api/sports'
 import { fetchSavedWeatherEvents, fetchWeatherCollector, weatherEventPath } from '../api/weather'
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/StatusBadge'
 import { TimezoneNote } from '../components/TimezoneNote'
 import { useAsync, type AsyncState } from '../components/sports/useAsync'
+import { PinnedSearchesSection } from '../savedSearches/PinnedSearchPanel'
+import { useSavedSearches } from '../savedSearches/useSavedSearches'
 import {
   sportsBackupHealth,
   sportsHealth,
@@ -164,6 +166,14 @@ function buildAttention({
 }
 
 export function DashboardPage({ apiStatus = 'unknown' }: Props) {
+  const { entries: savedEntries } = useSavedSearches()
+  const pinned = useMemo(
+    () =>
+      savedEntries
+        .filter((e) => e.pin_order != null)
+        .sort((a, b) => (a.pin_order ?? 0) - (b.pin_order ?? 0) || a.name.localeCompare(b.name)),
+    [savedEntries],
+  )
   const weatherCollector = useAsync(fetchWeatherCollector, 'dash-weather-collector')
   const sportsCollector = useAsync(fetchSportsCollector, 'dash-sports-collector')
   const weatherUpcoming = useAsync(
@@ -205,10 +215,12 @@ export function DashboardPage({ apiStatus = 'unknown' }: Props) {
       <header className="space-y-1">
         <h2 className="text-xl font-semibold break-words">Overview</h2>
         <p className="text-sm text-[var(--text-muted)]">
-          Saved weather and sports captures, collector status, and recent activity.
+          Saved weather and sports captures, collector status, pinned Explorer searches, and recent activity.
         </p>
         <TimezoneNote />
       </header>
+
+      <PinnedSearchesSection searches={pinned} />
 
       <section className="space-y-3" aria-labelledby="system-status">
         <h2 id="system-status" className="text-lg font-semibold">

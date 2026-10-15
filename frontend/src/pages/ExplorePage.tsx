@@ -13,8 +13,15 @@ import { TimezoneNote } from '../components/TimezoneNote'
 import { FilterBar, Pager } from '../components/sports/FilterBar'
 import { useAsync } from '../components/sports/useAsync'
 import { coverageSummary, freshnessLabel, lifecycleLabel } from '../explore/labels'
+import {
+  resolveWatchRefreshTargets,
+  type RefreshTargetsResult,
+  type UnresolvedWatch,
+} from '../explore/refreshTargets'
 import { fmtLocal } from '../lib/time'
 import type { ExploreEventCard, ExploreRefreshStatus, ExploreSummary } from '../types/explore'
+import { canonicalizeSort, filtersFromSearchParams, filtersToSearchParams, type ExploreSavedFilters } from '../savedSearches/filters'
+import { SavedSearchesPanel } from '../savedSearches/SavedSearchesPanel'
 import { StarButton } from '../watchlist/StarButton'
 import { useWatchlist } from '../watchlist/useWatchlist'
 
@@ -22,7 +29,7 @@ const SORTS = [
   { value: 'retrieved_desc', label: 'Latest retrieved' },
   { value: 'close_asc', label: 'Close time (earliest)' },
   { value: 'volume_desc', label: '24h volume' },
-  { value: 'title_asc', label: 'Title' },
+  { value: 'title', label: 'Title' },
 ]
 
 export function ExplorePage() {
@@ -33,6 +40,10 @@ export function ExplorePage() {
         (prev) => {
           const next = new URLSearchParams(prev)
           for (const [k, v] of Object.entries(updates)) {
+            if (k === 'sort' && v) {
+              next.set('sort', canonicalizeSort(v))
+              continue
+            }
             if (v) next.set(k, v)
             else next.delete(k)
           }
@@ -45,20 +56,23 @@ export function ExplorePage() {
     [setParams],
   )
 
+  const savedFilters = filtersFromSearchParams(params)
   const filters = {
-    category: params.get('category') ?? '',
-    q: params.get('q') ?? '',
-    lifecycle: params.get('lifecycle') ?? '',
-    coverage: params.get('coverage') ?? '',
-    quote: params.get('quote') ?? '',
-    sort: params.get('sort') || 'retrieved_desc',
+    ...savedFilters,
     page: Number(params.get('page') ?? '1') || 1,
   }
 
   const summary = useAsync(fetchExploreSummary, 'explore-summary')
   const list = useAsync(() => fetchExploreEvents({ ...filters, page_size: 40 }), JSON.stringify(filters))
   const { entries } = useWatchlist()
-  const watchedTickers = entries.filter((e) => e.category === 'kalshi' || e.category === 'weather').map((e) => e.key)
+
+  const openSaved = useCallback(
+    (f: ExploreSavedFilters) => {
+      // Restore filters only — never start a refresh.
+      setParams(filtersToSearchParams(f), { replace: true })
+    },
+    [setParams],
+  )
 
   return (
     <div className="space-y-5">
@@ -79,9 +93,11 @@ export function ExplorePage() {
         <TimezoneNote />
       </header>
 
-      <RefreshPanel watchedTickers={watchedTickers} summary={summary.data} onDone={() => { summary.reload(); list.reload() }} />
+      <RefreshPanel watchEntries={entries} summary={summary.data} onDone={() => { summary.reload(); list.reload() }} />
 
       {summary.data ? <SummaryStrip summary={summary.data} /> : null}
+
+      <SavedSearchesPanel currentFilters={savedFilters} onOpen={openSaved} />
 
       <FilterBar
         selects={[
@@ -144,8 +160,8 @@ export function ExplorePage() {
         <ErrorState message={list.error} onRetry={list.reload} />
       ) : list.data && list.data.events.length === 0 ? (
         <EmptyState
-          title="No events in the explorer cache"
-          detail="Run Refresh markets to crawl currently open Kalshi events into the local cache."
+          title="No events match these filters"
+          detail="Adjust filters or run Refresh markets to crawl currently open Kalshi events into the local cache."
         />
       ) : list.data ? (
         <>
@@ -215,19 +231,21 @@ function SummaryStrip({ summary }: { summary: ExploreSummary }) {
 }
 
 function RefreshPanel({
-  watchedTickers,
+  watchEntries,
   summary,
   onDone,
 }: {
-  watchedTickers: string[]
+  watchEntries: readonly { id: string; category: 'weather' | 'sports' | 'kalshi'; key: string; label: string; added_at: string }[]
   summary: ExploreSummary | null
   onDone: () => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [resolving, setResolving] = useState(false)
   const [status, setStatus] = useState<ExploreRefreshStatus['status'] | null>(
     (summary?.refresh as ExploreRefreshStatus['status'] | undefined) ?? null,
   )
   const [error, setError] = useState<string | null>(null)
+  const [targets, setTargets] = useState<RefreshTargetsResult | null>(null)
 
   useEffect(() => {
     if (summary?.refresh && typeof summary.refresh === 'object') {
@@ -262,9 +280,22 @@ function RefreshPanel({
 
   async function start() {
     setBusy(true)
+    setResolving(true)
     setError(null)
+    setTargets(null)
+    let resolved: RefreshTargetsResult
     try {
-      const res = await postExploreRefresh(watchedTickers)
+      resolved = await resolveWatchRefreshTargets(watchEntries)
+      setTargets(resolved)
+    } catch (err) {
+      setBusy(false)
+      setResolving(false)
+      setError(err instanceof Error ? err.message.slice(0, 400) : String(err).slice(0, 400))
+      return
+    }
+    setResolving(false)
+    try {
+      const res = await postExploreRefresh(resolved.tickers)
       setStatus(res.status)
       if (res.conflict) {
         setError('A refresh is already running.')
@@ -285,7 +316,7 @@ function RefreshPanel({
     <section className="panel space-y-2" aria-label="Refresh markets">
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" className="pager-button text-sm" disabled={running} onClick={() => void start()}>
-          {running ? 'Refreshing…' : 'Refresh markets'}
+          {resolving ? 'Resolving watchlist…' : running ? 'Refreshing…' : 'Refresh markets'}
         </button>
         {status?.state ? (
           <span className="text-xs text-[var(--text-muted)]">
@@ -298,6 +329,7 @@ function RefreshPanel({
           <span className="text-xs text-[var(--text-muted)]">No refresh has been run yet</span>
         )}
       </div>
+      {targets ? <TargetSummary result={targets} /> : null}
       {error ? (
         <p className="text-sm text-[var(--negative)]" role="alert">
           {error}
@@ -309,6 +341,29 @@ function RefreshPanel({
         </p>
       ) : null}
     </section>
+  )
+}
+
+function TargetSummary({ result }: { result: RefreshTargetsResult }) {
+  const issues: UnresolvedWatch[] = [...result.unresolved, ...result.overCap]
+  return (
+    <div className="text-xs text-[var(--text-muted)] space-y-1" role="status">
+      <p>
+        Watchlist targets for this refresh: <span className="mono">{result.tickers.length}</span> Kalshi ticker
+        {result.tickers.length === 1 ? '' : 's'}
+        {result.truncated ? ' (list truncated at cap)' : ''}
+      </p>
+      {issues.length ? (
+        <ul className="list-disc pl-4 text-[var(--warning)]">
+          {issues.slice(0, 12).map((u) => (
+            <li key={`${u.entryId}-${u.reason}`}>
+              {u.label} ({u.category}): {u.reason}
+            </li>
+          ))}
+          {issues.length > 12 ? <li>…and {issues.length - 12} more</li> : null}
+        </ul>
+      ) : null}
+    </div>
   )
 }
 

@@ -454,8 +454,8 @@ log.
 
 | Route | What it shows |
 | --- | --- |
-| `/` | Overview: separate Weather and Sports sections, each with collector health, saved-forecast freshness, and upcoming / pending settlement / recently settled cards. Every list loads on its own, so a slow or failed request never blocks another. |
-| `/explore`, `/explore/events/:eventTicker` | Market Explorer: Kalshi events across categories from the local explorer cache, with Refresh markets, lifecycle/freshness/lookup fields, and model support vs saved-forecast coverage shown separately. Quotes are labelled **Latest retrieved quotes**. |
+| `/` | Overview: pinned Explorer saved-search previews (independent cache reads), plus Weather and Sports sections with collector health and upcoming / recently settled cards. Every list loads on its own. |
+| `/explore`, `/explore/events/:eventTicker` | Market Explorer: Kalshi events across categories from the local explorer cache, with Refresh markets, lifecycle/freshness/lookup fields, and model support vs saved-forecast coverage shown separately. Quotes are labelled **Latest retrieved quotes**. Browser-local **saved searches** (filters only; no page) can be pinned to the dashboard. |
 | `/markets` | Weather events: **Saved forecasts** tab (search, status, sort, pagination in the URL) and **Open markets** tab (current market data from the slow live endpoint). |
 | `/markets/:eventTicker` | Open-market detail when the event is still open; otherwise the saved-forecast view with event settlement and per-snapshot scores. |
 | `/sports`, `/sports/events/:eventId` | Sports browsing with plain-language labels and sort by start, capture or settlement time. |

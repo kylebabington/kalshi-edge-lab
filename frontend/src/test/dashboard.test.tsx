@@ -15,6 +15,7 @@ import {
 import { DashboardPage } from '../pages/DashboardPage'
 import { MarketsPage } from '../pages/MarketsPage'
 import { WeatherEventRoute } from '../pages/WeatherEventRoute'
+import { savedSearchesStore } from '../savedSearches/store'
 import { watchlistStore } from '../watchlist/store'
 
 vi.mock('../api/sports', async (importOriginal) => ({
@@ -47,6 +48,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
   watchlistStore.reload()
+  savedSearchesStore.reload()
   sports.fetchSportsEvents.mockImplementation(async (f) => mockSportsEvents(f))
   sports.fetchSportsCollector.mockResolvedValue(mockSportsCollector)
   weather.fetchSavedWeatherEvents.mockImplementation(async (f) => mockSavedWeatherEvents(f))
