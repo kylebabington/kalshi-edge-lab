@@ -529,3 +529,38 @@ class ExploreRefreshResponse(BaseModel):
     accepted: bool
     conflict: bool = False
     status: dict[str, Any] = Field(default_factory=dict)
+
+
+class ActivitySummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    index_built_at: str | None = None
+    mode: str
+    total: int
+    by_type: dict[str, int] = Field(default_factory=dict)
+    by_category: dict[str, int] = Field(default_factory=dict)
+    newest_observed_at: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class ActivityListResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    index_built_at: str | None = None
+    mode: str
+    page: int
+    page_size: int
+    total: int
+    pages: int
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class ActivityIdsResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    generated_at: str
+    ids: list[str] = Field(default_factory=list)
+    total: int

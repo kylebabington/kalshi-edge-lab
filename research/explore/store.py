@@ -120,13 +120,19 @@ def upsert_event(
     mark_missing_markets: bool = True,
     last_lookup: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Merge one event into its shard. Never deletes prior markets or fields."""
+    """Merge one event into its shard. Never deletes prior markets or fields.
+
+    Activity Center deltas are staged (pending files) before the shard write and
+    folded into the run jsonl after, so a crash cannot silently drop changes.
+    """
     event_ticker = raw_event.get("event_ticker") or raw_event.get("ticker")
     if not isinstance(event_ticker, str) or not event_ticker:
         raise ValueError("event missing event_ticker")
 
     with _lock:
-        prev = load_event(event_ticker) or {
+        loaded = load_event(event_ticker)
+        is_new = loaded is None
+        prev = loaded or {
             "event_ticker": event_ticker,
             "markets": [],
             "first_seen_at": retrieved_at,
@@ -177,7 +183,20 @@ def upsert_event(
         lifecycle = derive_lifecycle(markets, markets_complete=bool(complete))
         entry["lifecycle"] = lifecycle
 
+        # Stage activity before the shard write so a crash cannot lose the observation.
+        from research.activity import explore_emit as AE
+
+        staged = AE.emit_and_stage(
+            event_ticker=event_ticker,
+            prev=None if is_new else prev,
+            entry=entry,
+            retrieved_at=retrieved_at,
+            run_id=run_id,
+            is_new=is_new,
+        )
         write_json(P.event_shard_path(event_ticker), entry, compact=False)
+        if staged:
+            AE.fold_pending_into_run(run_id, [it["id"] for it in staged])
         return entry
 
 

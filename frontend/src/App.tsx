@@ -17,6 +17,7 @@ import { OpportunitiesPage } from './pages/OpportunitiesPage'
 import { OpportunityDetailPage } from './pages/OpportunityDetailPage'
 import { ExplorePage } from './pages/ExplorePage'
 import { ExploreEventPage } from './pages/ExploreEventPage'
+import { ActivityPage } from './pages/ActivityPage'
 
 export default function App() {
   const [apiStatus, setApiStatus] = useState('loading')
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/explore" element={<ExplorePage />} />
         <Route path="/explore/events/:eventTicker" element={<ExploreEventPage />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
+        <Route path="/activity" element={<ActivityPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

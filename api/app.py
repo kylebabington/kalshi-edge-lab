@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import explore, health, opportunities, research, sports, weather
+from api.routes import activity, explore, health, opportunities, research, sports, weather
 from research.ai.config import load_env_file
 from research.explore.discovery import recover_stale_job
 from research.sports import service as sports_service
@@ -28,6 +28,16 @@ def _warm_sports() -> None:
         log.exception("sports index warm-up failed")
 
 
+def _warm_activity() -> None:
+    """One-shot in-memory activity index build (not a recurring scheduler)."""
+    try:
+        from research.activity import index as activity_index
+
+        activity_index.ensure_index()
+    except Exception:
+        log.exception("activity index warm-up failed")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     try:
@@ -35,6 +45,7 @@ async def lifespan(_app: FastAPI):
     except Exception:
         log.exception("explore lock recovery failed")
     threading.Thread(target=_warm_sports, name="sports-warm", daemon=True).start()
+    threading.Thread(target=_warm_activity, name="activity-warm", daemon=True).start()
     yield
 
 
@@ -47,7 +58,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -59,3 +70,4 @@ app.include_router(sports.router, prefix="/api")
 app.include_router(opportunities.router, prefix="/api")
 app.include_router(research.router, prefix="/api")
 app.include_router(explore.router, prefix="/api")
+app.include_router(activity.router, prefix="/api")
