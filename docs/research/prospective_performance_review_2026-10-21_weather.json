@@ -1,0 +1,300 @@
+{
+  "generated_at": "2026-10-21T20:38:39.935499+00:00",
+  "protocol_id": "PHASE7_PROSPECTIVE_V1",
+  "protocol_sha256": "cc33e71db90d0d6c069791892872f8e74d6d9dc7453e6fa5b9e1b3e79f948ae2",
+  "registered_at": "2026-10-02T17:09:09.117953+00:00",
+  "collection_window": [
+    "2026-10-03",
+    "2026-12-01"
+  ],
+  "status": "SHADOW ONLY | RESEARCH_ONLY / NO_BET | no automatic promotion or trading",
+  "integrity_problems": [],
+  "method_integrity_ok": true,
+  "calibration_integrity_ok": true,
+  "working_tree": {
+    "code_git_sha": "80793cfb5abeb48be0151b58295f0159bd73ed72",
+    "working_tree_dirty": true,
+    "working_tree_changed_paths": [
+      "data/weather/calibration/knyc_clinyc_pairs.csv"
+    ],
+    "code_dirty": false,
+    "code_dirty_paths": []
+  },
+  "calibration_unable_to_meet_thresholds": [
+    "d0_0900"
+  ],
+  "coverage_by_checkpoint": {
+    "dminus1_1800": {
+      "scheduled_so_far": 19,
+      "captured": 15,
+      "missed": 4,
+      "missed_reasons": {
+        "window_elapsed_without_capture": 4
+      },
+      "awaiting_receipt": 0,
+      "future": 41,
+      "paired_valid": 15,
+      "component_status": {
+        "research_gfs": {
+          "OK": 15
+        },
+        "research_hrrr": {
+          "OK": 15
+        },
+        "research_shadow": {
+          "OK": 15
+        }
+      },
+      "obs_status": {
+        "NOT_APPLICABLE_PRE_TARGET_DAY": 15
+      }
+    },
+    "d0_0600": {
+      "scheduled_so_far": 19,
+      "captured": 11,
+      "missed": 8,
+      "missed_reasons": {
+        "window_elapsed_without_capture": 8
+      },
+      "awaiting_receipt": 0,
+      "future": 41,
+      "paired_valid": 11,
+      "component_status": {
+        "research_gfs": {
+          "OK": 11
+        },
+        "research_hrrr": {
+          "OK": 11
+        },
+        "research_shadow": {
+          "OK": 11
+        }
+      },
+      "obs_status": {
+        "OK": 11
+      }
+    },
+    "d0_0900": {
+      "scheduled_so_far": 19,
+      "captured": 13,
+      "missed": 6,
+      "missed_reasons": {
+        "window_elapsed_without_capture": 6
+      },
+      "awaiting_receipt": 0,
+      "future": 41,
+      "paired_valid": 0,
+      "component_status": {
+        "research_gfs": {
+          "calibration_INSUFFICIENT_HISTORY": 13
+        },
+        "research_hrrr": {
+          "model_window_unavailable:selected_run_horizon_short_null_padded": 13
+        },
+        "research_shadow": {
+          "component_unavailable:gfs=UNAVAILABLE;hrrr=UNAVAILABLE": 13
+        }
+      },
+      "obs_status": {
+        "OK": 13
+      }
+    },
+    "d0_1200": {
+      "scheduled_so_far": 19,
+      "captured": 13,
+      "missed": 6,
+      "missed_reasons": {
+        "window_elapsed_without_capture": 6
+      },
+      "awaiting_receipt": 0,
+      "future": 41,
+      "paired_valid": 13,
+      "component_status": {
+        "research_gfs": {
+          "OK": 13
+        },
+        "research_hrrr": {
+          "OK": 13
+        },
+        "research_shadow": {
+          "OK": 13
+        }
+      },
+      "obs_status": {
+        "OK": 13
+      }
+    },
+    "d0_1500": {
+      "scheduled_so_far": 19,
+      "captured": 13,
+      "missed": 6,
+      "missed_reasons": {
+        "window_elapsed_without_capture": 6
+      },
+      "awaiting_receipt": 0,
+      "future": 41,
+      "paired_valid": 13,
+      "component_status": {
+        "research_gfs": {
+          "OK": 13
+        },
+        "research_hrrr": {
+          "OK": 13
+        },
+        "research_shadow": {
+          "OK": 13
+        }
+      },
+      "obs_status": {
+        "OK": 13
+      }
+    }
+  },
+  "fetch_outcomes": {
+    "single_run_hourly:gfs": {
+      "ok": 65
+    },
+    "single_run_hourly:hrrr": {
+      "http_error": 65,
+      "ok": 65
+    },
+    "iem_asos:obs": {
+      "ok": 50
+    }
+  },
+  "scores": {
+    "final": 63,
+    "pending": 2,
+    "pending_reasons": {
+      "event markets unavailable": 2
+    }
+  },
+  "primary_cohort": {
+    "evaluation_target_regime": "weather_company_clinyc",
+    "paired_checkpoints": 50,
+    "paired_intraday_checkpoints": 35,
+    "unique_paired_intraday_target_dates": 15,
+    "minimum_required": 30,
+    "label": "INSUFFICIENT",
+    "interval_interpretation": "descriptive only until the fixed collection period ends",
+    "pooled_intraday_shadow_minus_gfs_brier": {
+      "n_obs": 35,
+      "n_clusters": 15,
+      "mean": -0.02750076946752847,
+      "ci95": [
+        -0.092323278957628,
+        0.026781744810369004
+      ],
+      "bootstrap_unit": "event_date",
+      "n_boot": 1000,
+      "seed": 42
+    },
+    "by_checkpoint_shadow_minus_gfs_brier": {
+      "dminus1_1800": {
+        "n_obs": 15,
+        "n_clusters": 15,
+        "mean": 0.024366303808703322,
+        "ci95": [
+          -0.014229775236901923,
+          0.07045448612525121
+        ],
+        "bootstrap_unit": "event_date",
+        "n_boot": 1000,
+        "seed": 42
+      },
+      "d0_0600": {
+        "n_obs": 11,
+        "n_clusters": 11,
+        "mean": 0.0008254288032681482,
+        "ci95": [
+          -0.05883978287025379,
+          0.0549154984750553
+        ],
+        "bootstrap_unit": "event_date",
+        "n_boot": 1000,
+        "seed": 42
+      },
+      "d0_0900": {
+        "n_obs": 0,
+        "n_clusters": 0,
+        "mean": null,
+        "ci95": null,
+        "bootstrap_unit": "event_date"
+      },
+      "d0_1200": {
+        "n_obs": 12,
+        "n_clusters": 12,
+        "mean": -0.03797963475941319,
+        "ci95": [
+          -0.11052439212065253,
+          0.027425105160562208
+        ],
+        "bootstrap_unit": "event_date",
+        "n_boot": 1000,
+        "seed": 42
+      },
+      "d0_1500": {
+        "n_obs": 12,
+        "n_clusters": 12,
+        "mean": -0.04298758592387398,
+        "ci95": [
+          -0.11717708012721867,
+          0.020265851031086506
+        ],
+        "bootstrap_unit": "event_date",
+        "n_boot": 1000,
+        "seed": 42
+      }
+    },
+    "descriptive_scores": {
+      "research_gfs": {
+        "n": 50,
+        "brier": 0.717615634837768,
+        "log_loss": 2.0261473590899204
+      },
+      "research_hrrr": {
+        "n": 50,
+        "brier": 0.7420184310161183,
+        "log_loss": 2.0058116257766896
+      },
+      "research_shadow": {
+        "n": 50,
+        "brier": 0.7056749873531091,
+        "log_loss": 1.9860651333033323
+      },
+      "legacy_incumbent": {
+        "n": 50,
+        "brier": 0.6982004443809057,
+        "log_loss": 1.3412208290991947
+      }
+    },
+    "interpretation": "The primary result measures prospective performance of the transferred forecasting pipeline (NWS CLI KNYC calibration + experimental identity transfer) against CLINYC settlement. It does not establish KNYC/CLINYC identity; the CLINYC_TRANSFER_V1 experiment continues independently with unchanged criteria."
+  },
+  "strata_by_regime": {
+    "weather_company_clinyc": {
+      "final_scores": 63,
+      "descriptive_scores": {
+        "research_gfs": {
+          "n": 50,
+          "brier": 0.717615634837768,
+          "log_loss": 2.0261473590899204
+        },
+        "research_hrrr": {
+          "n": 50,
+          "brier": 0.7420184310161183,
+          "log_loss": 2.0058116257766896
+        },
+        "research_shadow": {
+          "n": 50,
+          "brier": 0.7056749873531091,
+          "log_loss": 1.9860651333033323
+        },
+        "legacy_incumbent": {
+          "n": 63,
+          "brier": 0.6933521043821939,
+          "log_loss": 1.3353588581490734
+        }
+      }
+    }
+  }
+}

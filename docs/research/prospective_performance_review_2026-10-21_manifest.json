@@ -1,0 +1,105 @@
+{
+  "cutoff_utc": "2026-10-21T20:38:39.935499+00:00",
+  "cutoff_basis": "datetime.now(timezone.utc) at the start of this process, before any copy",
+  "generated_at": "2026-10-21T21:03:52.301319+00:00",
+  "filter_rules": {
+    "weather_receipts": "created_at <= T",
+    "weather_records": "prediction_as_of (capture finalization) <= T",
+    "weather_scores": "scored_at <= T AND matching record included; settlement time is not used",
+    "weather_pending": "first_checked_at <= T; last_checked_at may exceed T on a live pending file",
+    "weather_fetch_log": "jsonl prefix: logged_at <= T from bytes read once",
+    "sports_WINDOW_CAPTURE": "finalized_at <= T",
+    "sports_MISSED": "written_at <= T",
+    "sports_attempts": "written_at <= T",
+    "sports_capture_runs": "finished_at <= T",
+    "sports_scores": "scored_at <= T AND source_record included; settlement timestamp is not used",
+    "sports_score_runs": "finished_at <= T",
+    "sports_cycles": "jsonl prefix: finished_at <= T from bytes read once",
+    "missing_timestamps": "reported and excluded; never inferred from mtime"
+  },
+  "inputs_listing_sha256": "53abb22116a0a4194c92097975387914a02d4747ed95a42f4c38a4edce1a51c8",
+  "inputs_listing_rows": 42177,
+  "excluded_count": 3,
+  "missing_timestamp_count": 21,
+  "excluded_reasons": {
+    "missing_availability_timestamp": 1,
+    "timestamp_after_T": 2
+  },
+  "tracked_hashes": {
+    "weather_protocol_sha256": "cc33e71db90d0d6c069791892872f8e74d6d9dc7453e6fa5b9e1b3e79f948ae2",
+    "sports_protocol_sha256": "6fce0fac0623241f373ec2f277c167030075d2a8af73bf1540681f56c5fb41ad",
+    "frozen_pool_sha256": "eb4b6e716c8b5d24ece9a2597d22a2876175648f2e5584adefe86b71b633c4bb"
+  },
+  "immutable_rehash": {
+    "frozen_pool": {
+      "path": "data/weather/phase7/frozen_pools_v1.csv",
+      "sha256": "eb4b6e716c8b5d24ece9a2597d22a2876175648f2e5584adefe86b71b633c4bb",
+      "snapshot_matches": true,
+      "unchanged_after_copy": true
+    },
+    "weather_protocol": {
+      "path": "research/weather/hypotheses/phase7_prospective_protocol_v1.json",
+      "sha256": "cc33e71db90d0d6c069791892872f8e74d6d9dc7453e6fa5b9e1b3e79f948ae2",
+      "snapshot_matches": true,
+      "unchanged_after_copy": true
+    },
+    "sports_protocol": {
+      "path": "research/sports/protocols/sports_phase2_capture_v2.json",
+      "sha256": "6fce0fac0623241f373ec2f277c167030075d2a8af73bf1540681f56c5fb41ad",
+      "snapshot_matches": true,
+      "unchanged_after_copy": true
+    },
+    "included_files": 42177,
+    "excluded_files": 3,
+    "missing_timestamp_records": 21
+  },
+  "notes": [],
+  "weather_progress_sha256": "650d5eb295e93359f400718892c81256634d247b01c9280184aff0e314882c3e",
+  "sports_table_sha256": "17a6e145fe07a92afb02a2d693d61fa8e7006921cc411cc6ee3f22ac5882d7c8",
+  "findings_sha256": "514a25e3c3613f6d1eef0e0b23f9f649723613991a8c4b4186e38867951130a8",
+  "filter_method": "Live directories were read once after T was recorded. Each JSON artifact was included only when its capture-finalization, receipt-creation, or local score-creation timestamp was <= T. Settlement timestamps were not used. Reporters ran against the copied snapshot with CAPTURE_DIR/SCORE_DIR/Phase7Paths.root redirected; they did not reload live dirs. Append-only logs used a one-read byte prefix filtered by timestamp. Live logs may grow after that prefix.",
+  "inputs_listing_gz": "docs/research/prospective_performance_review_2026-10-21_inputs.tsv.gz",
+  "inputs_listing_gz_sha256": "7473baadeb28a34ccf7912275bc49335243c1f02104a7188388760282fd183d5",
+  "excluded": [
+    {
+      "path": "data/sports/phase2/capture_v2/attempts/20261014T221034633923Z/k_kxatpchallengerdoubles__kalshi_3e3599ef-c776-41d0-a922-3989fea90e1f__FAILED_ATTEMPT.json",
+      "field": "written_at",
+      "reason": "missing_availability_timestamp",
+      "action": "excluded"
+    },
+    {
+      "path": "data/logs/sports/collector_cycles.jsonl:line1479",
+      "field": "finished_at",
+      "timestamp": "2026-10-21T20:45:33.638249+00:00",
+      "reason": "timestamp_after_T"
+    },
+    {
+      "path": "data/logs/sports/collector_cycles.jsonl:line1480",
+      "field": "finished_at",
+      "timestamp": "2026-10-21T20:48:56.278084+00:00",
+      "reason": "timestamp_after_T"
+    }
+  ],
+  "published_companions": {
+    "prospective_performance_review_2026-10-21.md": {
+      "sha256": "f59e3e23ed61c89c66857a6acf1ec60a0d365389f7e33bba57813765ca26eb71",
+      "bytes": 15024
+    },
+    "prospective_performance_review_2026-10-21_weather.json": {
+      "sha256": "e1f76fe9a4800e419746574f002129358b0bebdb0d8aed3142abd16c38608869",
+      "bytes": 7438
+    },
+    "prospective_performance_review_2026-10-21_sports.csv": {
+      "sha256": "17a6e145fe07a92afb02a2d693d61fa8e7006921cc411cc6ee3f22ac5882d7c8",
+      "bytes": 59766
+    },
+    "prospective_performance_review_2026-10-21_inputs.tsv.gz": {
+      "sha256": "7473baadeb28a34ccf7912275bc49335243c1f02104a7188388760282fd183d5",
+      "bytes": 2199430
+    },
+    "prospective_performance_review_2026-10-21_manifest.json": {
+      "note": "this file; sha256 is of git blob after commit"
+    }
+  },
+  "inputs_listing_bytes": 7739544
+}

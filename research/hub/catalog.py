@@ -470,6 +470,9 @@ def _sports_capture(detail: bool) -> dict:
         _result("Pilot scores (tracked CSV)", kind="tracked",
                 available=(DOCS / "sports_capture_v2_pilot_scores.csv").is_file(),
                 path=DOCS / "sports_capture_v2_pilot_scores.csv"),
+        _result("Prospective performance review (2026-10-21)", kind="tracked",
+                available=(DOCS / "prospective_performance_review_2026-10-21.md").is_file(),
+                path=DOCS / "prospective_performance_review_2026-10-21.md"),
     ]
     status = {
         "implementation": SR.implementation("Prospective capture and scoring",
@@ -550,6 +553,8 @@ def _sports_capture(detail: bool) -> dict:
             _source("Capture protocol notes", DOCS / "sports_capture_v2.md", True),
             _source("Scoring notes", DOCS / "sports_capture_v2_scoring.md", True),
             _source("Pilot scores", DOCS / "sports_capture_v2_pilot_scores.csv", True),
+            _source("Prospective performance review (2026-10-21)",
+                    DOCS / "prospective_performance_review_2026-10-21.md", True),
             _source("Capture records", LC.CAPTURE_DIR, False),
             _source("Finalized scores", SCC.SCORE_DIR, False),
         ],
@@ -897,6 +902,9 @@ def _weather_phase7(detail: bool) -> dict:
         _result("Saved forecasts", kind="api", available=True, href="/markets"),
         _result("Prediction records (local)", kind="local", available=bool(counts["records"]), path=PHASE7_ROOT / "records",
                 reason="no prediction records on this machine"),
+        _result("Prospective performance review (2026-10-21)", kind="tracked",
+                available=(DOCS / "prospective_performance_review_2026-10-21.md").is_file(),
+                path=DOCS / "prospective_performance_review_2026-10-21.md"),
     ]
     status = {
         "implementation": SR.implementation("Phase 7 protocol", ["research/weather/phase7.py",
@@ -960,6 +968,8 @@ def _weather_phase7(detail: bool) -> dict:
             _source("Frozen calibration pool", pools, True),
             _source("Runbook", DOCS / "phase7_hosting_runbook.md", True),
             _source("Operational misses note", DOCS / "phase7_operational_misses_note.md", True),
+            _source("Prospective performance review (2026-10-21)",
+                    DOCS / "prospective_performance_review_2026-10-21.md", True),
             _source("Receipts", PHASE7_ROOT / "receipts", False),
             _source("Prediction records", PHASE7_ROOT / "records", False),
             _source("Final scores", PHASE7_ROOT / "scores", False),
