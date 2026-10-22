@@ -1,0 +1,19 @@
+group,competition,family,sport,calibration_status,blend_status,cal_form,cal_lambda,cal_a,cal_b,cal_class,blend_w,blend_c,blend_lambda,blend_selected_w,blend_selected_lambda,blend_class,sample,map_class,pair,contracts,events,brier_contract,brier_event,log_loss_contract,log_loss_event,calibrated_contracts,calibrated_events,blend_contracts,blend_events
+k_kxatpmatch|game_winner,k_kxatpmatch,game_winner,Tennis,ok,unavailable: matched training support below threshold,identity,0,0.0,1.0,identity,,,,,,,,,,,,,,,,,,,
+k_kxwtamatch|game_winner,k_kxwtamatch,game_winner,Tennis,ok,unavailable: matched training support below threshold,platt,10,3.9077821423716e-18,1.2231934886862383,non_identity,,,,,,,,,,,,,,,,,,,
+ncaaf|game_winner,ncaaf,game_winner,Football,ok,ok,identity,0,0.0,1.0,identity,0.3,0.0,,0.3,,nonzero_model_weight,,,,,,,,,,,,,
+ncaaf|spread,ncaaf,spread,Football,ok,ok,intercept,10,0.1596999662007691,1.0,non_identity,0.0,-0.10320452271443377,0,0,0,market_only_transform_w0,,,,,,,,,,,,,
+ncaaf|total,ncaaf,total,Football,ok,ok,platt,1,-0.11503499374543573,0.9042893609144778,non_identity,0.0,0.0,,0,,market_copy_w0_c0,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,calibrated_vs_frozen,identity,calibrated_p-frozen_p,180,180,1.49619899803e-18,1.49619899803e-18,2.77555756156e-18,2.77555756156e-18,,,,
+,,,,,,,,,,,,,,,,,calibrated_vs_frozen,non_identity,calibrated_p-frozen_p,440,201,0.00392944001974,0.00450001870691,0.0101483084219,0.0123297246783,,,,
+,,,,,,,,,,,,,,,,,blend_vs_frozen,market_copy_w0_c0,blend_p-frozen_p,123,123,-0.00553912154792,-0.00553912154792,-0.0113883657519,-0.0113883657519,,,,
+,,,,,,,,,,,,,,,,,blend_vs_market,market_copy_w0_c0,blend_p-market_p,123,123,5.19006698504e-18,5.19006698504e-18,-4.51310172612e-18,-4.51310172612e-18,,,,
+,,,,,,,,,,,,,,,,,blend_vs_frozen,market_only_transform_w0,blend_p-frozen_p,239,123,0.0022469389225,0.00710473012139,0.00957899654411,0.0213802011724,,,,
+,,,,,,,,,,,,,,,,,blend_vs_market,market_only_transform_w0,blend_p-market_p,239,123,-0.00187119535764,-0.00261076427668,-0.00285538656068,-0.00441771035352,,,,
+,,,,,,,,,,,,,,,,,blend_vs_frozen,nonzero_model_weight,blend_p-frozen_p,121,121,-0.0112911877811,-0.0112911877811,-0.0280111821119,-0.0280111821119,,,,
+,,,,,,,,,,,,,,,,,blend_vs_market,nonzero_model_weight,blend_p-market_p,121,121,0.000912026787267,0.000912026787267,0.00125835920749,0.00125835920749,,,,
+,k_kxatpmatch,game_winner,Tennis,,,identity,0,0.0,1.0,identity,,,,,,,group_coverage,identity,k_kxatpmatch|game_winner,59,59,,,,,59,59,0,0
+,k_kxwtamatch,game_winner,Tennis,,,platt,10,3.9077821423716e-18,1.2231934886862383,non_identity,,,,,,,group_coverage,non_identity,k_kxwtamatch|game_winner,78,78,,,,,78,78,0,0
+,ncaaf,game_winner,Football,,,identity,0,0.0,1.0,identity,0.3,0.0,,,,nonzero_model_weight,group_coverage,identity,ncaaf|game_winner,242,121,,,,,121,121,121,121
+,ncaaf,spread,Football,,,intercept,10,0.1596999662007691,1.0,non_identity,0.0,-0.10320452271443377,0,,,market_only_transform_w0,group_coverage,non_identity,ncaaf|spread,478,123,,,,,239,123,239,123
+,ncaaf,total,Football,,,platt,1,-0.11503499374543573,0.9042893609144778,non_identity,0.0,0.0,,,,market_copy_w0_c0,group_coverage,non_identity,ncaaf|total,246,123,,,,,123,123,123,123

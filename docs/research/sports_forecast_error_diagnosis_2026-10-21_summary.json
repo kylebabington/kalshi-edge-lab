@@ -1,0 +1,168 @@
+{
+  "cutoff_utc": "2026-10-21T20:38:39.935499+00:00",
+  "snapshot": "C:\\dev\\Personal\\kalshi-edge-lab\\data\\results\\prospective_review_asof",
+  "listing_sha256": "53abb22116a0a4194c92097975387914a02d4747ed95a42f4c38a4edce1a51c8",
+  "phase2_protocol": "research/sports/protocols/sports_phase2_v1.json",
+  "phase2_protocol_sha256": "b95e662b233931caafbedfa16b04081d3c9ca01a2e43abfafa0c81867c81cb39",
+  "random_seed": 20261021,
+  "ece_bins": 10,
+  "tolerance": 1e-12,
+  "aggregates": {
+    "contracts": 4695,
+    "events": 2828,
+    "d_brier_event": 0.03206433177158735,
+    "d_brier_contract": 0.021772129103002497,
+    "d_log_event": 0.07579587592078085,
+    "d_log_contract": 0.051673611130403745,
+    "frozen_brier_event": 0.23111437748789368,
+    "market_brier_event": 0.19905004571630633
+  },
+  "reconciliation": {
+    "matched_contracts": 4695,
+    "matched_events": 2828,
+    "d_brier_event": 0.03206433177158735,
+    "d_brier_contract": 0.021772129103002497,
+    "d_log_event": 0.07579587592078085,
+    "d_log_contract": 0.051673611130403745,
+    "vs_frozen_review_event_brier": {
+      "left": 0.03206433177158735,
+      "right": 0.032064331771587344,
+      "abs_diff": 6.938893903907228e-18,
+      "numerical_agreement": true,
+      "bit_identical": false
+    },
+    "sport_contrib_sum_d_brier": {
+      "left": 0.032064331771587344,
+      "right": 0.03206433177158735,
+      "abs_diff": 6.938893903907228e-18,
+      "numerical_agreement": true,
+      "bit_identical": false
+    },
+    "competition_contrib_sum_d_brier": {
+      "left": 0.032064331771587344,
+      "right": 0.03206433177158735,
+      "abs_diff": 6.938893903907228e-18,
+      "numerical_agreement": true,
+      "bit_identical": false
+    },
+    "family_share_sum_d_brier": {
+      "left": 0.03206433177158735,
+      "right": 0.03206433177158735,
+      "abs_diff": 0.0,
+      "numerical_agreement": true,
+      "bit_identical": true
+    },
+    "sport_contrib_sum_d_log": {
+      "left": 0.07579587592078087,
+      "right": 0.07579587592078085,
+      "abs_diff": 1.3877787807814457e-17,
+      "numerical_agreement": true,
+      "bit_identical": false
+    },
+    "weight_event_sum": {
+      "left": 1.0,
+      "right": 1.0,
+      "abs_diff": 0.0,
+      "numerical_agreement": true,
+      "bit_identical": true
+    },
+    "weight_contract_sum": {
+      "left": 0.9999999999999999,
+      "right": 1.0,
+      "abs_diff": 1.1102230246251565e-16,
+      "numerical_agreement": true,
+      "bit_identical": false
+    },
+    "bins_frozen_p_w_contract_share_d_brier": {
+      "left": 0.021772129103002497,
+      "right": 0.021772129103002497,
+      "abs_diff": 0.0,
+      "numerical_agreement": true,
+      "bit_identical": true
+    },
+    "bins_frozen_p_w_contract_share_frozen_brier": {
+      "left": 0.22154932558862547,
+      "right": 0.2215493255886255,
+      "abs_diff": 2.7755575615628914e-17,
+      "numerical_agreement": true,
+      "bit_identical": false
+    },
+    "bins_frozen_p_w_event_share_d_brier": {
+      "left": 0.03206433177158735,
+      "right": 0.03206433177158735,
+      "abs_diff": 0.0,
+      "numerical_agreement": true,
+      "bit_identical": true
+    },
+    "bins_frozen_p_w_event_share_frozen_brier": {
+      "left": 0.23111437748789368,
+      "right": 0.23111437748789368,
+      "abs_diff": 0.0,
+      "numerical_agreement": true,
+      "bit_identical": true
+    },
+    "bins_market_p_w_contract_share_d_brier": {
+      "left": 0.021772129103002497,
+      "right": 0.021772129103002497,
+      "abs_diff": 0.0,
+      "numerical_agreement": true,
+      "bit_identical": true
+    },
+    "bins_market_p_w_contract_share_frozen_brier": {
+      "left": 0.2215493255886255,
+      "right": 0.2215493255886255,
+      "abs_diff": 0.0,
+      "numerical_agreement": true,
+      "bit_identical": true
+    },
+    "bins_market_p_w_event_share_d_brier": {
+      "left": 0.03206433177158735,
+      "right": 0.03206433177158735,
+      "abs_diff": 0.0,
+      "numerical_agreement": true,
+      "bit_identical": true
+    },
+    "bins_market_p_w_event_share_frozen_brier": {
+      "left": 0.23111437748789368,
+      "right": 0.23111437748789368,
+      "abs_diff": 0.0,
+      "numerical_agreement": true,
+      "bit_identical": true
+    }
+  },
+  "horizons": {
+    "horizon_minutes": {
+      "n": 4695,
+      "min": 60.004,
+      "median": 77.24,
+      "max": 79.992,
+      "mean": 75.888816400426
+    },
+    "missing_horizon": 0,
+    "market_age_s": {
+      "n": 4695,
+      "min": 23.0,
+      "median": 2516.0,
+      "max": 10652.0,
+      "mean": 2171.5277955271567
+    },
+    "missing_market_age_s": 0
+  },
+  "case_classifications": {
+    "confirmed_defect": 0,
+    "ordinary_incorrect_prediction": 40,
+    "cannot_verify": 0
+  },
+  "ok_calibration_groups": [
+    "k_kxatpmatch|game_winner",
+    "k_kxwtamatch|game_winner",
+    "ncaaf|game_winner",
+    "ncaaf|spread",
+    "ncaaf|total"
+  ],
+  "ok_blend_groups": [
+    "ncaaf|game_winner",
+    "ncaaf|spread",
+    "ncaaf|total"
+  ]
+}
