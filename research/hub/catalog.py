@@ -479,6 +479,9 @@ def _sports_capture(detail: bool) -> dict:
         _result("ITF singles challenger study v1", kind="tracked",
                 available=(DOCS / "sports_itf_challenger_study_v1.md").is_file(),
                 path=DOCS / "sports_itf_challenger_study_v1.md"),
+        _result("ITF singles challenger capture v1", kind="tracked",
+                available=(DOCS / "sports_itf_challenger_capture_v1.md").is_file(),
+                path=DOCS / "sports_itf_challenger_capture_v1.md"),
     ]
     status = {
         "implementation": SR.implementation("Prospective capture and scoring",
@@ -565,6 +568,8 @@ def _sports_capture(detail: bool) -> dict:
                     DOCS / "sports_forecast_error_diagnosis_2026-10-21.md", True),
             _source("ITF singles challenger study v1",
                     DOCS / "sports_itf_challenger_study_v1.md", True),
+            _source("ITF singles challenger capture v1",
+                    DOCS / "sports_itf_challenger_capture_v1.md", True),
             _source("Capture records", LC.CAPTURE_DIR, False),
             _source("Finalized scores", SCC.SCORE_DIR, False),
         ],
