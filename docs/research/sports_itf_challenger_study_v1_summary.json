@@ -1,0 +1,96 @@
+{
+  "contrib": {
+    "k_kxitfmatch": 0.00706402233099966,
+    "k_kxitfwmatch": 0.010676471975440437
+  },
+  "contrib_reconcile": {
+    "k_kxitfmatch": {
+      "abs_diff": 3.400058012914542e-16,
+      "left": 0.00706402233099966,
+      "numerical_agreement": true,
+      "right": 0.007064022331
+    },
+    "k_kxitfwmatch": {
+      "abs_diff": 4.0436404225019373e-14,
+      "left": 0.010676471975440437,
+      "numerical_agreement": true,
+      "right": 0.0106764719754
+    }
+  },
+  "decision": {
+    "agree_frac": 1.0,
+    "detail": "Capture-time evidence recovered and replay p agrees with saved frozen p on a large majority of matched ITF contracts. Challenger uses the same Kalshi UUID history with parameters selected on the recorded frozen-history split. October 21 outcomes stay development data. n0_contrib=0.0025381277763126603 experienced_n_ge_3_contrib=0.012263369794380165 (descriptive slices among capture_time_agree only; not a cause claim). Independent ITF feeds passing the usable-feed rule: none. No reviewed player join exists; exact-name equality does not merge UUIDs, so this challenger does not ingest those feeds.",
+    "kind": "kalshi_history_challenger",
+    "reason": "capture_time_replay_agrees"
+  },
+  "diagnosis_n_events": 2828,
+  "event_fields": {
+    "k_kxitfmatch": [
+      "available_at",
+      "away",
+      "completed",
+      "home",
+      "neutral",
+      "source_game_id",
+      "sport",
+      "start",
+      "winner_id"
+    ],
+    "k_kxitfwmatch": [
+      "available_at",
+      "away",
+      "completed",
+      "home",
+      "neutral",
+      "source_game_id",
+      "sport",
+      "start",
+      "winner_id"
+    ]
+  },
+  "generated_at": "2026-10-23T00:34:18.095413Z",
+  "identity_counts": {
+    "named": 1068,
+    "unresolved_missing_from_structured_targets": 84
+  },
+  "n_agree_capture": 812,
+  "n_capture_time": 812,
+  "n_replay": 812,
+  "no_bet": true,
+  "p_agree_tol": 1e-12,
+  "protocol": {
+    "challenger_code_hash": "8ffda605555b1aeb962a6e491975d3c0ff18ff61e7ec2235474c8f798b2a79b3",
+    "frozen_at": "2026-10-23T00:34:18.095413Z",
+    "path": "research/sports/challenger/protocol_itf_singles_v1.json",
+    "selected_params": {
+      "base": 1500,
+      "carry": 0.0,
+      "gap_days": 120,
+      "home": 0,
+      "k": 48,
+      "mov": false
+    }
+  },
+  "research_only": true,
+  "source_usable": {
+    "n_http_200": 5,
+    "n_probes": 12,
+    "usable_itf_result_feeds": []
+  },
+  "static_checks": {
+    "capture_protocol_sha256": "6fce0fac0623241f373ec2f277c167030075d2a8af73bf1540681f56c5fb41ad",
+    "inventory_sha256": "579981f783cb34919a9f843b27b9d34b770751c34a0ef5aecafc33bb43eb78aa",
+    "listing_payload_sha256": "53abb22116a0a4194c92097975387914a02d4747ed95a42f4c38a4edce1a51c8",
+    "live_code_hash": "f0060654af3b1a38d96607c575f0d27ae8f11fa0f40c84589077a6d6c34305b1",
+    "phase1_code_hash": "5672164410b0a02702382137a19b020c791ef55e171ed6dca4524dc53c04a195",
+    "phase1_protocol_sha256": "66283d9e2a6b679d4391a53d195d122269fbeed62a4c76f24a77e7dae4d0f4c6",
+    "phase2_code_hash": "74adc71a8e5758c242528aa81eb835551cca6eb9a0f51d5500bc5321fb3ef50c",
+    "phase2_protocol_sha256": "b95e662b233931caafbedfa16b04081d3c9ca01a2e43abfafa0c81867c81cb39"
+  },
+  "structured_targets_loaded": true,
+  "surface_on_capture_contracts": [],
+  "surface_on_events": {
+    "k_kxitfmatch": [],
+    "k_kxitfwmatch": []
+  }
+}

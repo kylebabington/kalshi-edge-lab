@@ -1,0 +1,151 @@
+{
+ "candidate_id": "itf_singles_v1",
+ "challenger_code_files": [
+  "itf_singles_v1.py"
+ ],
+ "challenger_code_hash": "8ffda605555b1aeb962a6e491975d3c0ff18ff61e7ec2235474c8f798b2a79b3",
+ "competitions": [
+  "k_kxitfmatch",
+  "k_kxitfwmatch"
+ ],
+ "development_data": "October 21 snapshot ITF matched contracts, and any later replay of events after that cutoff performed after this freeze, are development analysis. They are not prospective.",
+ "frozen_at": "2026-10-23T00:34:18.095413Z",
+ "identity": "Kalshi participant UUID; name collisions are review candidates and are not merged",
+ "no_bet": true,
+ "pins": {
+  "contracts_sha256": {
+   "k_kxitfmatch": "e39dd310fed0ed01bf60b748220f2d8e51797f30c4950f8ab1f0f6960cf6da8d",
+   "k_kxitfwmatch": "109420609600205fcebda0a079410821f437a7ff8ca19e20eaf38e1c354eb495"
+  },
+  "events_sha256": {
+   "k_kxitfmatch": "910755b9c55ddedb3761e83f51e6808c7402b3e054b647c59e5651c7f887c81e",
+   "k_kxitfwmatch": "543116b42078b0d4de41478e53b9db268545ee4bc9738b8f5dce23baeaab3a7b"
+  },
+  "live_code_hash": "f0060654af3b1a38d96607c575f0d27ae8f11fa0f40c84589077a6d6c34305b1",
+  "phase1_code_hash": "5672164410b0a02702382137a19b020c791ef55e171ed6dca4524dc53c04a195",
+  "phase2_code_hash": "74adc71a8e5758c242528aa81eb835551cca6eb9a0f51d5500bc5321fb3ef50c"
+ },
+ "prospective": {
+  "eligible_after": "2026-10-23T00:34:18.095413Z",
+  "future_collection": "A later research task may score this candidate on new WINDOW_CAPTURE records without connecting the scheduled sports collector.",
+  "rule": "Only predictions actually recorded under this protocol before their outcomes became available qualify as prospective. Replaying events after 2026-10-21 now is development analysis even if those outcomes have not previously been scored."
+ },
+ "protocol": "sports_itf_singles_challenger_v1",
+ "reference": "sports_phase1_v2 kalshi_only elo (frozen live candidate unchanged)",
+ "research_only": true,
+ "scheduler": "none (not connected; future collection is documented only)",
+ "selected": {
+  "all": [
+   {
+    "carry": 0.0,
+    "k": 48,
+    "n": 15264,
+    "select_logloss": 0.6555035981567607
+   },
+   {
+    "carry": 0.33,
+    "k": 48,
+    "n": 15264,
+    "select_logloss": 0.6555519169510978
+   },
+   {
+    "carry": 0.0,
+    "k": 36,
+    "n": 15264,
+    "select_logloss": 0.6595148267849461
+   },
+   {
+    "carry": 0.33,
+    "k": 36,
+    "n": 15264,
+    "select_logloss": 0.6595537358029466
+   },
+   {
+    "carry": 0.0,
+    "k": 24,
+    "n": 15264,
+    "select_logloss": 0.6658576558981829
+   },
+   {
+    "carry": 0.33,
+    "k": 24,
+    "n": 15264,
+    "select_logloss": 0.6658855627143387
+   },
+   {
+    "carry": 0.0,
+    "k": 12,
+    "n": 15264,
+    "select_logloss": 0.6759148525619866
+   },
+   {
+    "carry": 0.33,
+    "k": 12,
+    "n": 15264,
+    "select_logloss": 0.6759298734649967
+   }
+  ],
+  "n_compared": 8,
+  "params": {
+   "base": 1500,
+   "carry": 0.0,
+   "gap_days": 120,
+   "home": 0,
+   "k": 48,
+   "mov": false
+  },
+  "pools": 2,
+  "select_events": 15264,
+  "select_logloss": 0.6555035981567607
+ },
+ "selection_rules": {
+  "candidates": {
+   "base": [
+    1500
+   ],
+   "carry": [
+    0.0,
+    0.33
+   ],
+   "gap_days": [
+    120
+   ],
+   "home": [
+    0
+   ],
+   "k": [
+    12,
+    24,
+    36,
+    48
+   ],
+   "mov": [
+    false
+   ]
+  },
+  "chronological_split": {
+   "october_21_snapshot": "development data; never used for selection",
+   "select_end": "2026-10-01T00:00:00Z",
+   "select_start": "2026-07-01T00:00:00Z",
+   "unit": "event start",
+   "updates": "available_at <= query cutoff (start - 60 min)"
+  },
+  "competitions": [
+   "k_kxitfmatch",
+   "k_kxitfwmatch"
+  ],
+  "elo_state": "separate per competition (k_kxitfmatch and k_kxitfwmatch never share ratings)",
+  "history": "verified frozen normalized events only (capture protocol dependency hashes)",
+  "identity": "Kalshi participant UUID; exact-name equality does not merge UUIDs",
+  "metric": "mean log loss of P(home wins) on select-window events (clip eps=1e-4)",
+  "missing_input": "refuse if frozen history hash mismatches; unseen player uses Elo base 1500; no independent results; no name merge",
+  "recorded_before_comparison": true,
+  "surface": "not used",
+  "tie_break": [
+   "lower metric",
+   "lower k",
+   "lower carry"
+  ]
+ },
+ "surface": "not used"
+}

@@ -109,6 +109,8 @@ After inspection of the saved score and the matching snapshot capture record:
 | ordinary_incorrect_prediction | 40 |
 | cannot_verify | 0 |
 
+**No confirmed implementation defect found in 40 inspected cases.** CSV classification values remain `ordinary_incorrect_prediction`.
+
 What the saved evidence verifies on these 40: ticker present on the capture record; `source_record_sha256` matches; window timestamps satisfy `window_open ≤ prediction_as_of ≤ finalized_at ≤ scheduled_cutoff`; market `candle_end` is not after `prediction_as_of`; `age_s` equals that difference; market `p` is the two-sided bid/ask mid.
 
 What it does not verify: `as_of_view` on the saved record is a summary (`results_used` / `events_hidden` / `latest_release_used`). It cannot prove every unavailable outcome field was cleared. That rule lives in `research.sports.live.sources.hide` and is a code-inspection fact, not a record fact. Each case note states this limit. No fresh download was used.
@@ -147,7 +149,7 @@ Identity maps are copies of frozen. Non-identity historical calibration is sligh
 
 2. **Frozen probabilities sit near 0.5 while the market uses tails; the pinned historical maps do not close that gap.** Event-equal [0.4, 0.6] holds 80% of the paired Brier gap. Market-tail bins hold 68%. Recalibrating toward market-like tails is what the bins suggest, but identity maps add nothing and non-identity maps raise event-equal Brier by +0.0045 on 201 events. Do not fit new maps on this frozen sample.
 
-3. **Do not treat the gap as a quote or as-of bug.** The 40-case review found 0 confirmed input defects. Horizons are inside the 60–80 minute window; candle ages are present. Negative cases show the market tail can be wrong, which is why they were included. `as_of_view` still cannot prove `hide()`; that remains a code-inspection limit.
+3. **Do not treat the gap as a quote or as-of bug.** No confirmed implementation defect found in 40 inspected cases. Horizons are inside the 60–80 minute window; candle ages are present. Negative cases show the market tail can be wrong, which is why they were included. `as_of_view` still cannot prove `hide()`; that remains a code-inspection limit.
 
 ---
 
@@ -157,6 +159,6 @@ Stable summation is `math.fsum`. Tolerance `1e-12`. Numerical agreement within t
 
 - Script self-checks (in `_summary.json`): event-equal weights sum to 1 bit-identically; family shares and event-equal bin Δ-Brier shares are bit-identical to the aggregate; sport/competition contributions and the review delta agree numerically (`6.9e-18`), not bit-identically. Missing essential score fields (`ticker`, `event_key`, `sport`, `competition`, `family`, `y`) would have stopped the run; none were missing.
 - Independent rescan of snapshot finalized scores with the frozen `_losses` helper, not through the diagnosis module: 4,695 contracts / 2,828 events; event-equal Δ Brier **bit-identical** to the review value `0.032064331771587344`; sport-contribution sum agrees numerically (`6.9e-18`), not bit-identically. Tennis contribution `0.02353254516714668`.
-- Published CSV columns, parsed at 12 significant digits, sum to the same aggregates within `1e-12` and are not bit-identical (expected rounding). Case table: 40 unique tickers, 10 / 10 / 20 reasons, all `ordinary_incorrect_prediction`.
+- Published CSV columns, parsed at 12 significant digits, sum to the same aggregates within `1e-12` and are not bit-identical (expected rounding). Case table: 40 unique tickers, 10 / 10 / 20 reasons. No confirmed implementation defect found in 40 inspected cases. CSV classification values remain `ordinary_incorrect_prediction`.
 
 No capture or score record was rewritten. No network fetch.
