@@ -9,7 +9,7 @@ Does not edit ``itf_singles_v1.predict`` or the challenger study protocol.
     python -m research.sports.challenger.capture dry-run
     python -m research.sports.challenger.capture window
     python -m research.sports.challenger.capture settle
-    python -m research.sports.challenger.capture report
+    python -m research.sports.challenger.capture report [--output path]
 
 Dry-run writes no prediction, exclusion or settlement records. Discovery still uses
 the byte-exact evidence cache under data/cache/sports/raw_challenger_itf_v1/.
@@ -23,6 +23,7 @@ import json
 import math
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from ..benchmark import quote_at_cutoff
 from ..competitions import all_competitions
@@ -36,12 +37,14 @@ from ..phase2.market import listing_ts, pick_contracts
 from ..scoring import settle as ST
 from . import history as H
 from . import itf_singles_v1 as CH
+from . import outcomes as OC
 from . import records as R
 from . import report as RP
 from .constants import (
-    CAPTURE_CODE_FILES, CAPTURE_DIR, CAPTURE_PROTOCOL, CAPTURE_PROTOCOL_PATH, CHALLENGER_DIR,
-    COMPETITIONS, EVIDENCE_ROOT, NOMINAL_HORIZON_MIN, PAIRED_FROZEN_PARAMS, PROTOCOL_PATH,
-    REPORT_CODE_FILES,
+    ACTIVE_CAPTURE_PROTOCOL, ACTIVE_CAPTURE_PROTOCOL_PATH, CAPTURE_CODE_FILES, CAPTURE_DIR,
+    CHALLENGER_CAPTURE_V1_PATH, CHALLENGER_CAPTURE_V1_SHA256, CHALLENGER_CAPTURE_V2, CHALLENGER_DIR,
+    COMPETITIONS, EVIDENCE_ROOT, INDIANAPOLIS_TZ, NOMINAL_HORIZON_MIN, PAIRED_FROZEN_PARAMS,
+    PROTOCOL_PATH, REPORT_CODE_FILES,
 )
 
 
@@ -59,6 +62,13 @@ def _iso_us(t: float) -> str:
 
 def _iso(t: float) -> str:
     return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _clock_pair(t: float) -> str:
+    utc = datetime.fromtimestamp(t, timezone.utc)
+    indy = utc.astimezone(ZoneInfo(INDIANAPOLIS_TZ))
+    return (f"{utc.strftime('%Y-%m-%dT%H:%M:%SZ')} / "
+            f"{indy.strftime('%Y-%m-%d %H:%M:%S %Z')} ({INDIANAPOLIS_TZ})")
 
 
 def _ts(s: str) -> float:
@@ -120,11 +130,15 @@ def global_capture_pins() -> dict:
 
 
 def freeze_capture_protocol(log_fn=log) -> dict:
-    """Write the capture-wrapper protocol once. Does not touch the frozen helper protocol."""
+    """Write the v2 capture-wrapper protocol once. Does not touch v1 or the frozen helper."""
     if not PROTOCOL_PATH.is_file():
         raise SystemExit("challenger protocol missing; refusing to freeze capture wrapper")
+    if sha256_file(CHALLENGER_CAPTURE_V1_PATH) != CHALLENGER_CAPTURE_V1_SHA256:
+        raise SystemExit("v1 capture protocol bytes changed; refusing to freeze v2")
     body = {
-        "protocol": CAPTURE_PROTOCOL,
+        "protocol": CHALLENGER_CAPTURE_V2,
+        "predecessor_protocol": "sports_itf_singles_challenger_capture_v1",
+        "predecessor_protocol_sha256": CHALLENGER_CAPTURE_V1_SHA256,
         "parent_challenger_protocol": "sports_itf_singles_challenger_v1",
         "research_only": True,
         "no_bet": True,
@@ -147,13 +161,17 @@ def freeze_capture_protocol(log_fn=log) -> dict:
                              "separate men/women pools; helper refused if a later release remains",
             "market": "quote_at_cutoff at prediction_as_of; existing two-sided hourly candle rule",
             "dry_run": "no prediction/exclusion/settlement records; evidence cache may still be written",
+            "settlement_observations": "write-once per attempt_id; pending/failed remain retryable; "
+                                       "terminal states are never erased by later pending; "
+                                       "incompatible terminals become CONFLICTING",
+            "report": "read-only by default; --output writes JSON; no fetches",
         },
         "pins": global_capture_pins(),
         "candidate_id": CH.CANDIDATE_ID,
         "paired_frozen_params": PAIRED_FROZEN_PARAMS,
         "challenger_params": challenger_params(),
     }
-    path = CAPTURE_PROTOCOL_PATH
+    path = ACTIVE_CAPTURE_PROTOCOL_PATH
     if path.exists():
         old = json.loads(path.read_text(encoding="utf-8"))
         if {k: v for k, v in old.items() if k != "frozen_at"} != json.loads(json.dumps(body)):
@@ -167,10 +185,10 @@ def freeze_capture_protocol(log_fn=log) -> dict:
 
 
 def load_capture_protocol() -> dict:
-    if not CAPTURE_PROTOCOL_PATH.is_file():
-        raise SystemExit(f"{CAPTURE_PROTOCOL_PATH.name} not frozen; "
+    if not ACTIVE_CAPTURE_PROTOCOL_PATH.is_file():
+        raise SystemExit(f"{ACTIVE_CAPTURE_PROTOCOL_PATH.name} not frozen; "
                          "run `python -m research.sports.challenger.capture freeze` first")
-    return json.loads(CAPTURE_PROTOCOL_PATH.read_text(encoding="utf-8"))
+    return json.loads(ACTIVE_CAPTURE_PROTOCOL_PATH.read_text(encoding="utf-8"))
 
 
 def check_pins(proto: dict | None = None) -> list[str]:
@@ -180,12 +198,14 @@ def check_pins(proto: dict | None = None) -> list[str]:
     want = proto.get("pins") or {}
     for k, v in sorted(want.items()):
         if have.get(k) != v:
-            problems.append(f"{k} differs from {CAPTURE_PROTOCOL}")
+            problems.append(f"{k} differs from {proto.get('protocol') or ACTIVE_CAPTURE_PROTOCOL}")
     ch = CH.load_protocol()
     if ch["challenger_code_hash"] != CH.code_hash():
         problems.append("frozen helper code hash changed")
     if have.get("challenger_code_hash") and have.get("challenger_code_hash") != ch["challenger_code_hash"]:
         problems.append("challenger_code_hash does not match frozen helper protocol")
+    if sha256_file(CHALLENGER_CAPTURE_V1_PATH) != CHALLENGER_CAPTURE_V1_SHA256:
+        problems.append("v1 capture protocol file bytes changed")
     comps, _, _, _ = itf_competitions()
     live_proto = PN.load_protocol()
     problems.extend(PN.check(live_proto, comps))
@@ -201,7 +221,7 @@ def verify(log_fn=log) -> int:
     problems = check_pins(proto)
     for p in problems:
         log_fn(f"PIN PROBLEM: {p}")
-    log_fn(f"verify {CAPTURE_PROTOCOL}: {'OK' if not problems else f'{len(problems)} problems'}")
+    log_fn(f"verify {proto.get('protocol')}: {'OK' if not problems else f'{len(problems)} problems'}")
     return 0 if not problems else 1
 
 
@@ -225,9 +245,16 @@ def upcoming(log_fn=log, hours: float = 24.0, session=None) -> int:
     for w, k, title, s in sorted(out):
         log_fn(f"window opens {_iso(w)} (Kalshi start {s})  {k:<22} {title}")
     log_fn(f"{len(out)} ITF events in the next {hours} h; discovery complete={st['complete']}")
-    if not out:
+    future = [(w, k, title, s) for w, k, title, s in sorted(out)
+              if w + LC.WINDOW_MIN * 60 > now]
+    if future:
+        w, k, title, s = future[0]
+        cutoff = w + LC.WINDOW_MIN * 60
+        log_fn(f"next still-open window opens {_clock_pair(w)} (cutoff {_clock_pair(cutoff)}; {k} {title})")
+        log_fn("exact command: python -m research.sports.challenger.capture window")
+    else:
+        log_fn("no remaining ITF capture window in this lookahead")
         log_fn("next command: python -m research.sports.challenger.capture upcoming")
-        log_fn("when a window is open: python -m research.sports.challenger.capture window")
     return 0 if st["complete"] else 2
 
 
@@ -456,7 +483,7 @@ def _attempt(mode, dry_run, comp, ctx, annotated, cl, cs, start, w_open, cutoff,
         )
     rec = {
         "schema": R.SCHEMA_PREDICTION if not reasons else R.SCHEMA_EXCLUSION,
-        "protocol": CAPTURE_PROTOCOL,
+        "protocol": cap_proto.get("protocol") or ACTIVE_CAPTURE_PROTOCOL,
         "parent_challenger_protocol": "sports_itf_singles_challenger_v1",
         "candidate_id": CH.CANDIDATE_ID,
         "status": "EXCLUDED" if reasons else "PREDICTION",
@@ -475,7 +502,7 @@ def _attempt(mode, dry_run, comp, ctx, annotated, cl, cs, start, w_open, cutoff,
         "nominal_horizon_minutes": NOMINAL_HORIZON_MIN,
         "challenger_code_hash": cap_proto["pins"]["challenger_code_hash"],
         "capture_code_hash": cap_proto["pins"]["capture_code_hash"],
-        "protocol_hash": sha256_file(CAPTURE_PROTOCOL_PATH),
+        "protocol_hash": sha256_file(ACTIVE_CAPTURE_PROTOCOL_PATH),
         "challenger_protocol_sha256": cap_proto["pins"]["challenger_protocol_sha256"],
         "imported_dependency_hashes": PN.dependency_hashes(comp),
         "pins": cap_proto["pins"],
@@ -531,62 +558,73 @@ def settle(log_fn=log, now_fn=None, session=None) -> int:
         for p in problems:
             log_fn(f"PIN PROBLEM: {p}")
         return 2
+    writer_hash = sha256_file(ACTIVE_CAPTURE_PROTOCOL_PATH)
     ev = D.Evidence(EVIDENCE_ROOT / "settle" / run_id, clock.now, session)
     n = 0
+    skipped = 0
     for path, pred in R.list_complete(CAPTURE_DIR / "predictions"):
-        dest = R.settlement_path(pred["competition"], pred["cluster"])
-        existing, st = R.inspect_record(dest)
-        if st == "ok":
+        fresh, st = R.inspect_record(path)
+        if st != "ok" or fresh is None:
+            log_fn(f"{path}: {st}; not settling")
             continue
-        if st in ("incomplete", "checksum_mismatch"):
-            log_fn(f"{dest}: {st}; refusing overwrite")
+        pred = fresh
+        derived = OC.derive_event(pred)
+        if not derived["retry_event"]:
+            skipped += 1
+            log_fn(f"{pred['competition']} {pred['cluster']}: no unresolved contracts; not fetching")
             continue
         tickers = [c["ticker"] for c in pred.get("contracts") or []]
         ets = sorted({c.get("event_ticker") for c in pred.get("contracts") or [] if c.get("event_ticker")})
         if not ets:
             ets = sorted({(c.get("ticker") or "").rsplit("-", 1)[0]
                           for c in pred.get("contracts") or [] if c.get("ticker")})
-        found, failed = ST.lookup(ev.get, ets, tickers)
+        found, used_keys = ST.lookup(ev.get, ets, tickers)
         rows = []
         for t in tickers:
             info = found.get(t) or {"state": "LOOKUP_FAILED", "detail": "not in lookup"}
-            y = None
-            if info.get("state") == "SETTLED_YES":
-                y = 1
-            elif info.get("state") == "SETTLED_NO":
-                y = 0
-            rows.append({"ticker": t, **{k: info.get(k) for k in ("state", "detail", "market")}, "y": y})
-        rec = {
-            "schema": R.SCHEMA_SETTLEMENT,
-            "protocol": CAPTURE_PROTOCOL,
-            "competition": pred["competition"],
-            "cluster": pred["cluster"],
-            "prediction_record_sha256": pred.get("record_sha256"),
-            "settled_at": _iso_us(clock.t()),
-            "contracts": rows,
-            "lookup_failed": failed,
-            "note": "Settlement does not prove the outcome was unavailable at prediction time. "
-                    "Prospective eligibility uses capture-time outcome_availability only.",
-            "research_only": True,
-            "no_bet": True,
-        }
+            market = info.get("market")
+            rows.append({
+                "ticker": t,
+                "state": info.get("state"),
+                "detail": info.get("detail"),
+                "market": market,
+                "y": OC.BINARY_Y.get(info.get("state")),
+                "exchange_settled_at": OC.exchange_settled_at(market if isinstance(market, dict) else None),
+            })
         try:
-            R.publish_exclusive(dest, rec)
+            refs = ev.refs(used_keys)
+        except KeyError:
+            refs = []
+        obs = OC.build_observation(
+            pred=pred, attempt_id=run_id, observed_at=_iso_us(clock.t()),
+            writer_protocol=cap_proto, writer_protocol_hash=writer_hash,
+            contracts=rows, evidence=refs,
+            lookup_failed=[row["ticker"] for row in rows if row.get("state") == "LOOKUP_FAILED"],
+            evidence_root=_rel(ev.root),
+        )
+        dest = R.observation_path(pred["competition"], pred["cluster"], run_id)
+        if not OC.hash_matches_prediction(obs, pred):
+            log_fn(f"{pred['cluster']}: observation hash does not match prediction; rejected")
+            continue
+        try:
+            R.publish_exclusive(dest, obs)
             n += 1
-            log_fn(f"{pred['competition']} {pred['cluster']}: settlement written")
+            log_fn(f"{pred['competition']} {pred['cluster']}: observation {run_id} "
+                   f"unresolved_before={len(derived['unresolved_tickers'])}")
         except (R.RecordExists, R.IncompleteRecord) as exc:
             log_fn(str(exc))
-    log_fn(f"settle: wrote {n} settlement records; evidence cache {_rel(ev.root)}")
+    log_fn(f"settle: wrote {n} observations, skipped_resolved={skipped}; evidence cache {_rel(ev.root)}")
     return 0
 
 
-def report(log_fn=log) -> int:
+def report(log_fn=log, output: str | None = None) -> int:
     summary = RP.summarize()
-    out = CAPTURE_DIR / "report.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     log_fn(RP.render(summary).rstrip())
-    log_fn(f"report json { _rel(out) } (runtime; not committed)")
+    if output:
+        path = Path(output)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        log_fn(f"wrote report json {_rel(path)}")
     return 0
 
 
@@ -594,6 +632,7 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="research.sports.challenger.capture")
     p.add_argument("stage", choices=["freeze", "verify", "upcoming", "dry-run", "window", "settle", "report"])
     p.add_argument("--hours", type=float, default=24.0)
+    p.add_argument("--output", default=None, help="report: optional JSON path (default: print only)")
     a = p.parse_args(argv)
     if a.stage == "freeze":
         freeze_capture_protocol(log)
@@ -608,7 +647,7 @@ def main(argv=None) -> int:
         return run_window(dry_run=False, log_fn=log)
     if a.stage == "settle":
         return settle(log)
-    return report(log)
+    return report(log, output=a.output)
 
 
 if __name__ == "__main__":

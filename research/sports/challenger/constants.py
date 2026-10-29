@@ -54,12 +54,20 @@ STUDY_STEM = "sports_itf_challenger_study_v1"
 CAPTURE_STEM = "sports_itf_challenger_capture_v1"
 CHALLENGER_DIR = Path(__file__).resolve().parent
 PROTOCOL_PATH = CHALLENGER_DIR / "protocol_itf_singles_v1.json"
-CAPTURE_PROTOCOL = "sports_itf_singles_challenger_capture_v1"
-CAPTURE_PROTOCOL_PATH = CHALLENGER_DIR / "protocol_itf_singles_capture_v1.json"
 PROTOCOLS_DIR = PROTOCOLS
 
-# Collection wrapper (not the frozen helper). Later edits must re-freeze this protocol.
-CAPTURE_CODE_FILES = ["history.py", "records.py", "capture.py", "constants.py"]
+# Isolated capture wrappers. v1 is frozen; the active CLI uses v2. Do not reuse CAPTURE_PROTOCOL
+# (that name is the live sports_phase2_capture_v2 protocol imported by inputs.py).
+CHALLENGER_CAPTURE_V1 = "sports_itf_singles_challenger_capture_v1"
+CHALLENGER_CAPTURE_V2 = "sports_itf_singles_challenger_capture_v2"
+CHALLENGER_CAPTURE_V1_PATH = CHALLENGER_DIR / "protocol_itf_singles_capture_v1.json"
+CHALLENGER_CAPTURE_V2_PATH = CHALLENGER_DIR / "protocol_itf_singles_capture_v2.json"
+CHALLENGER_CAPTURE_V1_SHA256 = "414f259d1a86e5256c87844147e9b1d094416260ea130fc41d3fb6abd448b0d9"
+ACTIVE_CAPTURE_PROTOCOL = CHALLENGER_CAPTURE_V2
+ACTIVE_CAPTURE_PROTOCOL_PATH = CHALLENGER_CAPTURE_V2_PATH
+
+# Collection wrapper (not the frozen helper). v2 freeze pins these files.
+CAPTURE_CODE_FILES = ["history.py", "records.py", "capture.py", "constants.py", "outcomes.py"]
 REPORT_CODE_FILES = ["report.py"]
 
 CAPTURE_DIR = REPO_ROOT / "data" / "sports" / "challenger" / "itf_singles_v1"
@@ -67,3 +75,4 @@ EVIDENCE_ROOT = REPO_ROOT / "data" / "cache" / "sports" / "raw_challenger_itf_v1
 
 NOMINAL_HORIZON_MIN = 60
 PAIRED_FROZEN_PARAMS = {"k": 24, "home": 0, "carry": 0.0, "mov": False, "gap_days": 120, "base": 1500.0}
+INDIANAPOLIS_TZ = "America/Indiana/Indianapolis"

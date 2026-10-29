@@ -1,0 +1,77 @@
+{
+ "candidate_id": "itf_singles_v1",
+ "capture_code_files": [
+  "history.py",
+  "records.py",
+  "capture.py",
+  "constants.py",
+  "outcomes.py"
+ ],
+ "challenger_params": {
+  "base": 1500,
+  "carry": 0.0,
+  "gap_days": 120,
+  "home": 0,
+  "k": 48,
+  "mov": false
+ },
+ "competitions": [
+  "k_kxitfmatch",
+  "k_kxitfwmatch"
+ ],
+ "frozen_at": "2026-10-29T00:56:48.885761Z",
+ "no_bet": true,
+ "paired_frozen_params": {
+  "base": 1500.0,
+  "carry": 0.0,
+  "gap_days": 120,
+  "home": 0,
+  "k": 24,
+  "mov": false
+ },
+ "parent_challenger_protocol": "sports_itf_singles_challenger_v1",
+ "pins": {
+  "capture_code_hash": "c4e96c60986516d292cd40c85e71d692608440aa6caf1cc85bc265621715101a",
+  "challenger_code_hash": "8ffda605555b1aeb962a6e491975d3c0ff18ff61e7ec2235474c8f798b2a79b3",
+  "challenger_frozen_at": "2026-10-23T00:34:18.095413Z",
+  "challenger_protocol_sha256": "ca9c4389b781d4dd204e59fdcf636527bc4e7f0cf726695ffc3f89027a03feeb",
+  "contracts_sha256": {
+   "k_kxitfmatch": "e39dd310fed0ed01bf60b748220f2d8e51797f30c4950f8ab1f0f6960cf6da8d",
+   "k_kxitfwmatch": "109420609600205fcebda0a079410821f437a7ff8ca19e20eaf38e1c354eb495"
+  },
+  "events_sha256": {
+   "k_kxitfmatch": "910755b9c55ddedb3761e83f51e6808c7402b3e054b647c59e5651c7f887c81e",
+   "k_kxitfwmatch": "543116b42078b0d4de41478e53b9db268545ee4bc9738b8f5dce23baeaab3a7b"
+  },
+  "live_code_hash": "f0060654af3b1a38d96607c575f0d27ae8f11fa0f40c84589077a6d6c34305b1",
+  "phase1_code_hash": "5672164410b0a02702382137a19b020c791ef55e171ed6dca4524dc53c04a195",
+  "phase1_protocol_sha256": "66283d9e2a6b679d4391a53d195d122269fbeed62a4c76f24a77e7dae4d0f4c6",
+  "phase2_code_hash": "74adc71a8e5758c242528aa81eb835551cca6eb9a0f51d5500bc5321fb3ef50c",
+  "phase2_protocol_sha256": "b95e662b233931caafbedfa16b04081d3c9ca01a2e43abfafa0c81867c81cb39",
+  "report_code_hash": "1335431e446a7ec5c781e9aaf8a893eb0839199f6499a992b60a274e7c59ad70"
+ },
+ "predecessor_protocol": "sports_itf_singles_challenger_capture_v1",
+ "predecessor_protocol_sha256": "414f259d1a86e5256c87844147e9b1d094416260ea130fc41d3fb6abd448b0d9",
+ "protocol": "sports_itf_singles_challenger_capture_v2",
+ "report_code_files": [
+  "report.py"
+ ],
+ "research_only": true,
+ "rules": {
+  "as_of_history": "only results released and locally received by prediction_as_of; separate men/women pools; helper refused if a later release remains",
+  "dry_run": "no prediction/exclusion/settlement records; evidence cache may still be written",
+  "helper": "CH.predict(events, queries, params) unchanged; queries are (key, participant_uuid, opponent_uuid, start_timestamp)",
+  "horizons": {
+   "horizon_minutes": "(start - prediction_as_of) / 60",
+   "nominal_horizon_minutes": 60,
+   "recorded_horizon_minutes": "(start - recorded_at) / 60"
+  },
+  "market": "quote_at_cutoff at prediction_as_of; existing two-sided hourly candle rule",
+  "prediction_as_of": "frozen after bounded evidence fetches complete",
+  "recorded_at": "clock at persist; never backdated",
+  "report": "read-only by default; --output writes JSON; no fetches",
+  "settlement_observations": "write-once per attempt_id; pending/failed remain retryable; terminal states are never erased by later pending; incompatible terminals become CONFLICTING",
+  "window": "start-80min <= prediction_as_of <= recorded_at <= start-60min"
+ },
+ "scheduler": "none"
+}

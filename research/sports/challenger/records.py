@@ -16,9 +16,10 @@ from ..core import sha256_json
 from .constants import CAPTURE_DIR
 
 
-SCHEMA_PREDICTION = "sports_itf_singles_challenger_capture_v1_prediction"
-SCHEMA_EXCLUSION = "sports_itf_singles_challenger_capture_v1_exclusion"
+SCHEMA_PREDICTION = "sports_itf_singles_challenger_capture_prediction"
+SCHEMA_EXCLUSION = "sports_itf_singles_challenger_capture_exclusion"
 SCHEMA_SETTLEMENT = "sports_itf_singles_challenger_capture_v1_settlement"
+SCHEMA_OBSERVATION = "sports_itf_singles_challenger_capture_v2_observation"
 
 
 class RecordExists(RuntimeError):
@@ -45,7 +46,13 @@ def exclusion_path(comp_key: str, cluster: str, run_id: str) -> Path:
 
 
 def settlement_path(comp_key: str, cluster: str) -> Path:
+    """Legacy v1 write-once settlement file. Never overwritten by v2."""
     return CAPTURE_DIR / "settlements" / comp_key / f"{safe(cluster)}.json"
+
+
+def observation_path(comp_key: str, cluster: str, attempt_id: str) -> Path:
+    return (CAPTURE_DIR / "settlement_observations" / comp_key / safe(cluster)
+            / f"{safe(attempt_id)}.json")
 
 
 def dumps(rec: dict) -> bytes:

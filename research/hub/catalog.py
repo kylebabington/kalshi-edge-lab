@@ -27,6 +27,7 @@ REPO_ROOT = SR.REPO_ROOT
 RESULTS_ROOT = REPO_ROOT / "data" / "results"
 PHASE7_ROOT = REPO_ROOT / "data" / "weather" / "phase7"
 SPORTS_PROTOCOLS = REPO_ROOT / "research" / "sports" / "protocols"
+CHALLENGER = REPO_ROOT / "research" / "sports" / "challenger"
 WEATHER_HYPOTHESES = REPO_ROOT / "research" / "weather" / "hypotheses"
 DOCS = REPO_ROOT / "docs" / "research"
 
@@ -137,6 +138,17 @@ def _result(label: str, *, kind: str, available: bool, href: str | None = None, 
         "as_of": SR.mtime_iso(path) if (path and available) else None,
         "reason": None if available else (reason or "not found on this machine"),
     }
+
+
+def _itf_challenger_sources() -> list[dict]:
+    return [
+        _source("ITF singles challenger study v1", DOCS / "sports_itf_challenger_study_v1.md", True),
+        _source("ITF singles challenger capture v1", DOCS / "sports_itf_challenger_capture_v1.md", True),
+        _source("ITF singles challenger capture wrapper v1",
+                CHALLENGER / "protocol_itf_singles_capture_v1.json", True),
+        _source("ITF singles challenger capture wrapper v2",
+                CHALLENGER / "protocol_itf_singles_capture_v2.json", True),
+    ]
 
 
 def _source(label: str, path: Path, tracked: bool) -> dict:
@@ -482,6 +494,9 @@ def _sports_capture(detail: bool) -> dict:
         _result("ITF singles challenger capture v1", kind="tracked",
                 available=(DOCS / "sports_itf_challenger_capture_v1.md").is_file(),
                 path=DOCS / "sports_itf_challenger_capture_v1.md"),
+        _result("ITF singles challenger capture wrapper v2", kind="tracked",
+                available=(CHALLENGER / "protocol_itf_singles_capture_v2.json").is_file(),
+                path=CHALLENGER / "protocol_itf_singles_capture_v2.json"),
     ]
     status = {
         "implementation": SR.implementation("Prospective capture and scoring",
@@ -566,10 +581,7 @@ def _sports_capture(detail: bool) -> dict:
                     DOCS / "prospective_performance_review_2026-10-21.md", True),
             _source("Forecast-error diagnosis (2026-10-21)",
                     DOCS / "sports_forecast_error_diagnosis_2026-10-21.md", True),
-            _source("ITF singles challenger study v1",
-                    DOCS / "sports_itf_challenger_study_v1.md", True),
-            _source("ITF singles challenger capture v1",
-                    DOCS / "sports_itf_challenger_capture_v1.md", True),
+            *_itf_challenger_sources(),
             _source("Capture records", LC.CAPTURE_DIR, False),
             _source("Finalized scores", SCC.SCORE_DIR, False),
         ],
@@ -625,7 +637,9 @@ def _sports_capture_loading(proto: dict | None, proto_path: Path, detail: bool) 
     if detail:
         card.update({"question": CAPTURE_QUESTION, "reference": None, "candidates": [], "cohort_rules": [],
                      "limitations": [SPORTS_LOADING], "mode_blocks": [], "sources": [
-                         _source("Frozen protocol", proto_path, True)],
+                         _source("Frozen protocol", proto_path, True),
+                         *_itf_challenger_sources(),
+                     ],
                      "frozen_settings": _compact(proto) if proto else None,
                      "links": [{"label": "Prospective results", "href": "/sports?tab=results"}]})
     return card

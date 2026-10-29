@@ -99,4 +99,4 @@ Eligible: `k_kxitfmatch` and `k_kxitfwmatch` predictions **recorded under this f
 
 Collect those prospective records after the freeze timestamp without connecting the scheduled sports collector. Do not score post-2026-10-21 replays run now as prospective.
 
-Manual collection is documented in [sports_itf_challenger_capture_v1.md](sports_itf_challenger_capture_v1.md). The study protocol and helper were not re-frozen.
+Manual collection is documented in [sports_itf_challenger_capture_v1.md](sports_itf_challenger_capture_v1.md). The active capture CLI uses wrapper v2; the v1 wrapper protocol, study protocol, and helper were not re-frozen.
