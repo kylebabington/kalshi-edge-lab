@@ -67,9 +67,15 @@ class SavedEvidence:
         if e is None:
             raise EvidenceError(f"request not in the recorded evidence: {url} {params}")
         body_p = self.root / source / key[:2] / f"{key}.body"
-        if not body_p.exists():
-            raise EvidenceError(f"evidence bytes missing: {body_p}")
-        body = body_p.read_bytes()
+        meta_p = self.root / source / key[:2] / f"{key}.meta.json"
+        from research.storage.cas import EvidenceMissing, read_evidence_payload
+        from research.storage.write import EvidenceWriteError
+        try:
+            body = read_evidence_payload(body_p, meta_p, expected_sha256=e["sha256"])
+        except EvidenceMissing as exc:
+            raise EvidenceError(f"evidence bytes missing: {body_p}") from exc
+        except EvidenceWriteError as exc:
+            raise EvidenceError(f"evidence bytes changed since capture: {body_p}") from exc
         if sha256_bytes(body) != e["sha256"]:
             raise EvidenceError(f"evidence bytes changed since capture: {body_p}")
         return Raw(url, params, e["status"], body, {"sha256": e["sha256"]})

@@ -167,10 +167,17 @@ def evidence_bodies_ok(rec: dict) -> tuple[bool, str | None, int, int]:
         if request_key(e["url"], e["params"]) != e["key"]:
             return False, f"evidence key mismatch for {e['url']}", present, missing + 1
         body_p = root / e["source"] / e["key"][:2] / f"{e['key']}.body"
-        if not body_p.is_file():
+        meta_p = root / e["source"] / e["key"][:2] / f"{e['key']}.meta.json"
+        from research.storage.cas import EvidenceMissing, read_evidence_payload
+        from research.storage.write import EvidenceWriteError
+        try:
+            body = read_evidence_payload(body_p, meta_p, expected_sha256=e["sha256"])
+        except EvidenceMissing:
             missing += 1
             continue
-        if sha256_bytes(body_p.read_bytes()) != e["sha256"]:
+        except EvidenceWriteError:
+            return False, f"evidence bytes changed: {e['key'][:16]}", present, missing + 1
+        if sha256_bytes(body) != e["sha256"]:
             return False, f"evidence bytes changed: {e['key'][:16]}", present, missing + 1
         present += 1
     if missing:

@@ -296,6 +296,8 @@ reported separately.
 .venv\Scripts\python weather_model.py --phase7-report      # read-only
 .venv\Scripts\python weather_model.py --phase7-dry-run     # live fetch, never cohort
 .venv\Scripts\python weather_model.py --phase7-reproduce data\weather\phase7\records\...json
+.venv\Scripts\python weather_model.py --phase7-historical-replay-inventory
+.venv\Scripts\python weather_model.py --phase7-historical-replay-probe
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\register_weather_task.ps1
 ```
 
@@ -346,6 +348,12 @@ continues at the next open window. Never backfill: do not reconstruct missed
 checkpoints from historical downloads, do not edit or delete receipts, do not
 re-register the protocol, and do not use `--phase7-dry-run` as a substitute
 (it is never part of the cohort). Afterwards, check with `--phase7-report`.
+
+A separate historical recovery study (`weather.phase7_historical_replay_v1`) can
+reconstruct missed checkpoints from archives into
+`data/weather/phase7_historical_replay/` only. It does not change receipts,
+records, or primary evaluation. See
+[docs/research/phase7_historical_replay_v1.md](docs/research/phase7_historical_replay_v1.md).
 
 ---
 

@@ -16,7 +16,8 @@ from research.sports.ops import collector as CO
 from tests.test_sports_api import NOW, _snapshot, client, env, populated  # noqa: F401 - fixtures
 
 IDS = {
-    "weather": ["weather.phase7_prospective_v1", "weather.clinyc_transfer_v1",
+    "weather": ["weather.phase7_prospective_v1", "weather.phase7_historical_replay_v1",
+                "weather.clinyc_transfer_v1",
                 "weather.shadow_gfs_hrrr_equal_v1", "weather.phase6_v2_1"],
     "sports": ["sports.phase2_capture_v2", "sports.phase1_v1", "sports.phase1_v2", "sports.phase2_v1"],
 }

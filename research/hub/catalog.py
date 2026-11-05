@@ -931,9 +931,6 @@ def _weather_phase7(detail: bool) -> dict:
         _result("Saved forecasts", kind="api", available=True, href="/markets"),
         _result("Prediction records (local)", kind="local", available=bool(counts["records"]), path=PHASE7_ROOT / "records",
                 reason="no prediction records on this machine"),
-        _result("Prospective performance review (2026-10-21)", kind="tracked",
-                available=(DOCS / "prospective_performance_review_2026-10-21.md").is_file(),
-                path=DOCS / "prospective_performance_review_2026-10-21.md"),
     ]
     status = {
         "implementation": SR.implementation("Phase 7 protocol", ["research/weather/phase7.py",
@@ -987,7 +984,8 @@ def _weather_phase7(detail: bool) -> dict:
             "SHADOW ONLY / NO_BET: no automatic promotion, prices, trades or weights.",
         ],
         "mode_blocks": [
-            _mode("historical_replay", False, "Not part of this protocol. Historical replay is weather.phase6_v2_1."),
+            _mode("historical_replay", False, "Not part of this protocol. Archive recovery of missed checkpoints is "
+                  "weather.phase7_historical_replay_v1 and never enters this cohort."),
             _mode("manual_pilot", False, "Not part of this protocol."),
             _mode("automatic_collection", True, "Hourly prospective task captures each registered checkpoint "
                   "inside its window.", samples, card["period"], operations=operations, href="/markets"),
@@ -999,13 +997,110 @@ def _weather_phase7(detail: bool) -> dict:
             _source("Operational misses note", DOCS / "phase7_operational_misses_note.md", True),
             _source("Prospective performance review (2026-10-21)",
                     DOCS / "prospective_performance_review_2026-10-21.md", True),
+            _source("Historical recovery note", DOCS / "phase7_historical_replay_v1.md", True),
             _source("Receipts", PHASE7_ROOT / "receipts", False),
             _source("Prediction records", PHASE7_ROOT / "records", False),
             _source("Final scores", PHASE7_ROOT / "scores", False),
         ],
         "frozen_settings": _compact(proto) if proto else None,
+        "results": results + [
+            _result("Prospective performance review (2026-10-21)", kind="tracked",
+                    available=(DOCS / "prospective_performance_review_2026-10-21.md").is_file(),
+                    path=DOCS / "prospective_performance_review_2026-10-21.md"),
+        ],
         "links": [{"label": "Saved forecasts", "href": "/markets"},
                   {"label": "Settled saved forecasts", "href": "/markets?status=settled"}],
+    })
+    return card
+
+
+def _weather_phase7_historical(detail: bool) -> dict:
+    proto_path = WEATHER_HYPOTHESES / "phase7_historical_replay_v1.json"
+    proto = _json_dict(proto_path)
+    doc = DOCS / "phase7_historical_replay_v1.md"
+    root = REPO_ROOT / "data" / "weather" / "phase7_historical_replay"
+    counts = {name: _file_count(root / name) for name in ("records", "scores")}
+    inventory = root / "inventory.json"
+    probe = root / "probe.json"
+    report = root / "REPORT.md"
+    samples = [
+        _sample("Replay records", counts["records"], "files in data/weather/phase7_historical_replay/records",
+                "replay records directory not found"),
+        _sample("Replay scores", counts["scores"], "files in data/weather/phase7_historical_replay/scores",
+                "replay scores directory not found"),
+    ]
+    results = [
+        _result("Recovery note", kind="tracked", available=doc.is_file(), path=doc),
+        _result("Inventory (local)", kind="local", available=inventory.is_file(), path=inventory,
+                reason="inventory.json not found on this machine"),
+        _result("Archive probe (local)", kind="local", available=probe.is_file(), path=probe,
+                reason="probe.json not found on this machine"),
+        _result("Recovery report (local)", kind="local", available=report.is_file(), path=report,
+                reason="REPORT.md not found on this machine"),
+    ]
+    status = {
+        "implementation": SR.implementation(
+            "Phase 7 historical replay",
+            ["research/weather/phase7_historical_replay.py"],
+        ),
+        "evidence": [
+            _protocol_evidence("Historical replay hypothesis", proto_path),
+            SR.file_evidence("Recovery note", doc, what="tracked summary"),
+            SR.file_evidence("Inventory", inventory, what="local inventory"),
+        ],
+        "operations": SR.record(
+            "operations", "not_applicable", "Operations",
+            "Historical recovery; does not capture live checkpoints",
+            reason="Historical recovery; does not capture live checkpoints",
+        ),
+        "integrity": _integrity_not_checked(False),
+        "policy": _policy_records(proto, "phase7_historical_replay_v1.json"),
+    }
+    card = {
+        "lifecycle": {"value": "historical recovery (not Phase 7 cohort)",
+                      "basis": "phase7_historical_replay_v1.json"},
+        "frozen_at": None,
+        "period": _period("parent protocol target dates", "2026-10-03", "2026-12-01",
+                          "parent Phase 7 collection window") if proto else None,
+        "period_reason": None if proto else "hypothesis file missing",
+        "samples": samples,
+        "results": results,
+        "status": status,
+    }
+    if not detail:
+        return card
+    status["integrity"] = _integrity_not_checked(True)
+    card.update({
+        "question": "Using archived GFS/HRRR, IEM, and Kalshi data, what would the frozen Phase 7 method have "
+                    "produced at missed checkpoints, and how closely does archive reconstruction match live captures?",
+        "reference": "Phase 7 live captures are the agreement baseline; this study never enters the prospective cohort.",
+        "candidates": [
+            {"id": "research_gfs", "label": "Archive-reconstructed research GFS", "description": "Pinned Phase 7 method"},
+            {"id": "research_hrrr", "label": "Archive-reconstructed research HRRR", "description": "Pinned Phase 7 method"},
+            {"id": "research_shadow", "label": "Archive-reconstructed equal-weight shadow",
+             "description": "0.5 GFS + 0.5 HRRR"},
+        ],
+        "cohort_rules": [
+            {"name": "isolation", "rule": "Writes only under data/weather/phase7_historical_replay/; never Phase 7."},
+            {"name": "primary recovery", "rule": "Prioritize d0_0600, d0_1200, d0_1500."},
+            {"name": "d0_0900", "rule": "Structurally unpaired under the frozen method; never substitute an older HRRR run."},
+        ],
+        "limitations": list((proto or {}).get("limitations") or []),
+        "mode_blocks": [
+            _mode("historical_replay", True, "Archive reconstruction of missed Phase 7 checkpoints plus agreement "
+                  "against previously CAPTURED checkpoints.", samples, card["period"]),
+            _mode("manual_pilot", False, "Not part of this study."),
+            _mode("automatic_collection", False, "Not part of this study. Live collection is weather.phase7_prospective_v1."),
+        ],
+        "sources": [
+            _source("Hypothesis", proto_path, True),
+            _source("Recovery note", doc, True),
+            _source("Inventory", inventory, False),
+            _source("Archive probe", probe, False),
+            _source("Recovery report", report, False),
+        ],
+        "frozen_settings": _compact(proto) if proto else None,
+        "links": [{"label": "Weather Phase 7", "href": "/research/weather.phase7_prospective_v1"}],
     })
     return card
 
@@ -1016,6 +1111,9 @@ REGISTRY: list[dict[str, Any]] = [
     {"id": "weather.phase7_prospective_v1", "category": "weather", "protocol_id": "PHASE7_PROSPECTIVE_V1",
      "title": "Weather Phase 7: prospective GFS/HRRR shadow validation", "version": "v1",
      "designation": "prospective", "modes": ["automatic_collection"], "build": _weather_phase7},
+    {"id": "weather.phase7_historical_replay_v1", "category": "weather", "protocol_id": "PHASE7_HISTORICAL_REPLAY_V1",
+     "title": "Weather Phase 7: historical recovery of missed checkpoints", "version": "v1",
+     "designation": "historical", "modes": ["historical_replay"], "build": _weather_phase7_historical},
     {"id": "weather.clinyc_transfer_v1", "category": "weather", "protocol_id": "CLINYC_TRANSFER_V1",
      "title": "Weather: KNYC to CLINYC settlement transfer", "version": "v1",
      "designation": "prospective", "modes": ["historical_replay", "automatic_collection"], "build": _weather_clinyc},

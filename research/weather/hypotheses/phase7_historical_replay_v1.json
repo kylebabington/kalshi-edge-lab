@@ -1,0 +1,50 @@
+{
+  "dataset_id": "PHASE7_HISTORICAL_REPLAY_V1",
+  "schema": "phase7_historical_replay_v1",
+  "status": {
+    "mode": "RESEARCH_ONLY",
+    "decision": "NO_BET",
+    "shadow": "SHADOW ONLY",
+    "not_a_phase7_record": true,
+    "never_enters_primary_cohort": true
+  },
+  "parent_protocol_id": "PHASE7_PROSPECTIVE_V1",
+  "parent_protocol_file": "research/weather/hypotheses/phase7_prospective_protocol_v1.json",
+  "isolation": {
+    "output_root": "data/weather/phase7_historical_replay",
+    "never_modify": [
+      "research/weather/hypotheses/phase7_prospective_protocol_v1.json",
+      "data/weather/phase7/records",
+      "data/weather/phase7/receipts",
+      "data/weather/phase7/evidence",
+      "data/weather/phase7/scores",
+      "data/weather/phase7/diagnostics",
+      "data/weather/phase7/dry_run",
+      "data/weather/phase7/fetch_log.jsonl",
+      "data/weather/phase7/outcomes_ledger.jsonl",
+      "data/weather/phase7/frozen_pools_v1.csv"
+    ]
+  },
+  "priority": {
+    "primary": ["d0_0600", "d0_1200", "d0_1500"],
+    "secondary": ["dminus1_1800"],
+    "structurally_unavailable": ["d0_0900"],
+    "d0_0900_policy": "Preserve CALIBRATION_INSUFFICIENT_DETERMINISTIC and expected HRRR horizon-short UNAVAILABLE. Never substitute an older complete run."
+  },
+  "as_of_classes": {
+    "as_of_rule_gated": "Run init plus frozen publication latency, or observation time plus assumed 20 min lag. Verified under Phase 6/7 rules, not measured publication times.",
+    "archive_retrieved_now": "Payload bytes downloaded at reconstruction time from Open-Meteo Single Runs or IEM monthly archive.",
+    "post_settlement_market": "Kalshi GET /historical/markets after settlement: event identity and bucket labels, not contemporaneous open-book state.",
+    "current_open_unverified_as_of": "Current open markets used only when historical settled markets are absent. Not proof of HH:00 listing.",
+    "unverifiable_live_availability": "In-window fetch success, live evidence SHA-256, and capture-window prediction_as_of cannot be reconstructed."
+  },
+  "limitations": [
+    "Not a Phase 7 record; never enters the prospective cohort or primary evaluation.",
+    "reconstructed_at is reconstruction time, not a capture-window finalization.",
+    "Open-Meteo payloads are archive_retrieved_now; in-window bytes are unverifiable.",
+    "IEM publication time is assumed_fixed_lag_20m; the monthly archive may differ from the live snapshot.",
+    "Kalshi buckets from historical settled markets are post_settlement_market, not contemporaneous open state.",
+    "d0_0900 remains structurally unpaired under the frozen method.",
+    "A reconstructed paired score is HISTORICAL_REPLAY_DIAGNOSTIC only."
+  ]
+}

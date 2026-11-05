@@ -17,6 +17,8 @@ Commands:
   python weather_model.py --prospective-cycle
   python weather_model.py --phase7-preflight | --phase7-register | --phase7-report [--json]
   python weather_model.py --phase7-reproduce RECORD_JSON | --phase7-dry-run
+  python weather_model.py --phase7-historical-replay-inventory | --phase7-historical-replay-probe | --phase7-historical-replay-report
+  python weather_model.py --phase7-historical-replay
 
 Phase 1–5 do NOT place orders and do NOT optimize against trading ROI.
 Prospective cycle: schedule externally at HH:05 America/New_York hourly
@@ -165,10 +167,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Phase 7: live capture of the latest elapsed checkpoint into dry_run/ (never cohort)",
     )
+    group.add_argument(
+        "--phase7-historical-replay-inventory",
+        action="store_true",
+        help="Phase 7 historical recovery: read-only missed/captured inventory (writes only under phase7_historical_replay/)",
+    )
+    group.add_argument(
+        "--phase7-historical-replay-probe",
+        action="store_true",
+        help="Phase 7 historical recovery: archive availability probe for GFS/HRRR/IEM/Kalshi (no reconstruction)",
+    )
+    group.add_argument(
+        "--phase7-historical-replay-report",
+        action="store_true",
+        help="Phase 7 historical recovery: write REPORT.md from inventory/probe/reconstruction artifacts",
+    )
+    group.add_argument(
+        "--phase7-historical-replay",
+        action="store_true",
+        help="Phase 7 historical recovery: reconstruct into data/weather/phase7_historical_replay/ (never Phase 7)",
+    )
     parser.add_argument(
         "--json",
         action="store_true",
-        help="With --phase7-report / --phase7-preflight, print JSON",
+        help="With --phase7-report / --phase7-preflight / historical-replay inventory+probe, print JSON",
     )
     parser.add_argument(
         "--refresh-phase6-cache",
@@ -703,6 +725,175 @@ def cmd_phase7_dry_run() -> int:
     return 0
 
 
+def cmd_phase7_historical_replay_inventory(*, as_json: bool = False) -> int:
+    from research.weather.phase7_historical_replay import build_inventory, write_inventory, write_report
+
+    inventory = build_inventory()
+    path = write_inventory(inventory)
+    write_report(inventory)
+    if as_json or inventory.get("status") == "not_registered":
+        print(json.dumps(inventory, indent=2, default=str))
+        return 0 if inventory.get("status") == "ok" else 1
+    counts = inventory.get("counts") or {}
+    console.print("[bold]Phase 7 historical replay inventory[/bold] (read-only vs Phase 7; wrote replay tree only)")
+    console.print(f"wrote {path}")
+    console.print(
+        f"elapsed={counts.get('elapsed')} captured={counts.get('captured')} missed={counts.get('missed')} "
+        f"primary_missed={counts.get('missed_primary')} secondary={counts.get('missed_secondary')} "
+        f"d0_0900={counts.get('missed_structurally_unavailable')}"
+    )
+    for checkpoint_id, row in (inventory.get("by_checkpoint") or {}).items():
+        console.print(
+            f"  {checkpoint_id}: elapsed={row['elapsed']} captured={row['captured']} missed={row['missed']}"
+        )
+    return 0 if inventory.get("status") == "ok" else 1
+
+
+def cmd_phase7_historical_replay_probe(*, as_json: bool = False) -> int:
+    from research.weather.phase7_historical_replay import (
+        build_inventory,
+        load_json,
+        run_probe,
+        write_inventory,
+        write_report,
+        ReplayPaths,
+    )
+
+    inventory = build_inventory()
+    write_inventory(inventory)
+    if inventory.get("status") != "ok":
+        print(json.dumps(inventory, indent=2, default=str))
+        return 1
+    paths = ReplayPaths()
+    probe = run_probe(inventory, paths=paths, progress=lambda m: console.print(m, style="dim"))
+    write_report(
+        inventory,
+        probe=probe,
+        reconstruction=load_json(paths.reconstruction),
+        integrity=load_json(paths.integrity),
+        paths=paths,
+    )
+    if as_json:
+        slim = {k: v for k, v in probe.items() if k != "unique_runs"}
+        slim["unique_runs_n"] = probe.get("unique_runs_n")
+        print(json.dumps(slim, indent=2, default=str))
+        return 0 if probe.get("archives_retrievable") else 2
+    console.print("[bold]Phase 7 historical replay probe[/bold] (archives only; no reconstruction)")
+    console.print(f"archives_retrievable={probe.get('archives_retrievable')} blockers={probe.get('blockers') or 'none'}")
+    console.print(f"IEM ok={(probe.get('iem') or {}).get('ok')} Kalshi ok={(probe.get('kalshi') or {}).get('ok')}")
+    rates = probe.get("rates") or {}
+    console.print(
+        f"GFS primary-missed retrieval={rates.get('gfs_primary_missed')} "
+        f"HRRR primary-missed retrieval={rates.get('hrrr_primary_missed')}"
+    )
+    cov = probe.get("estimated_coverage") or {}
+    console.print(
+        f"estimated paired={cov.get('estimated_reconstructable_paired')} "
+        f"unpaired={cov.get('estimated_reconstructable_unpaired')} "
+        f"unrecoverable={cov.get('estimated_unrecoverable')} "
+        f"primary_paired={cov.get('estimated_primary_paired')}"
+    )
+    console.print(f"report {paths.report}")
+    return 0 if probe.get("archives_retrievable") else 2
+
+
+def cmd_phase7_historical_replay_report() -> int:
+    from research.weather.phase7_historical_replay import ReplayPaths, load_json, write_report
+
+    paths = ReplayPaths()
+    inventory = load_json(paths.inventory)
+    if not inventory:
+        console.print("No inventory.json — run --phase7-historical-replay-inventory first")
+        return 1
+    path = write_report(
+        inventory,
+        probe=load_json(paths.probe),
+        reconstruction=load_json(paths.reconstruction),
+        integrity=load_json(paths.integrity),
+        paths=paths,
+    )
+    console.print(f"[bold]Phase 7 historical replay report[/bold] {path}")
+    return 0
+
+
+def cmd_phase7_historical_replay() -> int:
+    from research.weather.phase7_historical_replay import (
+        ReplayFetchers,
+        ReplayPaths,
+        build_inventory,
+        compare_phase7_integrity,
+        ensure_pre_run_manifest,
+        load_json,
+        run_reconstruction,
+        wait_until_live_capture_closed,
+        write_inventory,
+        write_json,
+        write_report,
+    )
+
+    inventory = build_inventory()
+    paths = ReplayPaths()
+    write_inventory(inventory, paths)
+    if inventory.get("status") != "ok":
+        print(json.dumps(inventory, indent=2, default=str))
+        return 1
+    fetchers = ReplayFetchers()
+    wait_until_live_capture_closed(fetchers, log=lambda m: console.print(m, style="dim"))
+    manifest = ensure_pre_run_manifest(paths)
+    console.print(
+        "[bold]Phase 7 historical replay reconstruction[/bold] "
+        "(writes only under phase7_historical_replay/; collector stays live)"
+    )
+    console.print(
+        f"pre-run manifest files={manifest.get('file_n')} "
+        f"protocol={manifest.get('protocol_sha256')} pool={manifest.get('frozen_pool_sha256')}"
+    )
+    try:
+        result = run_reconstruction(
+            inventory,
+            paths=paths,
+            fetchers=fetchers,
+            require_probe=True,
+            include_captured=True,
+            respect_live_windows=True,
+            progress=lambda m: console.print(m, style="dim"),
+        )
+    except Exception as error:  # noqa: BLE001
+        console.print(f"blocked or failed: {type(error).__name__}: {error}")
+        return 2
+    integrity = compare_phase7_integrity(manifest)
+    write_json(paths.integrity, integrity, phase7_root=paths.phase7_root)
+    write_report(
+        inventory,
+        probe=load_json(paths.probe),
+        reconstruction=result,
+        integrity=integrity,
+        paths=paths,
+    )
+    acc = result.get("accuracy") or {}
+    console.print(
+        f"status={result.get('status')} reconstructed={result.get('reconstructed_n')} "
+        f"resumed={result.get('resumed_n')} unrecoverable={result.get('unrecoverable_n')} "
+        f"remaining={result.get('remaining_n')}"
+    )
+    console.print(
+        f"agreement_mismatches={result.get('agreement_mismatches_n')} "
+        f"paired_all_three={acc.get('paired_all_three_n')} "
+        f"shadow-gfs={acc.get('paired_shadow_minus_gfs_brier')} "
+        f"shadow-hrrr={acc.get('paired_shadow_minus_hrrr_brier')}"
+    )
+    console.print(
+        f"integrity_ok={integrity.get('ok')} unchanged={integrity.get('unchanged_n')} "
+        f"collector_additions={integrity.get('collector_additions_n')} "
+        f"pending={integrity.get('pending_transitions_n')} "
+        f"unexpected={integrity.get('unexpected_n')}"
+    )
+    console.print(f"report {paths.report}")
+    if not integrity.get("ok"):
+        return 3
+    return 0 if result.get("status") == "ok" else 4
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.build_calibration:
@@ -737,6 +928,14 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_phase7_reproduce(args.phase7_reproduce)
     if args.phase7_dry_run:
         return cmd_phase7_dry_run()
+    if args.phase7_historical_replay_inventory:
+        return cmd_phase7_historical_replay_inventory(as_json=args.json)
+    if args.phase7_historical_replay_probe:
+        return cmd_phase7_historical_replay_probe(as_json=args.json)
+    if args.phase7_historical_replay_report:
+        return cmd_phase7_historical_replay_report()
+    if args.phase7_historical_replay:
+        return cmd_phase7_historical_replay()
     return 1
 
 

@@ -49,13 +49,20 @@ def check_pins(rec: dict, comp) -> None:
 
 
 def check_evidence(rec: dict, root: Path) -> None:
+    from research.storage.cas import EvidenceMissing, read_evidence_payload
+    from research.storage.write import EvidenceWriteError
     for e in rec["evidence"]:
         if request_key(e["url"], e["params"]) != e["key"]:
             raise ReplayRefused(f"evidence key mismatch for {e['url']}")
         p = root / e["source"] / e["key"][:2] / f"{e['key']}.body"
-        if not p.exists():
-            raise ReplayRefused(f"evidence bytes missing: {p}")
-        if sha256_bytes(p.read_bytes()) != e["sha256"]:
+        meta_p = root / e["source"] / e["key"][:2] / f"{e['key']}.meta.json"
+        try:
+            body = read_evidence_payload(p, meta_p, expected_sha256=e["sha256"])
+        except EvidenceMissing as exc:
+            raise ReplayRefused(f"evidence bytes missing: {p}") from exc
+        except EvidenceWriteError as exc:
+            raise ReplayRefused(f"evidence bytes changed since capture: {p}") from exc
+        if sha256_bytes(body) != e["sha256"]:
             raise ReplayRefused(f"evidence bytes changed since capture: {p}")
 
 

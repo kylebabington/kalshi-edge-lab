@@ -173,13 +173,23 @@ class Fetcher:
     def cached(self, source: str, url: str, params: dict | None = None) -> Raw | None:
         key = request_key(url, params)
         body_p, meta_p = self._paths(source, key)
-        if body_p.exists() and meta_p.exists():
-            meta = json.loads(meta_p.read_text(encoding="utf-8"))
+        if not meta_p.exists():
+            return None
+        meta = json.loads(meta_p.read_text(encoding="utf-8"))
+        # Legacy full body, or CAS blob referenced by meta (evidence roots).
+        if body_p.exists():
             body = body_p.read_bytes()
-            if sha256_bytes(body) != meta.get("sha256"):
-                raise RuntimeError(f"raw cache corrupted: {body_p}")
-            return Raw(url, params or {}, meta["status"], body, meta)
-        return None
+        elif meta.get("storage"):
+            from research.storage.cas import EvidenceMissing, read_evidence_payload
+            try:
+                body = read_evidence_payload(body_p, meta_p, meta=meta)
+            except EvidenceMissing:
+                return None
+        else:
+            return None
+        if sha256_bytes(body) != meta.get("sha256"):
+            raise RuntimeError(f"raw cache corrupted: {body_p}")
+        return Raw(url, params or {}, meta["status"], body, meta)
 
     def get(self, source: str, url: str, params: dict | None = None, *,
             cache_statuses: tuple[int, ...] = (200, 400, 404), headers: dict | None = None) -> Raw:
@@ -219,9 +229,29 @@ class Fetcher:
         if status in cache_statuses:
             key = request_key(url, params)
             body_p, meta_p = self._paths(source, key)
-            body_p.parent.mkdir(parents=True, exist_ok=True)
-            body_p.write_bytes(body)
-            meta_p.write_text(json.dumps(meta, sort_keys=True, indent=1), encoding="utf-8")
+            # Atomic body+meta write. Evidence roots (raw_capture_v2 / raw_settlement_v1 /
+            # raw_challenger_itf_v1) are write-once: a failed or partial write must not leave a
+            # corrupt body, and must not replace different pinned bytes. Reconstructable caches
+            # under data/cache/sports/raw/ may be replaced atomically.
+            from research.storage.write import DiskFullError, EvidenceWriteError, write_cache_pair
+            posix = body_p.resolve().as_posix()
+            write_once = any(m in posix for m in (
+                "/raw_capture_v2/", "/raw_settlement_v1/", "/raw_challenger_itf_v1/",
+            ))
+            try:
+                # Evidence roots: CAS after the real response bytes are in hand.
+                # Reconstructable caches keep per-key full bodies (not shared blobs).
+                if write_once:
+                    from research.storage.cas import write_evidence_payload
+                    write_evidence_payload(body_p, meta_p, body, meta, write_once=True)
+                else:
+                    write_cache_pair(body_p, meta_p, body, meta, write_once=False)
+            except DiskFullError:
+                self.stats["errors"] += 1
+                raise
+            except EvidenceWriteError:
+                self.stats["errors"] += 1
+                raise
         else:
             self.stats["errors"] += 1
         return raw

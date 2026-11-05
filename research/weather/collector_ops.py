@@ -1124,18 +1124,49 @@ def reproduce_all() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _disk_health_for_post(repo_root: Path) -> dict[str, Any]:
+    """Best-effort free-space snapshot for weather post_cycle; never walks large trees."""
+    try:
+        import shutil
+        from datetime import datetime, timezone
+        from research.storage.config import load_config
+        from research.storage.health import append_usage_sample
+        cfg = load_config(root=repo_root)
+        usage = shutil.disk_usage(str(repo_root))
+        level = "ok"
+        if usage.free <= cfg.free_critical_bytes:
+            level = "critical"
+        elif usage.free <= cfg.free_warning_bytes:
+            level = "warning"
+        try:
+            append_usage_sample(repo_root)
+        except OSError:
+            pass
+        return {
+            "level": level,
+            "free_bytes": usage.free,
+            "free_gb": round(usage.free / (1024 ** 3), 3),
+            "assessed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "note": "free-space only; run python -m research.storage.run health for cache inventory",
+        }
+    except Exception as exc:
+        return {"level": "unknown", "error": f"{type(exc).__name__}: {exc}"}
+
+
 def post_cycle(cycle_exit: int, *, cfg_path: Path | None = None, pinger: Pinger = http_ping,
                repo_root: Path = REPO_ROOT) -> dict[str, Any]:
     """After a cycle: collector health ping, then backup (separate health check)."""
     path = cfg_path or config_path()
+    disk = _disk_health_for_post(repo_root)
     if not path.exists():
-        return {"post": "not_configured"}
+        return {"post": "not_configured", "disk_health": disk}
     cfg = load_config(path)
     pinger(cfg.collector_ping_url, cycle_exit != 0,
-           json.dumps({"collector_id": cfg.collector_id, "cycle_exit": cycle_exit}))
+           json.dumps({"collector_id": cfg.collector_id, "cycle_exit": cycle_exit,
+                       "disk_health_level": disk.get("level")}))
     if not cfg.backup_remote:
-        return {"post": "ok", "backup": "not_configured"}
-    return {"post": "ok", **run_backup(cfg, repo_root=repo_root, pinger=pinger)}
+        return {"post": "ok", "backup": "not_configured", "disk_health": disk}
+    return {"post": "ok", "disk_health": disk, **run_backup(cfg, repo_root=repo_root, pinger=pinger)}
 
 
 # ---------------------------------------------------------------------------

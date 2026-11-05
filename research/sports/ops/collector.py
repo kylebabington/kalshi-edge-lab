@@ -35,7 +35,7 @@ from pathlib import Path
 
 from .. import evaluate as EV
 from ..adapters import KALSHI_BASE
-from ..core import Fetcher
+from ..core import REPO_ROOT, Fetcher
 from ..live import capture as CP
 from ..live import config as LC
 from ..live import discover as D
@@ -210,6 +210,29 @@ def _cycle_body(log, now_fn, session, dry_run: bool, settle_mode: str, rec: dict
         rec["capture"] = {"skipped": "dry run"}
         rec["settlement"] = {"skipped": "dry run"}
         return 0
+    disk = _disk_health_snapshot()
+    rec["disk_health"] = disk
+    if (disk or {}).get("level") == "critical":
+        # Refuse to start new capture/settlement when the volume cannot absorb evidence writes.
+        # Explicit failure (not a successful empty cycle): missing data ≠ valid observation.
+        free_gb = (disk or {}).get("free_gb")
+        log(f"DISK CRITICAL free_gb={free_gb}; capture/settlement FAILED (not persisted)")
+        rec["capture"] = {
+            "status": "failed",
+            "reason": "disk_critical",
+            "ok": False,
+            "persisted": False,
+            "note": "Evidence could not be written; this is not a successful capture.",
+            "disk_health": disk,
+        }
+        rec["settlement"] = {
+            "status": "failed",
+            "reason": "disk_critical",
+            "ok": False,
+            "persisted": False,
+            "disk_health": disk,
+        }
+        return 4
     if comps is None or comps:
         cap = run_capture(comps, log, session)
         summary = cap.pop("summary")
@@ -343,6 +366,35 @@ def read_cycles(cycles_path: Path | None = None, since_s: float = 86400, *, as_o
     return out
 
 
+def _disk_health_snapshot() -> dict | None:
+    """Best-effort free-space snapshot for collector status; never walks large trees."""
+    try:
+        import shutil
+        from datetime import datetime, timezone
+        from research.storage.config import load_config
+        from research.storage.health import append_usage_sample
+        cfg = load_config()
+        usage = shutil.disk_usage(str(REPO_ROOT))
+        level = "ok"
+        if usage.free <= cfg.free_critical_bytes:
+            level = "critical"
+        elif usage.free <= cfg.free_warning_bytes:
+            level = "warning"
+        try:
+            append_usage_sample(REPO_ROOT)
+        except OSError:
+            pass
+        return {
+            "level": level,
+            "free_bytes": usage.free,
+            "free_gb": round(usage.free / (1024 ** 3), 3),
+            "assessed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "note": "free-space only; run python -m research.storage.run health for cache inventory",
+        }
+    except Exception as exc:  # status must still write if disk tools fail
+        return {"level": "unknown", "error": f"{type(exc).__name__}: {exc}"}
+
+
 def build_status(cycles_path: Path, state: dict, *, as_of: float | None = None) -> dict:
     as_of = time.time() if as_of is None else as_of
     recent = read_cycles(cycles_path, as_of=as_of)
@@ -378,6 +430,9 @@ def build_status(cycles_path: Path, state: dict, *, as_of: float | None = None) 
         "failures_24h": len(failures), "recent_failures": failures[-RECENT_FAILURES:],
         "duration_s_24h": ({"median": statistics.median(durations), "max": max(durations)} if durations else None),
         "bottlenecks_24h": [r["bottleneck"] for r in recent if r.get("bottleneck")][-5:],
+        "disk_health": _disk_health_snapshot(),
+        "research_only": True,
+        "no_bet": True,
     }
 
 

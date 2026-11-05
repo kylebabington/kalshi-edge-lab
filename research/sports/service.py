@@ -281,16 +281,21 @@ def _evidence_body(run_id: str, source: str, key: str, sha: str | None,
     """Saved evidence body, verified against its SHA-256. ``touched`` collects (path, signature) of each
     file consulted, taken before reading, for :class:`_SigCache`."""
     p = LC.EVIDENCE_ROOT / run_id / source / key[:2] / f"{key}.body"
-    sig = _stat_sig(p)
+    mp = p.parent / f"{key}.meta.json"
+    body_sig, meta_sig = _stat_sig(p), _stat_sig(mp)
     if touched is not None:
-        touched.append((p, sig))
-    if sig is None:
+        touched.append((p, body_sig))
+        touched.append((mp, meta_sig))
+    if body_sig is None and meta_sig is None:
         return None, "missing"
-    body = p.read_bytes()
+    from research.storage.cas import EvidenceMissing, read_evidence_payload
+    try:
+        body = read_evidence_payload(p, mp, expected_sha256=sha)
+    except EvidenceMissing:
+        return None, "missing"
+    except Exception:
+        return None, "hash_mismatch"
     if sha is None:
-        mp = p.with_name(f"{key}.meta.json")
-        if touched is not None:
-            touched.append((mp, _stat_sig(mp)))
         meta = _read_json(mp) or {}
         sha = meta.get("sha256")
     if sha is None or sha256_bytes(body) != sha:
